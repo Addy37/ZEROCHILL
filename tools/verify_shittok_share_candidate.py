@@ -13,7 +13,7 @@ apk, build_tools = Path(sys.argv[1]), Path(sys.argv[2])
 badging = subprocess.check_output([str(build_tools / 'aapt2'), 'dump', 'badging', str(apk)], text=True)
 package = re.search(r"package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'", badging)
 assert package and package[1] == 'com.addy37.crazyshitunofficial', 'Production package changed'
-assert int(package[2]) == int(os.environ['APP_VERSION_CODE']) > 7000005, 'Not an upgrade from 7.0.5'
+assert int(package[2]) == int(os.environ['APP_VERSION_CODE']) > 7000007, 'Not an upgrade from Beta 3'
 assert package[3] == os.environ['APP_VERSION_NAME'], 'Unexpected beta version'
 certs = subprocess.check_output([str(build_tools / 'apksigner'), 'verify', '--verbose', '--print-certs', str(apk)], text=True)
 cert = re.search(r'Signer #1 certificate SHA-256 digest: (\w+)', certs)
@@ -45,6 +45,14 @@ for variant in ('Debug', 'Release'):
     assert focus is not None, 'Missing Focus Mode regressions'
     assert any(case.get('name') == 'lateSettledEntranceKeepsChromeHiddenAcrossFocusSwipesUntilExit'
                and case.find('skipped') is None for case in ET.parse(focus).getroot().findall('testcase')), 'Missing forward/reverse Focus swipe regression'
+    replay = next((p for p in suites if p.name.endswith('.ShitTokAutoScrollIntegrationTest.xml')), None)
+    assert replay is not None, 'Missing Auto Scroll regressions'
+    names = {case.get('name') for case in ET.parse(replay).getroot().findall('testcase')
+             if case.find('skipped') is None}
+    assert {'completedRetainedVideoRewindsBeforeReplayAndAdvancesOnlyAfterNewEnd',
+            'oldPostedEndCannotAdvanceAfterRapidBackAndForwardVisits',
+            'completedRetiredLeaseRestoresZeroWhilePartialWatchKeepsPosition',
+            'manualDragCancelsQueuedEndWithoutDisablingSavedAutoScroll'} <= names, 'Missing replay regression'
     for path in suites:
         suite = ET.parse(path).getroot()
         for key in totals:

@@ -13,19 +13,18 @@ native drag/dismiss animation, a nested vertical scroller and horizontally scrol
 action rows. System-bar and cutout insets pad the panel.
 Opening it does not resize or replace the media viewport or prepare/restart a player.
 
-Download and Favorites reuse the current implementations (Favorites is the existing
-Watch Later store). Not Interested, Auto Scroll, creator blocking, Comments, Video
-details and the existing playback/problem report remain accessible. Creator blocking
+The menu contains exactly seven actions: Share Video, Copy Link, Auto Scroll,
+Not Interested, Block Creator, Report and Details. Download, Favorites (Watch Later)
+and Comments retain their existing controls outside this menu. Creator blocking
 requires confirmation and preserves saved data. Settings retains the existing unblock
-screen. Auto Scroll keeps its existing preference and completion policy; menu,
+screen. Auto Scroll saves its ON/OFF setting in the existing feed preference file; menu,
 confirmation/report and comments overlays suppress automatic paging. A finishing
 video loops while an overlay is open instead of moving the item under the user.
 
 ## Actual external video sharing
 
-Share Video and More Apps use Android's chooser. WhatsApp targets `com.whatsapp`;
-Messages targets the default SMS package. Missing/incompatible apps show an error
-and allow another selection. Apps may impose their own format/size limits.
+Share Video uses Android's native chooser for WhatsApp, Messages and other installed
+receivers. Apps may impose their own format/size limits.
 
 Preparation runs only on an explicit file-share request. It first reuses a prior
 prepared file, then a completed download, otherwise the selected resolved stream
@@ -56,25 +55,47 @@ Download, not the temporary share directory.
 Copy Link is explicitly a separate source-link action. The only current app deep
 link is an authentication callback; no video route/scheme is invented.
 
-## Compact menu (beta 3)
+## Final compact menu (beta 4)
 
-The Send to ZEROCHILL section, recent contacts, recipient search and sheet-only
-sending/retry code are removed. Existing direct messaging, video-card receiving,
-notifications, accounts and social features remain unchanged; no backend changes.
+SHARE contains Share Video and Copy Link side by side. VIDEO ACTIONS contains
+Auto Scroll, Not Interested, Block Creator, Report and Details in one horizontal
+row. There are no WhatsApp, Messages, More Apps, Download, Favorite or Comments
+menu controls. The sheet sizes to its content, capped at 65% of screen height;
+short screens scroll vertically. Rows scroll horizontally at narrow widths and
+large font scales, with labels allowed to grow vertically. The five actions fit
+at normal font scale on a 384dp phone. OLED black, accent colors, rounded styling,
+insets, native animations and file-preparation feedback remain.
 
-External sharing has one row: Share Video, Copy Link, WhatsApp, Messages, More Apps.
-Video actions have one row: Download, Favorite, Not Interested, Auto Scroll (ON/OFF),
-Block Creator, Report. Compact icons and spacing retain usable action targets and the
-selected accent. Rows never wrap; narrow widths can scroll horizontally. Comments
-and Video details remain accessible. The sheet is capped at 65% of the available
-screen height with vertical scrolling for small/landscape screens. Instructional
-paragraphs are removed. Native rounded sheet styling and animations are retained.
+Auto Scroll toggles in place with visible ON/OFF and an accent-filled enabled
+icon. Creator blocking checks both original metadata and the resolved identity
+used by the avatar. A newly resolved identity updates the open menu. Blocking
+uses the same persisted name keys and targeted queue removal; unidentified clips
+remain disabled. Existing saved creators, downloads and history are untouched.
+
+## Auto Scroll replay ownership
+
+Previously a retained ended player reached `prepareMeasured` and was treated as
+a new completion before the detached, delayed replay helper could seek it. The
+feed now rewinds a completed lease synchronously at settled selection, before
+playback permission and UI completion checks. Retired completed leases remember
+position zero, while partial watches retain their positions. Player engines,
+surfaces, pool limits and preparation scheduling are retained. The obsolete
+90ms view-tree replay helper is removed.
+
+Completion UI work captures its page visit and rejects work queued before a
+manual drag or selection change, including A → B → A. A completion must still be
+STATE_ENDED on the active holder. Existing generation cancellation and one-issued
+advance gates reject stale transitions and duplicate endings. Manual navigation
+keeps Auto Scroll enabled. Focus chrome and swipe handling remain on their
+existing paths. Regression tests cover retained and retired replay, partial
+position restoration, post-replay advance, duplicate/stale callbacks, rapid
+navigation, manual cancellation, toggles, saved setting and Focus behavior.
 
 ## Validation and delivery
 
 The scoped candidate workflow uses the existing encrypted `ANDROID_SIGNING_BUNDLE`,
 preserves `com.addy37.crazyshitunofficial` and the production certificate, and builds
-`7.0.6-beta.3-compact-share` / `7000007` to upgrade 7.0.5. The workflow checks out the
+`7.0.6-beta.4-replay-share` / `7000008` to upgrade Beta 3 and 7.0.5. The workflow checks out the
 exact feature source, runs Debug/Release tests and builds, verifies lineage/signing,
 current backend routing and APK contents, and uploads a branch/SHA-named APK plus
 checksum and validation report. It never creates a release/tag or merges a PR.

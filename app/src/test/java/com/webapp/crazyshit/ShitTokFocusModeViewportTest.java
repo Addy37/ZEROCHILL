@@ -37,13 +37,21 @@ public class ShitTokFocusModeViewportTest {
             ShitTokDynamicPinchTest.release(root, 200, 600);
             ShitTokDynamicPinchTest.idleAnimations();
 
+            ReflectionHelpers.callInstanceMethod(f.feed, "setAutoScrollEnabled",
+                    ReflectionHelpers.ClassParameter.from(boolean.class, true));
             for (int position : new int[]{1, 0, 1, 0}) {
+                if (position == 0) f.selectedPlayer.state = androidx.media3.common.Player.STATE_ENDED;
                 float delta = position > pager.getCurrentItem() ? -pager.getHeight() : pager.getHeight();
                 assertTrue(pager.beginFakeDrag());
                 assertTrue(pager.fakeDragBy(delta));
                 assertTrue(pager.endFakeDrag());
                 ShitTokDynamicPinchTest.idleAnimations();
                 assertEquals(position, pager.getCurrentItem());
+                if (position == 0) {
+                    assertEquals(0L, f.selectedPlayer.seekPosition);
+                    assertEquals(androidx.media3.common.Player.STATE_READY, f.selectedPlayer.state);
+                    assertTrue(ReflectionHelpers.getField(f.feed, "autoScrollEnabled"));
+                }
                 RecyclerView.ViewHolder selected = recycler.findViewHolderForAdapterPosition(position);
                 assertNotNull(selected);
                 ShitTokDynamicPinchController pinch = ReflectionHelpers.getField(selected, "pinch");

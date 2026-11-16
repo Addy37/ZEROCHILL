@@ -5,7 +5,7 @@
 `feature/shittok-share-menu` starts at current `main`
 `605e85c7c58a95bb8fd91c3921040f10f472ae50` (7.0.5), verified on GitHub and by
 fetching main. Historical `rebrand/zerochill` is an ancestor and is superseded by
-this approved complete lineage. Candidate `7.0.6-beta.3-compact-share` (`7000007`)
+this approved complete lineage. Candidate `7.0.6-beta.4-replay-share` (`7000008`)
 retains the production application ID and signing certificate through the existing
 encrypted signing bundle. Its scoped workflow records exact source SHA/branch,
 tests and signing/package verification in the artifact. See
@@ -24,6 +24,15 @@ only the share-menu recipient picker/sending UI and compacts external/video acti
 into single rows. Existing DM/card receiving, accounts and notifications remain intact.
 Version code 7000007 upgrades both earlier candidates. One signed review APK; no
 merge, tag or publication. Physical review remains pending.
+
+Beta 4 continues PR #449 from exact Beta 3 source
+`0a168ee0526d57317b348a1c1c2933f4ccb8cff9`. It finalizes seven menu actions,
+fixes completed-clip replay within the existing player owner, and removes the
+obsolete delayed replay helper. Existing Focus Mode protections remain. Version
+code `7000008` upgrades Beta 3 (`7000007`) with the same production package and
+certificate. The existing candidate workflow uploads one signed APK for phone
+review; full Debug/Release validation and artifact identity are recorded in PR #449.
+No merge, release, tag, deployment, backend or remote-config change is authorized.
 
 ## 7.0.5 release-readiness candidate (issue #446)
 

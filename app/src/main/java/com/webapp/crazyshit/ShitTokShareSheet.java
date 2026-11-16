@@ -26,8 +26,8 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 /** ShitTok's on-demand central menu. Does not own, resize, pause or recreate a player. */
 final class ShitTokShareSheet extends BottomSheetDialog {
     static final class Actions {
-        Runnable download, favorite, notInterested, autoScroll, blockCreator, report, comments, details;
-        boolean saved, autoScrollOn, canBlock;
+        Runnable notInterested, autoScroll, blockCreator, report, details;
+        boolean autoScrollOn, canBlock;
     }
     private final Activity activity;
     private final NativeContentItem item;
@@ -36,15 +36,26 @@ final class ShitTokShareSheet extends BottomSheetDialog {
     private final TextView progressText, cancel;
     private final ProgressBar progress;
     private ShitTokVideoShare.Job preparation;
+    private LinearLayout autoScrollTile, blockTile;
+    private final Actions actions;
 
     ShitTokShareSheet(Activity activity, NativeContentItem item,
                      CrazyShitRepository.StreamInfo stream, Actions actions) {
         super(activity);
         this.activity = activity;
+        this.actions = actions;
         this.item = item;
         this.stream = stream;
         setDismissWithAnimation(true);
-        LinearLayout panel = column();
+        LinearLayout panel = new LinearLayout(activity) {
+            @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                int limit = (int) (activity.getResources().getDisplayMetrics().heightPixels * .65f);
+                if (View.MeasureSpec.getMode(heightSpec) != View.MeasureSpec.UNSPECIFIED)
+                    limit = Math.min(limit, View.MeasureSpec.getSize(heightSpec));
+                super.onMeasure(widthSpec, View.MeasureSpec.makeMeasureSpec(limit, View.MeasureSpec.AT_MOST));
+            }
+        };
+        panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(12), dp(6), dp(12), dp(8));
         GradientDrawable background = new GradientDrawable();
         background.setColor(Color.BLACK);
@@ -73,20 +84,14 @@ final class ShitTokShareSheet extends BottomSheetDialog {
         scroll.setFillViewport(false);
         content = column();
         scroll.addView(content);
-        panel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        section("Share externally");
+        panel.addView(scroll, new LinearLayout.LayoutParams(-1, -2, 1));
+        section("SHARE");
         LinearLayout external = row();
         addExternal(external, R.drawable.ic_shittok_rail_share, "Share Video", () -> prepareVideo(null));
         addExternal(external, android.R.drawable.ic_menu_set_as, "Copy Link", this::copyLink);
-        addExternal(external, android.R.drawable.ic_menu_send, "WhatsApp", () -> prepareVideo("com.whatsapp"));
-        addExternal(external, android.R.drawable.ic_dialog_email, "Messages", () -> {
-            String app = android.provider.Telephony.Sms.getDefaultSmsPackage(activity);
-            if (app == null) { showStatus("No default Messages app. Use More Apps to choose one."); return; }
-            prepareVideo(app);
-        });
-        addExternal(external, R.drawable.ic_more_overflow, "More Apps", () -> prepareVideo(null));
         HorizontalScrollView externalScroll = new HorizontalScrollView(activity);
         externalScroll.setHorizontalScrollBarEnabled(false);
+        externalScroll.setFillViewport(true);
         externalScroll.addView(external);
         content.addView(externalScroll);
         progressText = text("", 12, AppearanceTheme.accent(activity));
@@ -106,26 +111,28 @@ final class ShitTokShareSheet extends BottomSheetDialog {
         });
         content.addView(cancel);
 
-        section("Video actions");
+        section("VIDEO ACTIONS");
         LinearLayout actionRow = row();
-        addAction(actionRow, R.drawable.ic_shittok_rail_download, "Download", actions.download);
-        addAction(actionRow, actions.saved ? R.drawable.ic_shittok_rail_bookmark_filled : R.drawable.ic_shittok_rail_bookmark,
-                actions.saved ? "Favorited" : "Favorite", actions.favorite);
-        addAction(actionRow, android.R.drawable.ic_menu_close_clear_cancel, "Not Interested", actions.notInterested);
-        addAction(actionRow, android.R.drawable.ic_media_play, "Auto Scroll · " + (actions.autoScrollOn ? "ON" : "OFF"), actions.autoScroll);
-        addAction(actionRow, android.R.drawable.ic_delete, "Block Creator", actions.canBlock ? actions.blockCreator : null);
-        addAction(actionRow, android.R.drawable.ic_menu_report_image, "Report", actions.report);
+        autoScrollTile = tile(R.drawable.ic_shittok_auto_scroll, "", () -> {
+            actions.autoScroll.run();
+            actions.autoScrollOn = !actions.autoScrollOn;
+            updateAutoScroll();
+        });
+        addTile(actionRow, autoScrollTile, 60);
+        updateAutoScroll();
+        addAction(actionRow, R.drawable.ic_shittok_not_interested, "Not Interested", actions.notInterested);
+        blockTile = addAction(actionRow, R.drawable.ic_shittok_block_creator, "Block Creator", actions.blockCreator);
+        updateCanBlock(actions.canBlock);
+        addAction(actionRow, R.drawable.ic_shittok_report, "Report", actions.report);
+        addAction(actionRow, android.R.drawable.ic_menu_info_details, "Details", actions.details);
         HorizontalScrollView actionScroll = new HorizontalScrollView(activity);
         actionScroll.setHorizontalScrollBarEnabled(false);
+        actionScroll.setFillViewport(true);
         actionScroll.addView(actionRow);
         content.addView(actionScroll);
-        LinearLayout secondaryRow = row();
-        addAction(secondaryRow, R.drawable.ic_shittok_rail_comments, "Comments", actions.comments);
-        addAction(secondaryRow, android.R.drawable.ic_menu_info_details, "Video details", actions.details);
-        content.addView(secondaryRow);
 
-        int height = Math.min(dp(340), (int) (activity.getResources().getDisplayMetrics().heightPixels * .65f));
-        setContentView(panel, new ViewGroup.LayoutParams(-1, height));
+        // Re-measure after insets and font/width changes; a fixed pre-inset height clips labels.
+        setContentView(panel, new ViewGroup.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT));
         ViewCompat.setOnApplyWindowInsetsListener(panel, (v, insets) -> {
             androidx.core.graphics.Insets safe = insets.getInsets(WindowInsetsCompat.Type.systemBars()
                     | WindowInsetsCompat.Type.displayCutout() | WindowInsetsCompat.Type.ime());
@@ -211,18 +218,35 @@ final class ShitTokShareSheet extends BottomSheetDialog {
         label.setPadding(0, dp(8), 0, dp(4));
         content.addView(label);
     }
+    boolean isFor(String url) { return item.url.equals(url); }
+
+    void updateCanBlock(boolean canBlock) {
+        actions.canBlock = canBlock;
+        blockTile.setEnabled(canBlock && actions.blockCreator != null);
+        blockTile.setAlpha(blockTile.isEnabled() ? 1f : .4f);
+    }
+    private void updateAutoScroll() {
+        String label = "Auto Scroll · " + (actions.autoScrollOn ? "ON" : "OFF");
+        autoScrollTile.setContentDescription(label);
+        ((TextView) autoScrollTile.getChildAt(1)).setText(label.replace(" · ", "\n"));
+        ImageView icon = (ImageView) autoScrollTile.getChildAt(0);
+        icon.setImageTintList(ColorStateList.valueOf(actions.autoScrollOn
+                ? Color.BLACK : AppearanceTheme.accent(activity)));
+        icon.setBackground(round(actions.autoScrollOn ? AppearanceTheme.accent(activity) : 0xFF17171B, 24));
+        autoScrollTile.setSelected(actions.autoScrollOn);
+    }
     private void addExternal(LinearLayout row, int icon, String label, Runnable action) {
-        float scale = Math.max(1f, activity.getResources().getConfiguration().fontScale);
-        row.addView(tile(icon, label, action), new LinearLayout.LayoutParams(dp(Math.round(68 * scale)), tileHeight()));
+        addTile(row, tile(icon, label, action), 88);
     }
-    private void addAction(LinearLayout row, int icon, String label, Runnable action) {
+    private LinearLayout addAction(LinearLayout row, int icon, String label, Runnable action) {
         LinearLayout tile = tile(icon, label, action == null ? null : () -> { dismiss(); action.run(); });
-        float scale = Math.max(1f, activity.getResources().getConfiguration().fontScale);
-        row.addView(tile, new LinearLayout.LayoutParams(dp(Math.round(60 * scale)), tileHeight()));
+        addTile(row, tile, 60);
+        return tile;
     }
-    private int tileHeight() {
+    private void addTile(LinearLayout row, LinearLayout tile, int width) {
         float scale = Math.max(1f, activity.getResources().getConfiguration().fontScale);
-        return dp(70 + Math.round((scale - 1f) * 28));
+        tile.setMinimumHeight(dp(70));
+        row.addView(tile, new LinearLayout.LayoutParams(dp(Math.round(width * scale)), -2, 1));
     }
     private LinearLayout tile(int icon, String label, Runnable action) {
         LinearLayout tile = column();
@@ -237,7 +261,7 @@ final class ShitTokShareSheet extends BottomSheetDialog {
         tile.addView(image, new LinearLayout.LayoutParams(dp(36), dp(36)));
         TextView text = text(label.replace(" · ", "\n"), 10, Color.WHITE);
         text.setGravity(Gravity.CENTER);
-        text.setMaxLines(2);
+
         text.setPadding(0, dp(3), 0, 0);
         tile.addView(text, new LinearLayout.LayoutParams(-1, -2));
         tile.setContentDescription(label);

@@ -33,8 +33,11 @@ final class ShitTokBlockedCreatorStore {
     }
 
     static synchronized String block(Context context, NativeContentItem item) {
+        return blockName(context, ShitTokCreatorMetadata.creatorName(item));
+    }
+
+    static synchronized String blockName(Context context, String name) {
         if (context == null) return "";
-        String name = ShitTokCreatorMetadata.creatorName(item);
         String key = keyForName(name);
         if (key.isEmpty()) return "";
 

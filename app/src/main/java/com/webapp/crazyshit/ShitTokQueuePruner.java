@@ -14,6 +14,12 @@ final class ShitTokQueuePruner {
             Set<String> blockedCreatorKeys,
             int selectedPosition
     ) {
+        return removeBlockedCreators(items, blockedCreatorKeys, selectedPosition,
+                item -> ShitTokBlockedCreatorStore.isBlocked(blockedCreatorKeys, item));
+    }
+
+    static Result removeBlockedCreators(List<NativeContentItem> items, Set<String> blockedCreatorKeys,
+            int selectedPosition, java.util.function.Predicate<NativeContentItem> blocked) {
         if (items == null || items.isEmpty()) {
             return new Result(new ArrayList<>(), new ArrayList<>(), 0, false);
         }
@@ -25,7 +31,7 @@ final class ShitTokQueuePruner {
 
         for (int index = 0; index < items.size(); index++) {
             NativeContentItem item = items.get(index);
-            if (ShitTokBlockedCreatorStore.isBlocked(blockedCreatorKeys, item)) {
+            if (blocked.test(item)) {
                 removed.add(item);
                 removedPositions.add(index);
             }
@@ -37,7 +43,7 @@ final class ShitTokQueuePruner {
 
         boolean selectedRemoved = removed.contains(selected);
         NativeContentItem target = selectedRemoved
-                ? nearestRemaining(items, blockedCreatorKeys, safeSelected)
+                ? nearestRemaining(items, blocked, safeSelected)
                 : selected;
         items.removeAll(removed);
         int targetPosition = target == null ? 0 : items.indexOf(target);
@@ -47,19 +53,18 @@ final class ShitTokQueuePruner {
 
     private static NativeContentItem nearestRemaining(
             List<NativeContentItem> items,
-            Set<String> blockedCreatorKeys,
+            java.util.function.Predicate<NativeContentItem> blocked,
             int selectedPosition
     ) {
         for (int distance = 1; distance < items.size(); distance++) {
             int next = selectedPosition + distance;
             if (next < items.size()
-                    && !ShitTokBlockedCreatorStore.isBlocked(blockedCreatorKeys, items.get(next))) {
+                    && !blocked.test(items.get(next))) {
                 return items.get(next);
             }
             int previous = selectedPosition - distance;
             if (previous >= 0
-                    && !ShitTokBlockedCreatorStore.isBlocked(
-                            blockedCreatorKeys, items.get(previous))) {
+                    && !blocked.test(items.get(previous))) {
                 return items.get(previous);
             }
         }

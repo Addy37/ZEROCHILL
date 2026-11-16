@@ -127,6 +127,7 @@ public final class ChaosFeedView extends FrameLayout {
     private static final String KEY_RECENT = "recent_urls";
     private static final String KEY_HIDDEN = "hidden_urls";
     private static final String KEY_MUTED = "muted";
+    private static final String KEY_AUTO_SCROLL = "auto_scroll";
     private static final int MAX_RECENT = 500;
     private static final int MAX_HIDDEN = 600;
     private static final int LOAD_AHEAD_AT = 5;
@@ -244,6 +245,8 @@ public final class ChaosFeedView extends FrameLayout {
     private volatile boolean closed;
     private boolean autoAdvancePending;
     private boolean autoScrollEnabled;
+    private int playbackVisit;
+    private boolean replaySelectedOnSettle;
     private int autoAdvanceIssuedFrom = -1;
     private int autoAdvanceGeneration;
     private boolean chaosMuted;
@@ -289,6 +292,8 @@ public final class ChaosFeedView extends FrameLayout {
         postDelayed(sourceRecoveryTick, 2_000L);
         chaosMuted = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(KEY_MUTED, false);
+        autoScrollEnabled = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_AUTO_SCROLL, false);
         playbackOwner = new ShitTokPlaybackOwner(activity.getApplicationContext(), new ShitTokPlaybackOwner.Callbacks() {
             @Override public void onLeaseChanged(String url) {
                 if (closed || isPaging()) return;
@@ -451,7 +456,11 @@ public final class ChaosFeedView extends FrameLayout {
                     consecutiveDryLoads = 0;
                     if (position > previousPosition) runway.forward(android.os.SystemClock.elapsedRealtime());
                 }
-                if (changed) autoAdvanceIssuedFrom = -1;
+                if (changed) {
+                    playbackVisit++;
+                    replaySelectedOnSettle = true;
+                    autoAdvanceIssuedFrom = -1;
+                }
 
                 resetCreatorSwipePreview();
                 if (autoAdvancePending && position != autoAdvanceFrom) {
@@ -660,7 +669,11 @@ public final class ChaosFeedView extends FrameLayout {
     private void handlePagerScrollState(int state) {
         if (queueUpdateDepth > 0 || syncingQueuePager) return;
         if (searchCoverActive) return;
-        if (state == ViewPager2.SCROLL_STATE_DRAGGING) userDragInProgress = true;
+        if (state == ViewPager2.SCROLL_STATE_DRAGGING) {
+            playbackVisit++;
+            replaySelectedOnSettle = true;
+            userDragInProgress = true;
+        }
         else if (state == ViewPager2.SCROLL_STATE_IDLE) userDragInProgress = false;
         userPaging = state != ViewPager2.SCROLL_STATE_IDLE;
         if (userPaging) resetTemporaryPinch(true);
@@ -786,6 +799,10 @@ public final class ChaosFeedView extends FrameLayout {
         String url = items.get(selectedPosition).url;
         creatorMetadata.select(items.get(selectedPosition));
         AppPerformance.startupItem("owner_select", url, "");
+        if (replaySelectedOnSettle) {
+            playbackOwner.restartCompleted(url);
+            replaySelectedOnSettle = false;
+        }
         playbackOwner.select(url,
                 selectedPosition + 1 < items.size() ? items.get(selectedPosition + 1).url : null,
                 selectedPosition > 0 ? items.get(selectedPosition - 1).url : null,
@@ -1852,6 +1869,14 @@ public final class ChaosFeedView extends FrameLayout {
         final int generation = feedGeneration;
         deferUiApply(() -> {
             if (closed || generation != feedGeneration) return;
+            int resolvedPosition = indexOfUrl(url);
+            if (shareSheet != null && shareSheet.isShowing() && shareSheet.isFor(url)
+                    && resolvedPosition >= 0)
+                shareSheet.updateCanBlock(!blockCreatorName(items.get(resolvedPosition)).isEmpty());
+            if (resolvedPosition >= 0 && isBlockedCreator(items.get(resolvedPosition))) {
+                removeBlockedCreatorsFromQueue();
+                return;
+            }
             // Refresh only creator chrome. Never bind a card, detach a lease or prepare a player.
             for (ChaosHolder holder : playerHolders) {
                 if (holder.item != null && url.equals(holder.item.url))
@@ -1892,6 +1917,8 @@ public final class ChaosFeedView extends FrameLayout {
         boolean pendingFailedClip = autoAdvancePending && selectedBeforeToggle != null
                 && selectedBeforeToggle.failurePending;
         autoScrollEnabled = enabled;
+        activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putBoolean(KEY_AUTO_SCROLL, enabled).apply();
         cancelPendingAutoAdvance();
         autoAdvanceIssuedFrom = -1;
         if (pendingFailedClip) requestAutoAdvance(selectedPosition);
@@ -2366,13 +2393,6 @@ public final class ChaosFeedView extends FrameLayout {
         return null;
     }
 
-    boolean canReplayCompletedPage(int position) {
-        ChaosHolder holder = holderAt(position);
-        return active && hostResumed && !closed && pager.getCurrentItem() == position
-                && selectedPosition == position && holder != null && !holder.userPaused
-                && !userPaging && !autoAdvancePending && autoAdvanceIssuedFrom != position;
-    }
-
     private RecyclerView pagerRecycler() {
         if (pager == null || pager.getChildCount() == 0) return null;
         View child = pager.getChildAt(0);
@@ -2457,14 +2477,23 @@ public final class ChaosFeedView extends FrameLayout {
         blockedCreatorKeys.addAll(ShitTokBlockedCreatorStore.keys(activity));
     }
 
+    private String blockCreatorName(NativeContentItem item) {
+        String name = ShitTokCreatorMetadata.creatorName(item);
+        if (!name.isEmpty()) return name;
+        NativeContentItem identity = creatorMetadata.identity(item);
+        return identity == null ? "" : identity.title.trim();
+    }
+
     private boolean isBlockedCreator(NativeContentItem item) {
-        return ShitTokBlockedCreatorStore.isBlocked(blockedCreatorKeys, item);
+        if (blockedCreatorKeys.isEmpty()) return false;
+        String key = ShitTokBlockedCreatorStore.keyForName(blockCreatorName(item));
+        return !key.isEmpty() && blockedCreatorKeys.contains(key);
     }
 
     private void blockCreatorFromChaos(NativeContentItem item) {
-        String creator = ShitTokCreatorMetadata.creatorName(item);
+        String creator = blockCreatorName(item);
         if (creator.isEmpty()) return;
-        String key = ShitTokBlockedCreatorStore.block(activity, item);
+        String key = ShitTokBlockedCreatorStore.blockName(activity, creator);
         if (key.isEmpty()) return;
         blockedCreatorKeys.add(key);
         ZeroChillToast.makeText(
@@ -2482,7 +2511,7 @@ public final class ChaosFeedView extends FrameLayout {
         ShitTokQueuePruner.Result result = ShitTokQueuePruner.removeBlockedCreators(
                 items,
                 blockedCreatorKeys,
-                selectedPosition
+                selectedPosition, this::isBlockedCreator
         );
         if (result.removed.isEmpty()) return;
         queueSelectedUrl = items.isEmpty() ? "" : items.get(result.targetPosition).url;
@@ -2702,16 +2731,12 @@ public final class ChaosFeedView extends FrameLayout {
         if (holder == null || holder.item == null || !item.url.equals(holder.item.url)) return;
         final NativeContentItem selectedItem = item;
         ShitTokShareSheet.Actions actions = new ShitTokShareSheet.Actions();
-        actions.saved = FavoriteStore.contains(activity, selectedItem.url);
         actions.autoScrollOn = autoScrollEnabled;
-        actions.canBlock = !ShitTokCreatorMetadata.creatorName(selectedItem).isEmpty();
-        actions.download = holder::downloadCurrentVideo;
-        actions.favorite = () -> toggleSaved(selectedItem, holder.save);
+        actions.canBlock = !blockCreatorName(selectedItem).isEmpty();
         actions.notInterested = () -> hideFromChaos(selectedItem);
         actions.autoScroll = () -> setAutoScrollEnabled(!autoScrollEnabled);
         actions.blockCreator = () -> confirmBlockCreator(selectedItem);
         actions.report = () -> showPlaybackReport(holder);
-        actions.comments = supportsComments(selectedItem) ? () -> openInlineComments(selectedItem) : null;
         actions.details = holder::openCurrentDetails;
         cancelPendingAutoAdvance();
         shareSheet = new ShitTokShareSheet(activity, selectedItem, holder.diagnosticStream(), actions);
@@ -2741,7 +2766,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void confirmBlockCreator(NativeContentItem item) {
-        String creator = ShitTokCreatorMetadata.creatorName(item);
+        String creator = blockCreatorName(item);
         if (creator.isEmpty()) return;
         cancelPendingAutoAdvance();
         actionDialog = new ZeroChillDialog.Builder(activity)
@@ -4482,8 +4507,10 @@ public final class ChaosFeedView extends FrameLayout {
                 @Override
                 public void onPlaybackStateChanged(int state) {
                     if (listenerGeneration != feedGeneration || !validUiCallback(createdPlayer, listenerUrl, listenerToken)) return;
+                    final int completionVisit = playbackVisit;
                     postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
-                        if (createdPlayer.getPlaybackState() != state) return;
+                        if (createdPlayer.getPlaybackState() != state
+                                || (state == Player.STATE_ENDED && completionVisit != playbackVisit)) return;
                         syncLoading();
                         if(boundPosition==selectedPosition && state==Player.STATE_BUFFERING && analyticsBufferStart==0) analyticsBufferStart=android.os.SystemClock.elapsedRealtime();
                         if (state == Player.STATE_READY) {
@@ -4790,6 +4817,7 @@ public final class ChaosFeedView extends FrameLayout {
                 silencePlayer(completedPlayer);
                 return;
             }
+            if (completedPlayer.getPlaybackState() != Player.STATE_ENDED) return;
             if (item != null) ShitTokSmartRanker.completion(item.url, completedPlayer.getDuration());
             ShitTokAutoScrollPolicy.Completion decision = ShitTokAutoScrollPolicy.onCompleted(
                     active, hostResumed, boundPosition == selectedPosition, userPaused,

@@ -47,7 +47,6 @@ final class UiFoundationCoordinator {
             ChaosStartupOverlayController.attach(main);
             attachMain(main, false);
             StableBottomNavigationController.attach(main);
-            ChaosCompletedReplayController.attachSoon(main);
             openChaosOnFreshLaunch(main);
             GestureGuideDialog.maybeShow(main);
         } else if (activity instanceof NativeFeedBrowserActivity) {
@@ -84,7 +83,6 @@ final class UiFoundationCoordinator {
             UiPolishController.detach(main);
             LandscapeUiController.detach(main);
             StableBottomNavigationController.detach(main);
-            ChaosCompletedReplayController.detach(main);
             FRESH_MAIN.remove(main);
 
             NativeMainActivity current = currentMain.get();
@@ -104,7 +102,6 @@ final class UiFoundationCoordinator {
             if (main.isFinishing()) return;
             attachMain(main, true);
             StableBottomNavigationController.applyOrientation(main);
-            ChaosCompletedReplayController.attachSoon(main);
         }, 80L);
     }
 
