@@ -1,0 +1,83 @@
+name: Publish verified ZEROCHILL 7.1.0
+
+# Manual-only recovery for the signed APK from release run 43973058596.
+# It never rebuilds an APK, edits a tag or overwrites an existing release.
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out current approved main
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify the approved source and matching update notes
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor b90cfdaecd1066d8eaf7ea2e62d47b827526b3c5 HEAD
+          test "$(tr -d '[:space:]' < RELEASE_VERSION)" = "7.1.0"
+          cmp RELEASE_NOTES.md <(git show b90cfdaecd1066d8eaf7ea2e62d47b827526b3c5:RELEASE_NOTES.md)
+          cmp app/src/main/res/raw/whats_new_7_0.md <(git show b90cfdaecd1066d8eaf7ea2e62d47b827526b3c5:app/src/main/res/raw/whats_new_7_0.md)
+          python3 - <<'PY'
+          from pathlib import Path
+          notes = Path('RELEASE_NOTES.md').read_text()
+          bundled = Path('app/src/main/res/raw/whats_new_7_0.md').read_text()
+          def bullets(s): return [x[2:].strip() for x in s.splitlines() if x.startswith('- ')]
+          assert len(bullets(notes)) == 5 and bullets(notes) == bullets(bundled), 'Release/Whats New mismatch'
+          assert notes.startswith('# ZEROCHILL 7.1.0\n'), 'Wrong release notes'
+          PY
+
+      - name: Download signed APK from validated production build
+        uses: actions/download-artifact@v4
+        with:
+          name: ZeroChill-signed
+          repository: ${{ github.repository }}
+          run-id: 43973058596
+          github-token: ${{ github.token }}
+          path: release
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - name: Install APK verification tools
+        run: sdkmanager 'build-tools;35.0.0'
+
+      - name: Verify signed artifact and production upgrade identity
+        run: |
+          set -euo pipefail
+          cd release
+          test "$(find . -maxdepth 1 -name '*.apk' | wc -l)" -eq 1
+          sha256sum -c SHA256SUMS.txt
+          test "$(sha256sum ZeroChill.apk | awk '{print $1}')" = "e51a502ee942dc03d1d4cb6343e9528b206d76b9a4af06f055caaed04fb13664"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs ZeroChill.apk | tee verification.txt
+          grep -F "Signer #1 certificate SHA-256 digest: 04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356" verification.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging ZeroChill.apk | grep -F "package: name='com.addy37.crazyshitunofficial' versionCode='7001000' versionName='7.1.0'"
+
+      - name: Reject duplicate public release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v7.1.0 >/dev/null 2>&1; then
+            echo 'v7.1.0 already exists; refusing overwrite'
+            exit 1
+          fi
+
+      - name: Publish verified ZEROCHILL 7.1.0
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v7.1.0 release/ZeroChill.apk release/SHA256SUMS.txt \
+            --target b90cfdaecd1066d8eaf7ea2e62d47b827526b3c5 \
+            --title 'ZeroChill v7.1.0' \
+            --notes-file RELEASE_NOTES.md \
+            --latest
