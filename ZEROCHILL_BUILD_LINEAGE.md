@@ -1,5 +1,28 @@
 # ZEROCHILL build lineage
 
+## ZEROCHILL 7.2.0 approved publication
+
+The user phone-tested and approved PR #451 candidate source
+`83899f9c66ba083a2d2e4229d6eecd6ba97fe2d1` (signed Actions run `44107909811`,
+versionCode `7001003`) and explicitly authorized merge and publication, including
+both the update dialog and What's New popup. PR #451 is merged into main as
+`aad94818736d961b7acc7fa835afc0caf1f21ec9`, following approved PR #450 at
+`66810a58eb4e53aeaa7b301bf201813d1ff202df`. These are the current complete
+approved product lineage; older pending-approval restrictions below are historical.
+
+`release/zerochill-7.2.0` starts at that exact main commit. Release preparation
+changes only version metadata, matching release/bundled highlights, their focused
+regression assertion and publication wiring. Version `7.2.0` (`7002000`) upgrades
+7.1.0 and every approved 7.1.1 test APK. The existing production application ID,
+signing certificate, sources, backend routing and persisted user data are preserved.
+No backend deployment or data migration is included.
+
+Local update summary, What's New, update card and overflow tests: 21 passed.
+One explicit `v7.2.0` tag push will run the existing signed release workflow with
+focused tests and fail-closed source, notes, package, certificate and upgrade checks.
+The standing release workflow will be restored to manual-only once that run starts.
+Publication remains unverified until the signed job and public assets are checked.
+
 ## Flat comments header and search entrance test candidate
 
 PR #450 was phone-approved and merged into `main` as
