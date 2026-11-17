@@ -242,11 +242,85 @@ public class SearchResultsPolishTest {
             android.provider.Settings.Global.putFloat(host.get().getContentResolver(),
                     android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
             fades.show(row, "two");
-            assertEquals(0f, row.getAlpha(), 0f);
+            assertEquals(.35f, row.getAlpha(), 0f);
+            assertEquals(BrowseUi.dp(host.get(), 8), row.getTranslationY(), .1f);
             fades.show(row, "two");
             assertEquals(1f, row.getAlpha(), 0f);
+            assertEquals(0f, row.getTranslationY(), 0f);
             SearchResultFades.recycle(row);
             assertEquals(1f, row.getAlpha(), 0f);
+            assertEquals(0f, row.getTranslationY(), 0f);
+            assertEquals(0L, row.animate().getStartDelay());
+        } finally { host.pause().stop().destroy(); }
+    }
+
+    @Test public void creatorAndGlobalResultsRevealOnAttachmentInsteadOfPrefetchBinding() {
+        var host = Robolectric.buildActivity(Activity.class).setup();
+        GlobalSearchAdapter global = new GlobalSearchAdapter(item -> {});
+        try {
+            host.get().getSharedPreferences("app_prefs", 0).edit()
+                    .putBoolean("immersive_motion_enabled", true).commit();
+            android.provider.Settings.Global.putFloat(host.get().getContentResolver(),
+                    android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
+            OnlyFapCreatorSearchAdapter creators = new OnlyFapCreatorSearchAdapter(item -> {});
+            NativeContentItem item = creator("Prefetched creator");
+            creators.replace(Collections.singletonList(item));
+            var creatorHolder = creators.onCreateViewHolder(new FrameLayout(host.get()), 0);
+            creators.onBindViewHolder(creatorHolder, 0);
+            assertEquals(1f, creatorHolder.card.getAlpha(), 0f);
+            global.replace(Collections.singletonList(GlobalSearchAdapter.Entry.item(item, 0)));
+            var result = (GlobalSearchAdapter.ResultHolder) global.onCreateViewHolder(new FrameLayout(host.get()), 1);
+            global.onBindViewHolder(result, 0);
+            assertEquals(1f, result.card.getAlpha(), 0f);
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500));
+            creators.onViewAttachedToWindow(creatorHolder);
+            global.onViewAttachedToWindow(result);
+            assertEquals(.35f, creatorHolder.card.getAlpha(), 0f);
+            assertEquals(.35f, result.card.getAlpha(), 0f);
+            assertTrue(creatorHolder.card.getTranslationY() > 0f);
+            assertTrue(result.card.getTranslationY() > 0f);
+            creators.onViewDetachedFromWindow(creatorHolder);
+            global.onViewDetachedFromWindow(result);
+            assertEquals(0f, creatorHolder.card.getTranslationY(), 0f);
+            assertEquals(0f, result.card.getTranslationY(), 0f);
+            creators.onViewAttachedToWindow(creatorHolder);
+            global.onViewAttachedToWindow(result);
+            assertEquals(1f, creatorHolder.card.getAlpha(), 0f);
+            assertEquals(1f, result.card.getAlpha(), 0f);
+            creators.resetEntrance();
+            global.resetEntrance();
+            creators.onViewAttachedToWindow(creatorHolder);
+            global.onViewAttachedToWindow(result);
+            assertEquals(.35f, creatorHolder.card.getAlpha(), 0f);
+            assertEquals(.35f, result.card.getAlpha(), 0f);
+            creators.onViewRecycled(creatorHolder);
+            global.onViewRecycled(result);
+        } finally { global.close(); host.pause().stop().destroy(); }
+    }
+
+    @Test public void staggerStaysShortAndNewQueriesAndReducedMotionResetIt() {
+        var host = Robolectric.buildActivity(Activity.class).setup();
+        try {
+            host.get().getSharedPreferences("app_prefs", 0).edit()
+                    .putBoolean("immersive_motion_enabled", true).commit();
+            android.provider.Settings.Global.putFloat(host.get().getContentResolver(),
+                    android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
+            SearchResultFades fades = new SearchResultFades();
+            View row = new View(host.get());
+            for (int i = 0; i < 12; i++) {
+                fades.show(row, "row-" + i);
+                assertTrue(row.animate().getStartDelay() <= 60L);
+                assertEquals(ZeroChillMotion.STANDARD_MS, row.animate().getDuration());
+            }
+            fades.reset();
+            fades.show(row, "row-0");
+            assertEquals(0L, row.animate().getStartDelay());
+            host.get().getSharedPreferences("app_prefs", 0).edit()
+                    .putBoolean("immersive_motion_enabled", false).commit();
+            fades.show(row, "reduced-motion");
+            assertEquals(1f, row.getAlpha(), 0f);
+            assertEquals(0f, row.getTranslationY(), 0f);
+            assertEquals(0L, row.animate().getStartDelay());
         } finally { host.pause().stop().destroy(); }
     }
 
