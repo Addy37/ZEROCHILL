@@ -27,19 +27,20 @@ The new manifest install permission could cause Play Protect to classify ZEROCHI
 
 No Supabase, remote source config, schema, signing, app ID or data migration changes.
 
-## Private two-APK confirmation test
+## Private on-phone test results and production cleanup
 
-PR #453 adds a **test-only** action under Settings > Notifications & updates > Test APK installer. It appears only in signed builds with the version name prefix `7.2.1-installer-beta.` and must be removed before the eventual production merge.
+The user installed the production-signed installer beta 7002001 on their OnePlus. Google Play Protect displayed "This app looks safe" and the app opened normally.
 
-The one-shot GitHub Actions artifact contains:
-- **Harness**: version code 7002002. Install this APK over the existing signed installer beta (7002001) with Play Protect enabled.
-- **Fixture**: version code 7002003. Download it to the phone but **do not install by tapping the APK**.
-- On the harness, tap Settings > Test APK installer and choose the fixture via Android Files. The app validates package identity and a higher version, stages it through the **same PackageInstaller session code** as a real DownloadManager update, and Android requests installation confirmation.
-- Accept the prompt and verify version 7002003 plus intact sign-in, history, favorites, downloaded content, preferences and backups.
-- Retest installation permission denied and installer cancellation if convenient.
+The user subsequently installed the signed 7002002 harness and used its temporary **Test APK installer** action to select the 7002003 update APK. Android installed the newer version successfully. This validates the Android confirmation and update-installation path, but the user still had to choose the APK manually, as intended by the temporary harness. No claim is made about a newer Play Protect scan unless the user confirms it.
 
-### What this tests and what remains
+The private file-picker code and both one-off Actions workflows have now been removed from the proposed production change. Their historical signed run [#44162759348](https://github.com/Addy37/ZEROCHILL/actions/runs/44162759348) succeeded and still records the test evidence.
 
-This privately tests the real Android PackageInstaller handoff, permission prompt, APK identity/version guards, Android's signing check, and upgrade preservation without publishing any release. It **does not** test private remote downloading or update auto-detection. Production still obtains APKs through the unchanged, previously working DownloadManager path; a future public update or controlled opt-in HTTPS endpoint is needed to validate that integration end to end.
+## Remaining work before a public release
 
-**No public release, Supabase changes, remote config changes, app ID change, signing change, or migrations.**
+- A real newly published GitHub release must still exercise the full automated update discovery, DownloadManager transfer and **Install update** handoff. That flow is coded, but was not exercised by the local-file test.
+- From a normal installed ZEROCHILL release, the app fetches the latest public stable GitHub release and offers it only if newer. The user taps **Download update** and later **Install update**; there is no APK file picker in the production changes.
+- Do not merge solely on the strength of the manual file-picker test. Retain the existing Downloads fallback.
+- Any future production APK intended to upgrade the user's 7002003 testing installation needs a versionCode **greater than 7002003**, with the production signing certificate unchanged.
+- Play Protect assessment can vary for each new build and must be reviewed on the final release candidate.
+
+No GitHub release, Supabase, remote-config, signing, app ID or persisted-data change was made as part of the private test.

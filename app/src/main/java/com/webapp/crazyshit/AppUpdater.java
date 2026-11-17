@@ -55,7 +55,6 @@ final class AppUpdater {
     private boolean waitingForInstallPermission;
     private long readyDownloadId = -1L;
     private ReleaseInfo readyRelease;
-    private Uri pendingTestApkUri;
     private static final long MAX_UPDATE_APK_BYTES = 512L * 1024L * 1024L;
 
     AppUpdater(Activity activity) {
@@ -136,14 +135,7 @@ final class AppUpdater {
         if (!waitingForInstallPermission) return;
         waitingForInstallPermission = false;
         if (activity.getPackageManager().canRequestPackageInstalls()) {
-            if (pendingTestApkUri != null) {
-                stageSelectedApk(pendingTestApkUri);
-            } else {
-                stageUpdateForAndroid(readyDownloadId, readyRelease);
-            }
-        } else if (pendingTestApkUri != null) {
-            card.showInstallFallback("test APK", this::openDownloads,
-                    () -> installPickedTestApk(pendingTestApkUri));
+            stageUpdateForAndroid(readyDownloadId, readyRelease);
         } else if (readyRelease != null) {
             card.showInstallFallback(readyRelease.version, this::openDownloads,
                     () -> requestInstall(readyDownloadId, readyRelease));
@@ -486,67 +478,6 @@ final class AppUpdater {
         stageUpdateForAndroid(downloadId, release);
     }
 
-    static boolean isInstallerTestBuild() {
-        return isInstallerTestVersion(BuildConfig.VERSION_NAME);
-    }
-
-    static boolean isInstallerTestVersion(String versionName) {
-        return versionName != null
-                && versionName.startsWith("7.2.1-installer-beta.");
-    }
-
-    /**
-     * Private two-APK test harness only. A Files-picked APK enters the same
-     * verified PackageInstaller session as downloaded production APKs.
-     */
-    void installPickedTestApk(Uri apkUri) {
-        if (!isInstallerTestBuild() || apkUri == null
-                || !"content".equalsIgnoreCase(apkUri.getScheme())) {
-            return;
-        }
-        pendingTestApkUri = apkUri;
-        readyRelease = null;
-        readyDownloadId = -1L;
-        if (!activity.getPackageManager().canRequestPackageInstalls()) {
-            waitingForInstallPermission = true;
-            try {
-                activity.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                        Uri.parse("package:" + activity.getPackageName())));
-            } catch (Exception error) {
-                waitingForInstallPermission = false;
-                card.showInstallFallback("test APK", this::openDownloads,
-                        () -> installPickedTestApk(apkUri));
-            }
-            return;
-        }
-        stageSelectedApk(apkUri);
-    }
-
-    private void stageSelectedApk(Uri uri) {
-        if (uri == null || stagingInstall || !isInstallerTestBuild()) return;
-        stagingInstall = true;
-        cancelInstall = false;
-        card.showPreparing("test APK", () -> cancelInstall = true);
-        io.execute(() -> {
-            try {
-                commitApkUri(uri, -1L);
-                activity.runOnUiThread(card::dismiss);
-            } catch (Exception error) {
-                Log.w("ZeroChillInstaller", "Test APK installation staging failed", error);
-                activity.runOnUiThread(() -> {
-                    if (error instanceof InterruptedException) {
-                        card.dismiss();
-                    } else {
-                        card.showInstallFallback("test APK", this::openDownloads,
-                                () -> installPickedTestApk(uri));
-                    }
-                });
-            } finally {
-                stagingInstall = false;
-            }
-        });
-    }
-
     private void stageUpdateForAndroid(long downloadId, ReleaseInfo release) {
         if (release == null || downloadId < 0 || stagingInstall) return;
         DownloadManager manager = (DownloadManager) activity.getSystemService(Context.DOWNLOAD_SERVICE);
@@ -593,9 +524,9 @@ final class AppUpdater {
     }
 
     /**
-     * Shared installer path for a DownloadManager URI or a private test file
-     * selected through Android Files. Android still handles user confirmation
-     * and the final signing-certificate / update compatibility checks.
+     * Stage the exact APK returned by DownloadManager through Android's
+     * user-confirmed PackageInstaller session. Android validates the signing
+     * certificate and upgrade compatibility before installing.
      */
     private void commitApkUri(Uri uri, long expectedSize) throws Exception {
         File apk = File.createTempFile("zerochill-update-", ".apk", activity.getCacheDir());
