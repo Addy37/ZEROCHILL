@@ -641,13 +641,42 @@ public final class ZeroChillMessageActivity extends Activity {
                 if (uri.getHost() == null || uri.getHost().isEmpty()
                         || !("http".equalsIgnoreCase(uri.getScheme())
                         || "https".equalsIgnoreCase(uri.getScheme()))) continue;
-                linked.setSpan(new URLSpan(url), matcher.start(), end, 0);
+                linked.setSpan(new URLSpan(url) {
+                    @Override public void onClick(View widget) {
+                        showLinkActions(widget, getURL());
+                    }
+                }, matcher.start(), end, 0);
                 hasLinks = true;
             } catch (java.net.URISyntaxException ignored) { }
         }
         view.setText(hasLinks ? linked : body);
         view.setLinkTextColor(accent);
         view.setMovementMethod(hasLinks ? LinkMovementMethod.getInstance() : null);
+    }
+
+    private static void showLinkActions(View anchor, String url) {
+        android.net.Uri uri = android.net.Uri.parse(url).normalizeScheme();
+        if (!("http".equals(uri.getScheme()) || "https".equals(uri.getScheme()))
+                || uri.getHost() == null || uri.getHost().isEmpty()) return;
+        android.content.Context context = anchor.getContext();
+        new ZeroChillDialog.Builder(context)
+                .setTitle("Web link")
+                .setMessage(url)
+                .setPositiveButton("Open link", (dialog, which) -> {
+                    Intent browser = new Intent(Intent.ACTION_VIEW, uri)
+                            .addCategory(Intent.CATEGORY_BROWSABLE);
+                    try { context.startActivity(browser); }
+                    catch (android.content.ActivityNotFoundException unavailable) {
+                        ZeroChillToast.makeText(context, "No browser available", ZeroChillToast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNeutralButton("Copy link", (dialog, which) -> {
+                    ((android.content.ClipboardManager) context.getSystemService(CLIPBOARD_SERVICE))
+                            .setPrimaryClip(android.content.ClipData.newPlainText("Link", url));
+                    ZeroChillToast.makeText(context, "Link copied", ZeroChillToast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private static int trimUrlEnd(String body, int start, int end) {

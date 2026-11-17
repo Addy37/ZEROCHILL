@@ -29,6 +29,43 @@ import static org.junit.Assert.*;
 @Config(application = Application.class, sdk = 35)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class ZeroChillMessageThreadUiTest {
+    @Test public void tappingReceivedAndSentLinksOffersOpenAndCopiesOnlyTheUrl() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        TextView body = new TextView(activity);
+        String url = "https://github.com/Addy37/ZEROCHILL?q=1&tab=readme";
+        for (String prefix : new String[]{"Received: ", "Sent: "}) {
+            ZeroChillMessageActivity.bindMessageLinks(body, prefix + url, AppearanceTheme.accent(activity));
+            URLSpan span = ((Spanned) body.getText()).getSpans(0, body.length(), URLSpan.class)[0];
+            span.onClick(body);
+            android.app.AlertDialog dialog = (android.app.AlertDialog)
+                    org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            assertEquals("Open link", dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).getText());
+            assertEquals("Copy link", dialog.getButton(android.content.DialogInterface.BUTTON_NEUTRAL).getText());
+            dialog.getButton(android.content.DialogInterface.BUTTON_NEUTRAL).performClick();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
+                    activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+            assertEquals(url, clipboard.getPrimaryClip().getItemAt(0).getText().toString());
+            assertEquals(prefix + url, body.getText().toString());
+        }
+    }
+
+    @Test public void openLinkUsesBrowsableHttpAndUnsafeSchemesHaveNoActions() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        TextView body = new TextView(activity);
+        ZeroChillMessageActivity.bindMessageLinks(body, "HTTP://example.org/page", Color.CYAN);
+        ((Spanned) body.getText()).getSpans(0, body.length(), URLSpan.class)[0].onClick(body);
+        android.app.AlertDialog dialog = (android.app.AlertDialog)
+                org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        android.content.Intent opened = org.robolectric.Shadows.shadowOf(activity).getNextStartedActivity();
+        assertEquals(android.content.Intent.ACTION_VIEW, opened.getAction());
+        assertEquals("http://example.org/page", opened.getDataString());
+        assertTrue(opened.hasCategory(android.content.Intent.CATEGORY_BROWSABLE));
+        ZeroChillMessageActivity.bindMessageLinks(body, "javascript:alert(1) intent://test file:///test", Color.CYAN);
+        assertNull(body.getMovementMethod());
+    }
     private ZeroChillSocialRepository.DirectMessage message(String sender, String time, String body) throws Exception {
         return new ZeroChillSocialRepository.DirectMessage(new JSONObject()
                 .put("id", time).put("sender_id", sender).put("recipient_id", "me")

@@ -45,6 +45,30 @@ public class ShowsWatchPageTest {
         org.robolectric.RuntimeEnvironment.getApplication().getSharedPreferences("player_positions", 0)
                 .edit().remove("shows_play_next").commit();
     }
+
+    @Test public void bunkrWatchTitlesAreCleanWhileSourceAndOriginalFilenameStayIntact() {
+        NativeContentItem first = new NativeContentItem("media", "My_Trip.S01E03.mp4",
+                "https://bunkr.cr/f/first", "", "", "Bunkr", "");
+        NativeContentItem next = new NativeContentItem("media", "Next_Clip.webm",
+                "https://bunkr.cr/f/next", "", "", "Bunkr", "");
+        VideoDetailActivity activity = watch(first, next);
+        String id = BunkrGallerySessionStore.create("Album", "https://bunkr.cr/a/test");
+        BunkrGallerySessionStore.replace(id, Arrays.asList(first, next), 1, true);
+        Intent context = ShowsWatchSession.attach(new Intent(), Arrays.asList(first, next), true, "Album");
+        ShowsWatchSession.attachAlbum(context, id);
+        ReflectionHelpers.setField(activity, "showsSession", ShowsWatchSession.from(context));
+        ReflectionHelpers.callInstanceMethod(activity, "updateMetadataUi");
+        android.widget.TextView heading = ReflectionHelpers.getField(activity, "titleView");
+        assertEquals("My Trip S01E03", heading.getText().toString());
+        assertEquals(first.title, ReflectionHelpers.getField(activity, "title"));
+        assertEquals(first.url, ReflectionHelpers.getField(activity, "pageUrl"));
+        orient(activity, Configuration.ORIENTATION_LANDSCAPE);
+        View overlay = ReflectionHelpers.getField(activity, "fullscreenOverlay");
+        assertEquals("My Trip S01E03", ((android.widget.TextView) overlay.findViewById(R.id.player_title))
+                .getText().toString());
+        ShowsWatchSession session = ReflectionHelpers.getField(activity, "showsSession");
+        assertEquals(next.title, session.next(first.url).title);
+    }
     public static class WatchProbe extends VideoDetailActivity {
         NativeContentItem dispatched;
         @Override void dispatchShowsSelection(NativeContentItem item) { dispatched = item; }

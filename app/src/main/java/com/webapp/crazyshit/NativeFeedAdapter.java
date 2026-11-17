@@ -1001,6 +1001,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
 
     private String displayTitle(NativeContentItem item) {
         String title = item == null || item.title == null ? "" : item.title.trim();
+        if (episodePresentation) return BunkrAlbumTitles.display(item).trim();
         if (!homePresentation || viewMode != VIEW_LIST || title.isEmpty()) return title;
         return titleCaseIfAllCaps(title);
     }

@@ -1,4 +1,4 @@
-name: ZEROCHILL Five Fixes Signed Test APK
+name: ZEROCHILL Fixes and Polish Signed Test APK
 
 # One authorized candidate build on the final feature-branch push. No publication.
 on:
@@ -16,8 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '7001001'
-      APP_VERSION_NAME: '7.1.1-test.1-five-fixes'
+      APP_VERSION_CODE: '7001002'
+      APP_VERSION_NAME: '7.1.1-test.2-polish'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       ZEROCHILL_V7_TRAFFIC: 'true'
       SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
@@ -31,9 +31,10 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Verify approved 7.1.0 lineage
+      - name: Verify approved five-fixes lineage
         run: |
           git merge-base --is-ancestor 8964653bb5a25948d587d477077e8a13162548b0 HEAD
+          git merge-base --is-ancestor 8f219b32da76c99bc6955826d3a786b902bf4302 HEAD
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -76,11 +77,10 @@ jobs:
               }.items():
                   out.write(key+'='+value+'\n')
           PY
-      - name: Validate Android 15 and 16 comments and build one signed release APK
+      - name: Check Android 15 and 16 ShitTok chrome and build one signed release APK
         run: >-
           gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
-          :app:testReleaseUnitTest --tests com.webapp.crazyshit.InlineCommentsSheetTest
-          --tests com.webapp.crazyshit.InlineCommentsUiTest :app:assembleRelease
+          :app:testReleaseUnitTest --tests com.webapp.crazyshit.ShitTokVisualPolishTest :app:assembleRelease
       - name: Verify install upgrade identity and checksum
         env:
           GH_TOKEN: ${{ github.token }}
@@ -106,7 +106,7 @@ jobs:
           candidate = inspect(os.environ['CANDIDATE_APK'])
           stable = inspect(str(pathlib.Path(os.environ['RUNNER_TEMP'])/'stable/ZeroChill.apk'))
           assert candidate[0] == stable[0] == 'com.addy37.crazyshitunofficial'
-          assert candidate[1] == 7001001 and candidate[1] > max(stable[1],7001000)
+          assert candidate[1] == 7001002 and candidate[1] > max(stable[1],7001001)
           assert candidate[2] == stable[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356'
           report = ('Source: '+os.environ['GITHUB_SHA']+'\n'
               +'Branch: '+os.environ['GITHUB_REF_NAME']+'\n'
@@ -118,12 +118,13 @@ jobs:
           pathlib.Path('candidate/VALIDATION.txt').write_text(report)
           print(report)
           PY
-          cp docs/FIVE_FIXES_TEST_APK.md candidate/CHANGE_AND_TEST_NOTES.md
-          cp -r app/build/test-results/testReleaseUnitTest candidate/comments-test-results
+          cp docs/FIVE_FIXES_POLISH.md candidate/CHANGE_AND_TEST_NOTES.md
+          cp docs/FIVE_FIXES_TEST_APK.md candidate/BASELINE_TEST_NOTES.md
+          cp -r app/build/test-results/testReleaseUnitTest candidate/shittok-test-results
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Five-Fixes-signed-${{ github.sha }}
+          name: ZeroChill-Fixes-and-Polish-signed-${{ github.sha }}
           path: candidate/
           if-no-files-found: error
           retention-days: 14

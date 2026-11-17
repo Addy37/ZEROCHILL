@@ -2176,6 +2176,9 @@ public class NativeFeedBrowserActivity extends Activity {
                 ? "Remove from Watch Later"
                 : "Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
+        if (isBunkrAlbum()) actions.add(VideoActionSheet.action(
+                R.drawable.ic_action_link, "Original filename", item.title,
+                () -> BunkrAlbumTitles.showOriginal(this, item)));
         if (item.isVideo() && item.url != null && !item.url.isEmpty()) {
             actions.add(VideoActionSheet.action(
                     R.drawable.ic_action_comments,
@@ -2222,7 +2225,7 @@ public class NativeFeedBrowserActivity extends Activity {
         final VideoDownloadStore.Entry download = savedDownload;
         VideoActionSheet.showEpisodeAware(
                 this,
-                item.title,
+                isBunkrAlbum() ? BunkrAlbumTitles.display(item) : item.title,
                 showDetailsMode,
                 VideoActionSheet.section(
                         "SAVE",

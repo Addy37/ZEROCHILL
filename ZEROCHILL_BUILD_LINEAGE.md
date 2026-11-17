@@ -1,5 +1,19 @@
 # ZEROCHILL build lineage
 
+## Five fixes plus polish, second physical-test candidate
+
+The user requested the three agreed polish changes on top of the phone-approved
+five-fixes APK: cleaner Bunkr filename titles, DM Open link / Copy link actions,
+and removing ShitTok's broad lower gradient while keeping outlined, shadowed text.
+Continue `feature/zerochill-five-fixes` and PR #450 from `cff34b86`, retaining
+approved APK source `8f219b32da76c99bc6955826d3a786b902bf4302` as an ancestor.
+Current production `main` remains `8964653bb5a25948d587d477077e8a13162548b0`.
+Candidate `7.1.1-test.2-polish` (`7001002`) uses the same production application ID,
+certificate and backend routing, and upgrades both 7.1.0 and the first test APK.
+See `docs/FIVE_FIXES_POLISH.md` for scope and validation. One signed artifact;
+the new polish awaits phone approval. No merge, tag, public release, backend or
+source-config publication is authorized.
+
 ## Five fixes approved physical-test candidate
 
 `feature/zerochill-five-fixes` starts at verified current `main`

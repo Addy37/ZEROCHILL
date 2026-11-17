@@ -37,6 +37,24 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = {35, 36}, qualifiers = "w400dp-h800dp-xhdpi")
 public class ShitTokVisualPolishTest {
+    @Test public void lowerOverlayIsTransparentAndCopyKeepsItsOwnContrastAfterRebinding() {
+        try (ShitTokAudioOwnershipTest.Fixture fixture = new ShitTokAudioOwnershipTest.Fixture()) {
+            Object holder = fixture.selected;
+            View lower = ReflectionHelpers.getField(holder, "lower");
+            assertEquals(android.graphics.Color.TRANSPARENT,
+                    ((android.graphics.drawable.ColorDrawable) lower.getBackground()).getColor());
+            for (String field : new String[]{"title", "meta"}) {
+                TextView text = ReflectionHelpers.getField(holder, field);
+                assertTrue(text instanceof ShitTokOverlayTextView);
+                assertEquals(android.graphics.Color.WHITE, text.getCurrentTextColor());
+                assertTrue(text.getShadowRadius() > 0f);
+            }
+            ViewPager2 pager = ReflectionHelpers.getField(fixture.feed, "pager");
+            pager.getAdapter().bindViewHolder((RecyclerView.ViewHolder) holder, 0);
+            assertEquals(android.graphics.Color.TRANSPARENT,
+                    ((android.graphics.drawable.ColorDrawable) lower.getBackground()).getColor());
+        }
+    }
     @Implements(VideoDownloadStore.class)
     public static class Downloads {
         static NativeContentItem requested;

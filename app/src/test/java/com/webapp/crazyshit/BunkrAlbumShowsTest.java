@@ -25,6 +25,45 @@ import static org.robolectric.Shadows.shadowOf;
 public class BunkrAlbumShowsTest {
     private static final String ALBUM = "https://bunkr.cr/a/collection";
 
+    @Test public void filenameTitlesAreCleanedOnlyForDisplayAndNumbersStayIntact() {
+        NativeContentItem video = file("media", "My_Trip.S01E03_7.5_1080p.MP4", "title");
+        assertEquals("My Trip S01E03 7.5 1080p", BunkrAlbumTitles.display(video));
+        assertEquals("My_Trip.S01E03_7.5_1080p.MP4", video.title);
+        assertEquals("Dr. Smith", BunkrAlbumTitles.display(file("media", "Dr. Smith", "prose")));
+        NativeContentItem unrelated = new NativeContentItem("media", "Keep_this.mp4",
+                "https://example.test/video", "", "", "", "");
+        assertEquals(unrelated.title, BunkrAlbumTitles.display(unrelated));
+        NativeContentItem image = file("image", "Keep_this.jpg", "photo-title");
+        assertEquals(image.title, BunkrAlbumTitles.display(image));
+        assertEquals("S01E03", BunkrAlbumTitles.display(file("media", "S01E03.webm", "episode")));
+        NativeFeedBrowserActivity browser = browser();
+        ReflectionHelpers.callInstanceMethod(browser, "replaceBunkrItems",
+                ReflectionHelpers.ClassParameter.from(List.class, java.util.Collections.singletonList(video)));
+        NativeFeedAdapter adapter = ReflectionHelpers.getField(browser, "adapter");
+        RecyclerView recycler = ReflectionHelpers.getField(browser, "recycler");
+        NativeFeedAdapter.Holder holder = adapter.onCreateViewHolder(recycler, NativeFeedAdapter.VIEW_LIST);
+        adapter.onBindViewHolder(holder, 0);
+        assertEquals("My Trip S01E03 7.5 1080p", holder.title.getText().toString());
+        assertEquals("My_Trip.S01E03_7.5_1080p.MP4", video.title);
+        adapter.close();
+    }
+
+    @Test public void originalFilenameRemainsAvailableAndCopyable() {
+        NativeFeedBrowserActivity browser = browser();
+        NativeContentItem video = file("media", "Original_File.Name.mp4", "original");
+        BunkrAlbumTitles.showOriginal(browser, video);
+        android.app.AlertDialog dialog = (android.app.AlertDialog)
+                org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        TextView message = dialog.findViewById(android.R.id.message);
+        assertEquals(video.title, message.getText().toString());
+        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
+                browser.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+        assertEquals(video.title, clipboard.getPrimaryClip().getItemAt(0).getText().toString());
+        ((NativeFeedAdapter) ReflectionHelpers.getField(browser, "adapter")).close();
+    }
+
     @Implements(value = BunkrRepository.class, isInAndroidSdk = false)
     public static class AlbumPages {
         static NativeContentItem video, image;

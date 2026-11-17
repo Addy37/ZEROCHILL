@@ -1452,8 +1452,17 @@ public class VideoDetailActivity extends Activity {
         portraitSeekBar.setProgress(progress);
     }
 
+    private boolean isBunkrAlbumWatch() {
+        return showsOrigin && showsSession != null && !showsSession.albumSession.isEmpty();
+    }
+
+    private String showsDisplayTitle(NativeContentItem item) {
+        return isBunkrAlbumWatch() ? BunkrAlbumTitles.display(item) : item.title;
+    }
+
     private void updateMetadataUi() {
-        String displayTitle = OnlyFapVideoMetadata.displayTitle(currentContent());
+        String displayTitle = isBunkrAlbumWatch() ? BunkrAlbumTitles.display(currentContent())
+                : OnlyFapVideoMetadata.displayTitle(currentContent());
         if (titleView != null) titleView.setText(displayTitle);
         if (playerTitleView != null) playerTitleView.setText(displayTitle);
         if (fullscreenOverlay != null) {
@@ -1819,7 +1828,7 @@ public class VideoDetailActivity extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setClickable(true);
         card.setFocusable(true);
-        card.setContentDescription("Play " + item.title);
+        card.setContentDescription("Play " + showsDisplayTitle(item));
         card.setOnTouchListener((v, event) -> {
             if (fullscreenControls == null) return false;
             int action = event.getActionMasked();
@@ -1855,7 +1864,7 @@ public class VideoDetailActivity extends Activity {
         showsCountdownDeadline = SystemClock.uptimeMillis() +
                 (remaining > 0L ? remaining : 5_000L);
         showsCountdownRemainingMs = 0L;
-        if (showsNextTitle != null) showsNextTitle.setText(showsCountdownItem.title);
+        if (showsNextTitle != null) showsNextTitle.setText(showsDisplayTitle(showsCountdownItem));
         if (showsNextImage != null) {
             Glide.with(showsNextImage).clear(showsNextImage);
             showsNextImage.setImageDrawable(null);
@@ -1905,7 +1914,7 @@ public class VideoDetailActivity extends Activity {
         column.setOrientation(LinearLayout.VERTICAL);
         column.setClickable(true);
         column.setFocusable(true);
-        column.setContentDescription("Play " + item.title);
+        column.setContentDescription("Play " + showsDisplayTitle(item));
         column.setOnClickListener(v -> { haptic(v); dispatchShowsSelection(item); });
         ImageView image = new ImageView(this);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -1918,7 +1927,7 @@ public class VideoDetailActivity extends Activity {
         if (clean(thumbnail).isEmpty()) thumbnail = item.imageUrl;
         if (!clean(thumbnail).isEmpty()) loadImage(image, thumbnail, item.url);
         TextView name = new TextView(this);
-        name.setText(item.title);
+        name.setText(showsDisplayTitle(item));
         name.setTextColor(Color.WHITE);
         name.setTextSize(16);
         name.setMaxLines(2);
@@ -1977,7 +1986,7 @@ public class VideoDetailActivity extends Activity {
         row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
         TextView name = new TextView(this);
-        name.setText(item.title);
+        name.setText(showsDisplayTitle(item));
         name.setTextColor(Color.WHITE);
         name.setTextSize(14);
         name.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -2808,6 +2817,9 @@ public class VideoDetailActivity extends Activity {
                 ? "Remove from Watch Later"
                 : "Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
+        if (isBunkrAlbumWatch()) actions.add(VideoActionSheet.action(
+                R.drawable.ic_action_link, "Original filename", title,
+                () -> BunkrAlbumTitles.showOriginal(this, currentContent())));
         if (supportsComments()) {
             actions.add(VideoActionSheet.action(
                     R.drawable.ic_action_comments,
@@ -2860,7 +2872,7 @@ public class VideoDetailActivity extends Activity {
 
         VideoActionSheet.showCompact(
                 this,
-                title,
+                isBunkrAlbumWatch() ? BunkrAlbumTitles.display(currentContent()) : title,
                 VideoActionSheet.section(
                         "PLAYBACK",
                         VideoActionSheet.action(
@@ -3093,7 +3105,8 @@ public class VideoDetailActivity extends Activity {
             if (fullscreenGestures != null) fullscreenGestures.cancel();
         }
         if (fullscreen) {
-            ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(title);
+            ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(
+                    isBunkrAlbumWatch() ? BunkrAlbumTitles.display(currentContent()) : title);
             fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
             View toggle = fullscreenOverlay.findViewById(R.id.shows_fullscreen_toggle);
             toggle.setVisibility(showsOrigin || (!landscape && !portraitVideo) ? View.VISIBLE : View.GONE);
