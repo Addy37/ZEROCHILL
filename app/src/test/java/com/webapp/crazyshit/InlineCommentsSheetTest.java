@@ -114,7 +114,7 @@ public class InlineCommentsSheetTest {
         }
     }
 
-    @Test public void sheetStartsAtSixtyPercentExpandsAndRestoresAfterImeResize() {
+    @Test public void sheetStartsAtSixtyPercentAndTracksParentSize() {
         try (ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup()) {
             Activity activity = host.get();
             activity.setTheme(R.style.Theme_CrazyShit);
@@ -131,7 +131,7 @@ public class InlineCommentsSheetTest {
             BottomSheetBehavior<?> behavior = ReflectionHelpers.getField(dialog, "behavior");
             assertNotNull(sheet);
             assertEquals(BottomSheetBehavior.STATE_HALF_EXPANDED, behavior.getState());
-            assertEquals(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+            assertEquals(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING,
                     dialog.getWindow().getAttributes().softInputMode
                             & WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST);
             View parent = (View) sheet.getParent();
@@ -188,6 +188,8 @@ public class InlineCommentsSheetTest {
                     ((BottomSheetBehavior<?>) ReflectionHelpers.getField(dialog, "behavior")).getState());
             assertComposerAbove((EditText) ReflectionHelpers.getField(dialog, "composerInput"),
                     parent, 500);
+            assertComposerNearBottom((EditText) ReflectionHelpers.getField(dialog, "composerInput"),
+                    parent, 500);
             WindowInsetsCompat hidden = new WindowInsetsCompat.Builder()
                     .setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE)
                     .setVisible(WindowInsetsCompat.Type.ime(), false).build();
@@ -200,6 +202,61 @@ public class InlineCommentsSheetTest {
                     parent, 0);
             dialog.dismiss();
         }
+    }
+
+    @Test public void imeInsetSubtractsNavigationBarAndRestoresExpandedSheet() {
+        try (ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup()) {
+            Activity activity = host.get();
+            activity.setTheme(R.style.Theme_CrazyShit);
+            InlineCommentsDialog dialog = new InlineCommentsDialog(activity,
+                    "https://crazyshit.com/video/clip", "Video", "", null);
+            dialog.show();
+            shadowOf(Looper.getMainLooper()).idle();
+            FrameLayout sheet = ReflectionHelpers.getField(dialog, "bottomSheet");
+            View parent = (View) sheet.getParent();
+            View shell = ReflectionHelpers.getField(dialog, "sheetContent");
+            EditText composer = ReflectionHelpers.getField(dialog, "composerInput");
+            BottomSheetBehavior<?> behavior = ReflectionHelpers.getField(dialog, "behavior");
+            int width = Math.max(parent.getWidth(), 800), height = Math.max(parent.getHeight(), 1600);
+            parent.layout(0, 0, width, height);
+            shadowOf(Looper.getMainLooper()).idle();
+            behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+            shadowOf(Looper.getMainLooper()).idle();
+            WindowInsetsCompat open = new WindowInsetsCompat.Builder()
+                    .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, 500))
+                    .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(0, 0, 0, 24))
+                    .setVisible(WindowInsetsCompat.Type.ime(), true).build();
+            ViewCompat.dispatchApplyWindowInsets(shell, open);
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(476, shell.getPaddingBottom());
+            assertEquals(BottomSheetBehavior.STATE_EXPANDED, behavior.getState());
+            View comments = ReflectionHelpers.getField(dialog, "scrollView");
+            assertTrue("Comments must retain space above the composer", comments.getHeight() > 0);
+            assertTrue(((ViewGroup) ReflectionHelpers.getField(dialog, "commentsContainer"))
+                    .getChildCount() > 0);
+            assertComposerNearBottom(composer, parent, 476);
+
+            WindowInsetsCompat hidden = new WindowInsetsCompat.Builder()
+                    .setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE)
+                    .setVisible(WindowInsetsCompat.Type.ime(), false).build();
+            ViewCompat.dispatchApplyWindowInsets(shell, hidden);
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(0, shell.getPaddingBottom());
+            assertEquals(BottomSheetBehavior.STATE_EXPANDED, behavior.getState());
+            assertComposerNearBottom(composer, parent, 0);
+            dialog.dismiss();
+        }
+    }
+
+    private static void assertComposerNearBottom(EditText composer, View parent, int keyboardBottom) {
+        int[] field = new int[2], container = new int[2];
+        composer.getLocationOnScreen(field);
+        parent.getLocationOnScreen(container);
+        int gap = container[1] + parent.getHeight() - keyboardBottom
+                - field[1] - composer.getHeight();
+        assertTrue("Composer must not overlap the keyboard", gap >= 0);
+        assertTrue("Composer must sit directly above the keyboard: " + gap,
+                gap <= Math.round(32 * parent.getResources().getDisplayMetrics().density));
     }
 
     private static void assertComposerAbove(EditText composer, View parent, int keyboardBottom) {

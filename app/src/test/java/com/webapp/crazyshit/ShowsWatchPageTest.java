@@ -45,6 +45,30 @@ public class ShowsWatchPageTest {
         org.robolectric.RuntimeEnvironment.getApplication().getSharedPreferences("player_positions", 0)
                 .edit().remove("shows_play_next").commit();
     }
+
+    @Test public void bunkrWatchTitlesAreCleanWhileSourceAndOriginalFilenameStayIntact() {
+        NativeContentItem first = new NativeContentItem("media", "My_Trip.S01E03.mp4",
+                "https://bunkr.cr/f/first", "", "", "Bunkr", "");
+        NativeContentItem next = new NativeContentItem("media", "Next_Clip.webm",
+                "https://bunkr.cr/f/next", "", "", "Bunkr", "");
+        VideoDetailActivity activity = watch(first, next);
+        String id = BunkrGallerySessionStore.create("Album", "https://bunkr.cr/a/test");
+        BunkrGallerySessionStore.replace(id, Arrays.asList(first, next), 1, true);
+        Intent context = ShowsWatchSession.attach(new Intent(), Arrays.asList(first, next), true, "Album");
+        ShowsWatchSession.attachAlbum(context, id);
+        ReflectionHelpers.setField(activity, "showsSession", ShowsWatchSession.from(context));
+        ReflectionHelpers.callInstanceMethod(activity, "updateMetadataUi");
+        android.widget.TextView heading = ReflectionHelpers.getField(activity, "titleView");
+        assertEquals("My Trip S01E03", heading.getText().toString());
+        assertEquals(first.title, ReflectionHelpers.getField(activity, "title"));
+        assertEquals(first.url, ReflectionHelpers.getField(activity, "pageUrl"));
+        orient(activity, Configuration.ORIENTATION_LANDSCAPE);
+        View overlay = ReflectionHelpers.getField(activity, "fullscreenOverlay");
+        assertEquals("My Trip S01E03", ((android.widget.TextView) overlay.findViewById(R.id.player_title))
+                .getText().toString());
+        ShowsWatchSession session = ReflectionHelpers.getField(activity, "showsSession");
+        assertEquals(next.title, session.next(first.url).title);
+    }
     public static class WatchProbe extends VideoDetailActivity {
         NativeContentItem dispatched;
         @Override void dispatchShowsSelection(NativeContentItem item) { dispatched = item; }
@@ -193,6 +217,25 @@ public class ShowsWatchPageTest {
         assertSame(overlay.findViewById(R.id.shows_action_row),
                 overlay.findViewById(R.id.shows_fullscreen_toggle).getParent());
         assertSame(surface, player.getVideoSurfaceView());
+    }
+
+    @Test public void manualShowsFullscreenOverridesLockAndExitRestoresUserRotation() {
+        VideoDetailActivity activity = watch(item("1"), item("2"));
+        android.provider.Settings.System.putInt(activity.getContentResolver(),
+                android.provider.Settings.System.ACCELEROMETER_ROTATION, 0);
+        PlayerView player = ReflectionHelpers.getField(activity, "playerView");
+        View surface = player.getVideoSurfaceView();
+        ReflectionHelpers.callInstanceMethod(activity, "setRotatableFullscreen",
+                ReflectionHelpers.ClassParameter.from(boolean.class, true));
+        PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+        assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+                activity.getRequestedOrientation());
+        ReflectionHelpers.callInstanceMethod(activity, "setRotatableFullscreen",
+                ReflectionHelpers.ClassParameter.from(boolean.class, false));
+        PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+        assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER, activity.getRequestedOrientation());
+        assertSame(surface, player.getVideoSurfaceView());
+        PhoneOrientationPolicy.onActivityDestroyed(activity);
     }
 
     @Test @Config(qualifiers = "w800dp-h360dp-land-mdpi")

@@ -3,6 +3,8 @@ package com.webapp.crazyshit;
 import android.app.Application;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.text.Spanned;
+import android.text.style.URLSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -27,6 +29,43 @@ import static org.junit.Assert.*;
 @Config(application = Application.class, sdk = 35)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class ZeroChillMessageThreadUiTest {
+    @Test public void tappingReceivedAndSentLinksOffersOpenAndCopiesOnlyTheUrl() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        TextView body = new TextView(activity);
+        String url = "https://github.com/Addy37/ZEROCHILL?q=1&tab=readme";
+        for (String prefix : new String[]{"Received: ", "Sent: "}) {
+            ZeroChillMessageActivity.bindMessageLinks(body, prefix + url, AppearanceTheme.accent(activity));
+            URLSpan span = ((Spanned) body.getText()).getSpans(0, body.length(), URLSpan.class)[0];
+            span.onClick(body);
+            android.app.AlertDialog dialog = (android.app.AlertDialog)
+                    org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            assertEquals("Open link", dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).getText());
+            assertEquals("Copy link", dialog.getButton(android.content.DialogInterface.BUTTON_NEUTRAL).getText());
+            dialog.getButton(android.content.DialogInterface.BUTTON_NEUTRAL).performClick();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
+                    activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+            assertEquals(url, clipboard.getPrimaryClip().getItemAt(0).getText().toString());
+            assertEquals(prefix + url, body.getText().toString());
+        }
+    }
+
+    @Test public void openLinkUsesBrowsableHttpAndUnsafeSchemesHaveNoActions() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        TextView body = new TextView(activity);
+        ZeroChillMessageActivity.bindMessageLinks(body, "HTTP://example.org/page", Color.CYAN);
+        ((Spanned) body.getText()).getSpans(0, body.length(), URLSpan.class)[0].onClick(body);
+        android.app.AlertDialog dialog = (android.app.AlertDialog)
+                org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        android.content.Intent opened = org.robolectric.Shadows.shadowOf(activity).getNextStartedActivity();
+        assertEquals(android.content.Intent.ACTION_VIEW, opened.getAction());
+        assertEquals("http://example.org/page", opened.getDataString());
+        assertTrue(opened.hasCategory(android.content.Intent.CATEGORY_BROWSABLE));
+        ZeroChillMessageActivity.bindMessageLinks(body, "javascript:alert(1) intent://test file:///test", Color.CYAN);
+        assertNull(body.getMovementMethod());
+    }
     private ZeroChillSocialRepository.DirectMessage message(String sender, String time, String body) throws Exception {
         return new ZeroChillSocialRepository.DirectMessage(new JSONObject()
                 .put("id", time).put("sender_id", sender).put("recipient_id", "me")
@@ -67,7 +106,9 @@ public class ZeroChillMessageThreadUiTest {
         Method select=activity.getClass().getDeclaredMethod("showReactions",View.class,ZeroChillSocialRepository.DirectMessage.class);select.setAccessible(true);
         select.invoke(activity,field(holder,"bubble"),media);assertSame(media,field(activity,"selectedMessage"));
         android.widget.PopupWindow popup=(android.widget.PopupWindow)field(activity,"reactionPopup");assertTrue(popup.isShowing());
-        assertEquals(6,((LinearLayout)popup.getContentView()).getChildCount());
+        LinearLayout panel=(LinearLayout)popup.getContentView();
+        assertEquals(1,panel.getChildCount());
+        assertEquals(6,((LinearLayout)panel.getChildAt(0)).getChildCount());
         LinearLayout actions=(LinearLayout)field(activity,"selectionActions");assertEquals(1,actions.getChildCount());assertEquals("Report",((TextView)actions.getChildAt(0)).getText().toString());
         adapter.bindViewHolder(holder,0);assertEquals(AppearanceTheme.selectionSurface(activity),((GradientDrawable)((View)field(holder,"bubble")).getBackground()).getColor().getDefaultColor());
         activity.onBackPressed();assertNull(field(activity,"selectedMessage"));assertFalse(popup.isShowing());
@@ -79,11 +120,54 @@ public class ZeroChillMessageThreadUiTest {
         Method select=activity.getClass().getDeclaredMethod("showReactions",View.class,ZeroChillSocialRepository.DirectMessage.class);select.setAccessible(true);
         select.invoke(activity,field(holder,"bubble"),message("other","2026-09-30T12:00:00Z","Incoming text"));
         LinearLayout actions=(LinearLayout)field(activity,"selectionActions");assertEquals(2,actions.getChildCount());
-        ((android.widget.PopupWindow)field(activity,"reactionPopup")).dismiss();assertNull(field(activity,"selectedMessage"));
+        LinearLayout panel=(LinearLayout)((android.widget.PopupWindow)field(activity,"reactionPopup")).getContentView();
+        assertEquals("Copy message",((TextView)panel.getChildAt(1)).getText().toString());
+        panel.getChildAt(1).performClick();
+        android.content.ClipboardManager clipboard=(android.content.ClipboardManager)activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+        assertEquals("Incoming text",clipboard.getPrimaryClip().getItemAt(0).getText().toString());
+        assertNull(field(activity,"selectedMessage"));
         select.invoke(activity,field(holder,"bubble"),message("me","2026-09-30T12:00:00Z","Own exact text"));
         assertEquals(1,actions.getChildCount());assertEquals("Copy",((TextView)actions.getChildAt(0)).getText().toString());actions.getChildAt(0).performClick();
-        assertNull(field(activity,"selectedMessage"));android.content.ClipboardManager clipboard=(android.content.ClipboardManager)activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+        assertNull(field(activity,"selectedMessage"));
         assertEquals("Own exact text",clipboard.getPrimaryClip().getItemAt(0).getText().toString());
+    }
+    @Test public void webLinksAreExplicitSafeAndResetOnHolderReuse() throws Exception {
+        ZeroChillMessageActivity activity = shell();
+        RecyclerView recycler = (RecyclerView) field(activity, "recycler");
+        RecyclerView.Adapter adapter = recycler.getAdapter();
+        Method replace = adapter.getClass().getDeclaredMethod("replace", java.util.List.class);
+        replace.setAccessible(true);
+        String original = "Hi https://example.com/path?q=1, then HTTP://example.org/x! "
+                + "https://en.wikipedia.org/wiki/Function_(mathematics)😀 "
+                + "javascript:alert(1) and www.example.net";
+        replace.invoke(adapter, Arrays.asList(message("other", "2026-09-30T12:00:00Z", original)));
+        RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
+        adapter.bindViewHolder(holder, 0);
+        TextView body = (TextView) field(holder, "body");
+        assertEquals(original, body.getText().toString());
+        URLSpan[] spans = ((Spanned) body.getText()).getSpans(0, body.length(), URLSpan.class);
+        assertEquals(3, spans.length);
+        assertEquals("https://example.com/path?q=1", spans[0].getURL());
+        assertEquals("HTTP://example.org/x", spans[1].getURL());
+        assertEquals("https://en.wikipedia.org/wiki/Function_(mathematics)", spans[2].getURL());
+        assertEquals(AppearanceTheme.accent(activity), body.getLinkTextColors().getDefaultColor());
+        assertNotNull(body.getMovementMethod());
+        assertTrue(body.performLongClick());
+        LinearLayout actions = (LinearLayout) field(activity, "selectionActions");
+        assertEquals("Copy", ((TextView) actions.getChildAt(0)).getText().toString());
+        assertEquals("Copy full message", actions.getChildAt(0).getContentDescription());
+        actions.getChildAt(0).performClick();
+        android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
+                activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+        assertEquals(original, clipboard.getPrimaryClip().getItemAt(0).getText().toString());
+        replace.invoke(adapter, Arrays.asList(message("me", "2026-09-30T12:01:00Z", "Plain text")));
+        adapter.bindViewHolder(holder, 0);
+        assertEquals("Plain text", body.getText().toString());
+        assertNull(body.getMovementMethod());
+        replace.invoke(adapter, Arrays.asList(message("me", "2026-09-30T12:02:00Z", "https://example.org/sent")));
+        adapter.bindViewHolder(holder, 0);
+        assertEquals("https://example.org/sent", ((Spanned) body.getText())
+                .getSpans(0, body.length(), URLSpan.class)[0].getURL());
     }
     @Test public void videoCardBodyRetainsMessageReactionAndSelectionGesture() throws Exception {
         ZeroChillMessageActivity activity = shell();

@@ -78,8 +78,6 @@ final class InlineCommentsDialog extends BottomSheetDialog {
     private final Map<String, Integer> replyCounts = new HashMap<>();
     private final java.util.Set<String> expandedThreads = new java.util.HashSet<>();
     private final java.util.Set<String> likesInFlight = new java.util.HashSet<>();
-    private int baselineParentHeight;
-    private int baselineParentWidth;
     private boolean keyboardVisible;
     private boolean userExpanded;
     private int imeInsetBottom;
@@ -929,7 +927,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         window.setDimAmount(0.18f);
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         window.setNavigationBarColor(Color.BLACK);
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
     }
 
     private void configureSheet() {
@@ -986,19 +984,15 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         int available = parent.getHeight();
         if (available <= 0) return;
         boolean landscape = isLandscape();
-        boolean orientationChanged = configuredLandscape != landscape || baselineParentWidth != parent.getWidth();
+        boolean orientationChanged = configuredLandscape != landscape;
         if (orientationChanged) {
             configuredLandscape = landscape;
-            baselineParentWidth = parent.getWidth();
-            baselineParentHeight = available;
             behavior.setHalfExpandedRatio(landscape ? .72f : .60f);
         }
-        baselineParentHeight = Math.max(baselineParentHeight, available);
-        int resized = Math.max(0, baselineParentHeight - available);
-        boolean ime = imeInsetBottom > dp(120) || resized > dp(120);
+        boolean ime = imeInsetBottom > 0;
         boolean imeChanged = keyboardVisible != ime;
         keyboardVisible = ime;
-        int insetPadding = Math.max(0, imeInsetBottom - resized);
+        int insetPadding = imeInsetBottom;
         if (sheetContent != null && sheetContent.getPaddingBottom() != insetPadding) {
             sheetContent.setPadding(sheetContent.getPaddingLeft(), sheetContent.getPaddingTop(),
                     sheetContent.getPaddingRight(), insetPadding);

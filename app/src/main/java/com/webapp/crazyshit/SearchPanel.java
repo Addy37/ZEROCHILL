@@ -1181,7 +1181,7 @@ final class SearchPanel {
             return;
         }
         if (item.isSeries() || item.isCategory()) {
-            activity.startActivity(scope == Scope.SHOWS
+            activity.startActivity(scope == Scope.SHOWS || BunkrRepository.isAlbumUrl(item.url)
                     ? NativeFeedBrowserActivity.createShowDetails(activity, item, feedSource(item))
                     : NativeFeedBrowserActivity.create(activity, item.title, item.url, false, feedSource(item)));
             return;

@@ -18,6 +18,7 @@ final class ShowsWatchSession {
     static final String EXTRA_ITEMS = "shows_watch_items";
     static final String EXTRA_EPISODIC = "shows_watch_episodic";
     static final String EXTRA_LABEL = "shows_watch_label";
+    static final String EXTRA_ALBUM_SESSION = "shows_bunkr_album_session";
     private static final int MAX_ITEMS = 200;
     private static final int MAX_VISIBLE = 24;
     private static final int MAX_ENCODED_CHARS = 80_000;
@@ -27,11 +28,21 @@ final class ShowsWatchSession {
     final List<NativeContentItem> items;
     final boolean episodic;
     final String label;
+    final String albumSession;
 
     private ShowsWatchSession(List<NativeContentItem> items, boolean episodic, String label) {
+        this(items, episodic, label, "");
+    }
+
+    private ShowsWatchSession(List<NativeContentItem> items, boolean episodic, String label, String albumSession) {
         this.items = items;
         this.episodic = episodic;
         this.label = label == null ? "" : label;
+        this.albumSession = albumSession == null ? "" : albumSession;
+    }
+
+    static void attachAlbum(Intent intent, String sessionId) {
+        intent.putExtra(EXTRA_ALBUM_SESSION, sessionId);
     }
 
     static Intent attach(Intent intent, List<NativeContentItem> items, boolean episodic, String label) {
@@ -71,8 +82,25 @@ final class ShowsWatchSession {
                 }
             }
         } catch (JSONException ignored) { }
-        return new ShowsWatchSession(items, intent.getBooleanExtra(EXTRA_EPISODIC, false),
-                intent.getStringExtra(EXTRA_LABEL));
+        ShowsWatchSession session = new ShowsWatchSession(items, intent.getBooleanExtra(EXTRA_EPISODIC, false),
+                intent.getStringExtra(EXTRA_LABEL), intent.getStringExtra(EXTRA_ALBUM_SESSION));
+        BunkrGallerySessionStore.Snapshot album = session.albumSession.isEmpty() ? null
+                : BunkrGallerySessionStore.snapshot(session.albumSession);
+        return album == null ? session : session.withAlbum(album);
+    }
+
+    ShowsWatchSession withAlbum(BunkrGallerySessionStore.Snapshot album) {
+        List<NativeContentItem> videos = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (NativeContentItem item : album.items)
+            if (ShowsEpisodePlayback.playable(item) && seen.add(item.url)) videos.add(item);
+        return new ShowsWatchSession(videos, true, label, albumSession);
+    }
+
+    boolean nearAlbumEnd(String currentUrl) {
+        for (int i = 0; i < items.size(); i++)
+            if (items.get(i).url.equals(currentUrl)) return items.size() - i <= 10;
+        return true;
     }
 
     ShowsWatchSession withFallback(NativeContentItem current, List<NativeContentItem> fetched) {
@@ -84,7 +112,7 @@ final class ShowsWatchSession {
                     combined.stream().noneMatch(existing -> existing.url.equals(item.url))) combined.add(item);
             if (combined.size() >= MAX_ITEMS) break;
         }
-        return new ShowsWatchSession(combined, episodic, label);
+        return new ShowsWatchSession(combined, episodic, label, albumSession);
     }
 
     List<NativeContentItem> related(String currentUrl) {
@@ -106,6 +134,15 @@ final class ShowsWatchSession {
     }
 
     NativeContentItem next(String currentUrl, Set<String> visited) {
+        // Album filenames can contain episode numbers unrelated to their source order.
+        if (!albumSession.isEmpty()) {
+            for (int i = 0; i + 1 < items.size(); i++) if (items.get(i).url.equals(currentUrl)) {
+                for (int j = i + 1; j < items.size(); j++)
+                    if (!visited.contains(items.get(j).url)) return items.get(j);
+                break;
+            }
+            return null;
+        }
         if (!episodic) {
             for (int i = 0; i + 1 < items.size(); i++)
                 if (items.get(i).url.equals(currentUrl)) {

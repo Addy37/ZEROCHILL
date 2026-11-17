@@ -3218,8 +3218,7 @@ public final class ChaosFeedView extends FrameLayout {
             lower.setOrientation(LinearLayout.HORIZONTAL);
             lower.setGravity(Gravity.BOTTOM);
             lower.setPadding(dp(16), dp(18), dp(10), dp(30));
-            lower.setBackground(new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,
-                    new int[] {0xB9000000, 0x52000000, Color.TRANSPARENT}));
+            lower.setBackgroundColor(Color.TRANSPARENT);
             lower.setClickable(false);
             lower.setLongClickable(false);
             lower.setFocusable(false);
@@ -3233,7 +3232,7 @@ public final class ChaosFeedView extends FrameLayout {
             copy.setBackgroundColor(Color.TRANSPARENT);
             lower.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
-            title = new TextView(activity);
+            title = new ShitTokOverlayTextView(activity);
             title.setTextColor(Color.WHITE);
             title.setTextSize(18);
             title.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -3241,8 +3240,7 @@ public final class ChaosFeedView extends FrameLayout {
             title.setLineSpacing(dp(2), 1f);
             copy.addView(title, new LinearLayout.LayoutParams(-1, -2));
 
-            meta = new TextView(activity);
-            meta.setTextColor(Color.rgb(215, 215, 222));
+            meta = new ShitTokOverlayTextView(activity);
             meta.setTextSize(13);
             meta.setPadding(0, dp(7), 0, 0);
             copy.addView(meta, new LinearLayout.LayoutParams(-1, -2));

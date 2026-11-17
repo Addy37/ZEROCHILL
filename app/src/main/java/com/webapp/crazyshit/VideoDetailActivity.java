@@ -219,6 +219,9 @@ public class VideoDetailActivity extends Activity {
     private long showsIdentStartedAt;
     private long lastShowsFramePositionMs = -1L;
     private ShowsWatchSession showsSession;
+    private boolean showsAlbumLoading;
+    private boolean showsAlbumLoadFailed;
+    private int showsAlbumEmptyPages;
     private LinearLayout showsLandscapeRail;
     private HorizontalScrollView showsRailScroll;
     private LinearLayout showsLandscapeActions;
@@ -383,7 +386,7 @@ public class VideoDetailActivity extends Activity {
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        if (showsOrigin) setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER);
+        if (showsOrigin) PhoneOrientationPolicy.enterShowsPlayback(this);
         else PhoneOrientationPolicy.applyBrowsingOrientation(this);
         orientationListener = new SensorMediaOrientationListener(this, this::onPhysicalOrientation);
 
@@ -1449,8 +1452,17 @@ public class VideoDetailActivity extends Activity {
         portraitSeekBar.setProgress(progress);
     }
 
+    private boolean isBunkrAlbumWatch() {
+        return showsOrigin && showsSession != null && !showsSession.albumSession.isEmpty();
+    }
+
+    private String showsDisplayTitle(NativeContentItem item) {
+        return isBunkrAlbumWatch() ? BunkrAlbumTitles.display(item) : item.title;
+    }
+
     private void updateMetadataUi() {
-        String displayTitle = OnlyFapVideoMetadata.displayTitle(currentContent());
+        String displayTitle = isBunkrAlbumWatch() ? BunkrAlbumTitles.display(currentContent())
+                : OnlyFapVideoMetadata.displayTitle(currentContent());
         if (titleView != null) titleView.setText(displayTitle);
         if (playerTitleView != null) playerTitleView.setText(displayTitle);
         if (fullscreenOverlay != null) {
@@ -1595,6 +1607,10 @@ public class VideoDetailActivity extends Activity {
 
     private void loadRelated() {
         if (relatedContainer == null) return;
+        if (showsOrigin && showsSession != null && !showsSession.albumSession.isEmpty()) {
+            maybeLoadShowsAlbum();
+            return;
+        }
         if (showsOrigin) {
             if (showsFallbackRequested || showsSession == null ||
                     !showsSession.related(pageUrl).isEmpty()) return;
@@ -1739,6 +1755,65 @@ public class VideoDetailActivity extends Activity {
                 showsLandscapeRail.addView(card, params);
             }
         }
+        if (!showsSession.albumSession.isEmpty()) {
+            maybeLoadShowsAlbum();
+            if ((showsAlbumLoadFailed || showsAlbumEmptyPages >= 3) && relatedContainer != null) {
+                TextView retry = new TextView(this);
+                retry.setText("Load more album videos");
+                retry.setTextColor(AppearanceTheme.accent(this));
+                retry.setGravity(Gravity.CENTER);
+                retry.setMinHeight(dp(48));
+                retry.setOnClickListener(v -> {
+                    showsAlbumLoadFailed = false;
+                    showsAlbumEmptyPages = 0;
+                    renderShowsRelated();
+                });
+                relatedContainer.addView(retry);
+            }
+        }
+    }
+
+    /** Extend the existing album session one source page at a time, using the same resolver. */
+    private void maybeLoadShowsAlbum() {
+        if (!showsOrigin || showsSession == null || showsSession.albumSession.isEmpty()
+                || showsAlbumLoading || showsAlbumLoadFailed || showsAlbumEmptyPages >= 3
+                || !showsSession.nearAlbumEnd(pageUrl) || isFinishing() || isDestroyed()) return;
+        String sessionId = showsSession.albumSession;
+        BunkrGallerySessionStore.Snapshot cached = BunkrGallerySessionStore.snapshot(sessionId);
+        if (cached != null && cached.endReached) return;
+        showsAlbumLoading = true;
+        ShowsWatchSession requestSession = showsSession;
+        String albumUrl = relatedFeedUrl;
+        String selected = pageUrl;
+        io.execute(() -> {
+            BunkrGallerySessionStore.Snapshot album = BunkrGallerySessionStore.restore(this, sessionId);
+            boolean failed = false;
+            try {
+                if (album == null) throw new java.io.IOException("Album session unavailable");
+                if (!album.endReached && requestSession.withAlbum(album).nearAlbumEnd(selected)) {
+                    int nextPage = album.currentPage + 1;
+                    List<NativeContentItem> more = bunkrRepository.fetchAlbum(this, albumUrl, nextPage);
+                    int added = BunkrGallerySessionStore.append(sessionId, more, nextPage, false);
+                    BunkrGallerySessionStore.updatePaging(sessionId, nextPage, more.isEmpty() || added == 0);
+                    BunkrGallerySessionStore.persist(this, sessionId);
+                    album = BunkrGallerySessionStore.snapshot(sessionId);
+                }
+            } catch (Exception e) { failed = true; }
+            BunkrGallerySessionStore.Snapshot loaded = album;
+            boolean loadFailed = failed;
+            runOnUiThread(() -> {
+                showsAlbumLoading = false;
+                if (isFinishing() || isDestroyed() || showsSession == null
+                        || !sessionId.equals(showsSession.albumSession)) return;
+                showsAlbumLoadFailed = loadFailed;
+                int before = showsSession.items.size();
+                if (loaded != null) showsSession = showsSession.withAlbum(loaded);
+                showsAlbumEmptyPages = before == showsSession.items.size() ? showsAlbumEmptyPages + 1 : 0;
+                renderShowsRelated();
+                if (showsCompleted && !showsCountdownCancelled && showsCountdownDeadline == 0L)
+                    startShowsCountdown();
+            });
+        });
     }
 
     private float showsLandscapeScale() {
@@ -1753,7 +1828,7 @@ public class VideoDetailActivity extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setClickable(true);
         card.setFocusable(true);
-        card.setContentDescription("Play " + item.title);
+        card.setContentDescription("Play " + showsDisplayTitle(item));
         card.setOnTouchListener((v, event) -> {
             if (fullscreenControls == null) return false;
             int action = event.getActionMasked();
@@ -1782,11 +1857,14 @@ public class VideoDetailActivity extends Activity {
         showsCountdownItem = showsCountdownQueued == null
                 ? showsSession.next(pageUrl, showsVisited)
                 : ContentItemCodec.decode(showsCountdownQueued);
-        if (showsCountdownItem == null || showsNextOverlay == null) return;
+        if (showsCountdownItem == null || showsNextOverlay == null) {
+            maybeLoadShowsAlbum();
+            return;
+        }
         showsCountdownDeadline = SystemClock.uptimeMillis() +
                 (remaining > 0L ? remaining : 5_000L);
         showsCountdownRemainingMs = 0L;
-        if (showsNextTitle != null) showsNextTitle.setText(showsCountdownItem.title);
+        if (showsNextTitle != null) showsNextTitle.setText(showsDisplayTitle(showsCountdownItem));
         if (showsNextImage != null) {
             Glide.with(showsNextImage).clear(showsNextImage);
             showsNextImage.setImageDrawable(null);
@@ -1836,7 +1914,7 @@ public class VideoDetailActivity extends Activity {
         column.setOrientation(LinearLayout.VERTICAL);
         column.setClickable(true);
         column.setFocusable(true);
-        column.setContentDescription("Play " + item.title);
+        column.setContentDescription("Play " + showsDisplayTitle(item));
         column.setOnClickListener(v -> { haptic(v); dispatchShowsSelection(item); });
         ImageView image = new ImageView(this);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -1849,7 +1927,7 @@ public class VideoDetailActivity extends Activity {
         if (clean(thumbnail).isEmpty()) thumbnail = item.imageUrl;
         if (!clean(thumbnail).isEmpty()) loadImage(image, thumbnail, item.url);
         TextView name = new TextView(this);
-        name.setText(item.title);
+        name.setText(showsDisplayTitle(item));
         name.setTextColor(Color.WHITE);
         name.setTextSize(16);
         name.setMaxLines(2);
@@ -1908,7 +1986,7 @@ public class VideoDetailActivity extends Activity {
         row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
         TextView name = new TextView(this);
-        name.setText(item.title);
+        name.setText(showsDisplayTitle(item));
         name.setTextColor(Color.WHITE);
         name.setTextSize(14);
         name.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -2086,6 +2164,8 @@ public class VideoDetailActivity extends Activity {
         showsCountdownCancelled = false;
         showsResumeAfterStop = false;
         showsVisited.add(item.url);
+        showsAlbumEmptyPages = 0;
+        showsAlbumLoadFailed = false;
         syncShowsPlaybackIntent();
         updateMetadataUi();
         buildPlayer(-1L);
@@ -2737,6 +2817,9 @@ public class VideoDetailActivity extends Activity {
                 ? "Remove from Watch Later"
                 : "Watch Later";
         ArrayList<VideoActionSheet.Action> actions = new ArrayList<>();
+        if (isBunkrAlbumWatch()) actions.add(VideoActionSheet.action(
+                R.drawable.ic_action_link, "Original filename", title,
+                () -> BunkrAlbumTitles.showOriginal(this, currentContent())));
         if (supportsComments()) {
             actions.add(VideoActionSheet.action(
                     R.drawable.ic_action_comments,
@@ -2789,7 +2872,7 @@ public class VideoDetailActivity extends Activity {
 
         VideoActionSheet.showCompact(
                 this,
-                title,
+                isBunkrAlbumWatch() ? BunkrAlbumTitles.display(currentContent()) : title,
                 VideoActionSheet.section(
                         "PLAYBACK",
                         VideoActionSheet.action(
@@ -3022,7 +3105,8 @@ public class VideoDetailActivity extends Activity {
             if (fullscreenGestures != null) fullscreenGestures.cancel();
         }
         if (fullscreen) {
-            ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(title);
+            ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(
+                    isBunkrAlbumWatch() ? BunkrAlbumTitles.display(currentContent()) : title);
             fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
             View toggle = fullscreenOverlay.findViewById(R.id.shows_fullscreen_toggle);
             toggle.setVisibility(showsOrigin || (!landscape && !portraitVideo) ? View.VISIBLE : View.GONE);
@@ -3142,7 +3226,7 @@ public class VideoDetailActivity extends Activity {
             PhoneOrientationPolicy.enterPortraitFullscreen(this);
         } else {
             PhoneOrientationPolicy.exitFullscreenVideo(this);
-            if (showsOrigin) setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER);
+            if (showsOrigin) PhoneOrientationPolicy.enterShowsPlayback(this);
         }
         applyOrientation(getResources().getConfiguration().orientation);
         if (playerView != null) showVideoControls();
@@ -3156,7 +3240,7 @@ public class VideoDetailActivity extends Activity {
         rotatableFullscreen = enabled;
         sensorFullscreen = false;
         if (enabled) {
-            if (!showsOrigin && ShowsPlaybackOrientationPolicy.shouldForceLandscapeOnFullscreen(
+            if (ShowsPlaybackOrientationPolicy.shouldForceLandscapeOnFullscreen(
                     manualLandscapeFullscreen,
                     showsOrigin,
                     portraitVideo
@@ -3170,13 +3254,15 @@ public class VideoDetailActivity extends Activity {
         } else {
             portraitFullscreen = false;
             PhoneOrientationPolicy.exitFullscreenVideo(this);
-            if (showsOrigin) setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER);
+            if (showsOrigin) PhoneOrientationPolicy.enterShowsPlayback(this);
         }
         applyOrientation(getResources().getConfiguration().orientation);
         if (playerView != null) showVideoControls();
     }
 
     private void onPhysicalOrientation(SensorMediaOrientationListener.Position position) {
+        // Shows uses Android USER orientation, registered with the shared lifecycle policy.
+        // Keep this custom fullscreen sensor exclusive to the other playback surfaces.
         if (showsOrigin) return;
         if (socialEntry && activeComments != null && activeComments.isShowing()) return;
         if (player == null || !videoSizeKnown || !ShowsPlaybackOrientationPolicy.autoRotateEnabled(this)) return;
@@ -3381,6 +3467,8 @@ public class VideoDetailActivity extends Activity {
                 Intent context = ShowsWatchSession.attach(new Intent()
                         .putExtra(PlayerActivity.EXTRA_PAGE_URL, pageUrl), showsSession.items,
                         showsSession.episodic, showsSession.label);
+                if (!showsSession.albumSession.isEmpty())
+                    ShowsWatchSession.attachAlbum(context, showsSession.albumSession);
                 outState.putBundle("shows_context", context.getExtras());
             }
             outState.putInt("shows_scroll_y", detailsScroll == null ? 0 : detailsScroll.getScrollY());

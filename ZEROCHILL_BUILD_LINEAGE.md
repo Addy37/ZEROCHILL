@@ -1,5 +1,36 @@
 # ZEROCHILL build lineage
 
+## Five fixes plus polish, second physical-test candidate
+
+The user requested the three agreed polish changes on top of the phone-approved
+five-fixes APK: cleaner Bunkr filename titles, DM Open link / Copy link actions,
+and removing ShitTok's broad lower gradient while keeping outlined, shadowed text.
+Continue `feature/zerochill-five-fixes` and PR #450 from `cff34b86`, retaining
+approved APK source `8f219b32da76c99bc6955826d3a786b902bf4302` as an ancestor.
+Current production `main` remains `8964653bb5a25948d587d477077e8a13162548b0`.
+Candidate `7.1.1-test.2-polish` (`7001002`) uses the same production application ID,
+certificate and backend routing, and upgrades both 7.1.0 and the first test APK.
+See `docs/FIVE_FIXES_POLISH.md` for scope and validation. One signed artifact;
+the new polish awaits phone approval. No merge, tag, public release, backend or
+source-config publication is authorized.
+
+## Five fixes approved physical-test candidate
+
+`feature/zerochill-five-fixes` starts at verified current `main`
+`8964653bb5a25948d587d477077e8a13162548b0`, the complete released 7.1.0 lineage.
+Fetched historical `rebrand/zerochill` (`2f9a489a`) is an ancestor of this baseline.
+Candidate `7.1.1-test.1-five-fixes` (`7001001`) preserves the production package,
+signing certificate and New Zerochill routing. See `docs/FIVE_FIXES_TEST_APK.md`
+for the five scoped fixes, focused validation and physical-test limitations.
+The single signed Actions artifact records its exact source branch/SHA and verifies
+upgrade compatibility against published 7.1.0. No merge, tag, public release,
+updater publication, backend/source-config change, data migration or integration
+branch synchronization is authorized. On 2026-11-17 the user confirmed personal
+phone testing and approved the APK built from
+`8f219b32da76c99bc6955826d3a786b902bf4302` in Actions run `44020022617`.
+PR preparation against current `main` is authorized; merging and publication are
+separate actions. Subsequent merge-preparation changes update documentation only.
+
 ## ZEROCHILL 7.1.0 publication
 
 User approved PR #449 after on-device review of the compact ShitTok share menu.

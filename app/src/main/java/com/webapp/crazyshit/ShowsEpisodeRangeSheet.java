@@ -144,9 +144,11 @@ final class ShowsEpisodeRangeSheet {
         for (int index = 0; index < episodes.size() && shown < 40; index++) {
             NativeContentItem item = episodes.get(index);
             String title = item == null || item.title == null ? "" : item.title.trim();
-            if (!title.toLowerCase(Locale.US).contains(needle)) continue;
+            String displayTitle = BunkrAlbumTitles.display(item).trim();
+            if (!title.toLowerCase(Locale.US).contains(needle)
+                    && !displayTitle.toLowerCase(Locale.US).contains(needle)) continue;
             final int selected = index;
-            addRow(activity, rows, "#" + (index + 1) + "  " + title, false, () -> {
+            addRow(activity, rows, "#" + (index + 1) + "  " + displayTitle, false, () -> {
                 if (listener != null) listener.onSelected(selected);
                 dialog.dismiss();
             });

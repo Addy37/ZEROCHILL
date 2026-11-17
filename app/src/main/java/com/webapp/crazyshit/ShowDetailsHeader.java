@@ -354,6 +354,17 @@ final class ShowDetailsHeader extends FrameLayout {
         }
     }
 
+    void setAlbumItemCount(int total, int videos, int images) {
+        count.setText(total + " items · " + videos + " videos · " + images + " pictures");
+    }
+
+    void setAlbumArtwork(String imageUrl) {
+        if (imageUrl != null && !imageUrl.isEmpty() && !imageUrl.equals(artwork.getTag())) {
+            artwork.setTag(imageUrl);
+            loadArtwork(imageUrl);
+        }
+    }
+
     private void loadArtwork(String imageUrl) {
         byte[] embedded = EmbeddedBrowseArtwork.get(getContext(), collectionUrl);
         if (embedded != null && embedded.length >= 512) {
