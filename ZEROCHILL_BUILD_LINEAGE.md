@@ -1,5 +1,18 @@
 # ZEROCHILL build lineage
 
+## Flat comments header and search entrance test candidate
+
+PR #450 was phone-approved and merged into `main` as
+`66810a58eb4e53aeaa7b301bf201813d1ff202df`. PR #451, branch
+`fix/flat-comments-header`, starts from that verified complete baseline. Its app
+changes at `f23693c9ff40c9de83bfd09bbeb7171f129c99ce` flatten only the comments
+header and improve on-screen search-result entrances. Candidate
+`7.1.1-test.3-header-search` (`7001003`) upgrades the approved second test APK
+(`7001002`) using the same production package, certificate and backend routing.
+See `docs/COMMENTS_SEARCH_TEST_APK.md`. The signed artifact records exact source
+branch/SHA. No merge, release, tag, updater publication, backend deployment or
+source-config change is authorized. Phone testing of these two tweaks is pending.
+
 ## Five fixes plus polish, second physical-test candidate
 
 The user requested the three agreed polish changes on top of the phone-approved
