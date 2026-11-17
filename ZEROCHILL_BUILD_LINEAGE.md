@@ -22,8 +22,15 @@ PR #452 merged release preparation at
 `20e4fd47dc7f23873ece2c3f1ff735b3f85b4bf0`. Tag `v7.2.0` points to that exact
 commit. Its single signed release run `44111217600` started with focused tests and
 fail-closed source, notes, package, certificate and upgrade checks. The standing
-release workflow is restored to manual-only after this run started. Publication
-remains unverified until the signed job and public assets are checked.
+release workflow was restored to manual-only after this run started.
+
+Run `44111217600` completed successfully, including focused release tests, signed
+assembly, matching bundled notes, unchanged package/certificate and upgrade checks.
+Public latest release: https://github.com/Addy37/ZEROCHILL/releases/tag/v7.2.0
+Verified assets: `ZeroChill.apk` (23,222,568 bytes) and `SHA256SUMS.txt`.
+APK SHA-256: `0814f18c5f979e6f93eccc7fc1d1d3ff5478cd7fc820d0f6d8d6aa49f7d35bfc`.
+Signed Actions artifact `ZeroChill-signed` is `14341286669`. GitHub reports the
+release as public, stable and latest, targeting the exact tagged source above.
 
 ## Flat comments header and search entrance test candidate
 
