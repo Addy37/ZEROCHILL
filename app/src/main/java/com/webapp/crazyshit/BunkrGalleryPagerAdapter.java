@@ -233,7 +233,7 @@ final class BunkrGalleryPagerAdapter
     void preloadImage(int position) {
         NativeContentItem item = itemAt(position);
         if (item == null || !item.isImage()) return;
-        String url = value(resolvedUrls.get(item.url));
+        String url = resolvedUrl(position);
         if (url.isEmpty()) url = value(item.imageUrl);
         if (url.isEmpty() || !preloadedImages.add(url)) return;
         Glide.with(context)
@@ -410,11 +410,13 @@ final class BunkrGalleryPagerAdapter
         }
         GalleryMediaTransition.clearName(holder.image);
         holder.image.setZoomEnabled(item.isImage());
-        String resolved = value(resolvedUrls.get(item.url));
+        boolean bunkrPhoto = item.isImage() && BunkrRepository.isBunkrUrl(item.url);
+        String resolved = bunkrPhoto ? resolvedUrl(position) : value(resolvedUrls.get(item.url));
         boolean opening = sharedElementOpening && item.url.equals(sharedElementUrl)
                 && !value(item.imageUrl).isEmpty();
         // The thumbnail owns the shared expansion. Upgrade it once Android finishes.
         String preview = item.isVideo() || resolved.isEmpty() || opening ? value(item.imageUrl) : resolved;
+        boolean fullImage = item.isImage() && !resolved.isEmpty() && preview.equals(resolved);
         boolean activeVideo = item.isVideo() && position == activeVideoPosition && activePlayer != null;
         boolean retryImage = retryImages.remove(item.url);
         if (!activeVideo && (!sameItem || retryImage || !preview.equals(holder.requestedImageUrl))) {
@@ -436,7 +438,7 @@ final class BunkrGalleryPagerAdapter
                         .transition(DrawableTransitionOptions.with((source, first) ->
                                 holder.reveal.imageTransition(source, !revealsStopped
                                         && !(sharedElementOpening && item.url.equals(sharedElementUrl)),
-                                        item.isImage() && !resolved.isEmpty() && preview.equals(resolved))))
+                                        fullImage)))
                         .placeholder(placeholder != null ? placeholder : new ColorDrawable(Color.BLACK))
                         .error(new ColorDrawable(Color.BLACK))
                         .listener(new RequestListener<Drawable>() {
@@ -459,11 +461,19 @@ final class BunkrGalleryPagerAdapter
                                     if (holder.imageRequest != request || revealsStopped ||
                                             current == RecyclerView.NO_POSITION || current >= items.size() ||
                                             !item.url.equals(items.get(current).url)) return;
-                                    if (!resolved.isEmpty() && resolved.equals(resolvedUrls.get(item.url))) {
-                                        resolvedUrls.remove(item.url);
-                                        listener.onResolvedImageFailed(current, item);
+                                    // A failed thumbnail can race the original during shared entry.
+                                    // Only the request using the current original can invalidate it.
+                                    String currentOriginal = value(resolvedUrls.get(item.url));
+                                    if (bunkrPhoto && (!fullImage || (!currentOriginal.isEmpty()
+                                            && !resolved.equals(currentOriginal)))) {
+                                        return;
                                     }
                                     setFailed(current, true);
+                                    if (bunkrPhoto || (!resolved.isEmpty() && resolved.equals(currentOriginal))) {
+                                        resolvedUrls.remove(item.url);
+                                        if (bunkrPhoto) retryImages.add(item.url);
+                                        listener.onResolvedImageFailed(current, item);
+                                    }
                                     updateState(holder, current);
                                 });
                                 // Glide must not replace a successful thumbnail/owned snapshot with black.
@@ -482,7 +492,7 @@ final class BunkrGalleryPagerAdapter
                                 holder.imageLoading = false;
                                 holder.hasUsableImage = true;
                                 listener.onArtworkReady(holder.getBindingAdapterPosition());
-                                if (item.isImage() && !resolved.isEmpty() && preview.equals(resolved)) {
+                                if (fullImage) {
                                     failed.remove(item.url);
                                     loading.remove(item.url);
                                 }

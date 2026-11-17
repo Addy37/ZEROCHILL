@@ -115,6 +115,7 @@ public final class BunkrGalleryActivity extends Activity {
     private boolean recoveryResumed;
     private int activeVideoPosition = -1;
     private volatile int requestedPhotoPosition = -1;
+    private String retriedBunkrPhoto = "";
     private final Set<String> resolvingMedia = new HashSet<>();
     private final Set<String> warmedVideos = new HashSet<>();
     private final Map<String, String> videoReferers = new HashMap<>();
@@ -233,6 +234,11 @@ public final class BunkrGalleryActivity extends Activity {
                     @Override
                     public void onResolvedImageFailed(int position, NativeContentItem item) {
                         BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
+                        if (position == pager.getCurrentItem() && BunkrRepository.isBunkrUrl(item.url)
+                                && !item.url.equals(retriedBunkrPhoto)) {
+                            retriedBunkrPhoto = item.url;
+                            resolvePhoto(position);
+                        }
                     }
 
                     @Override public void onVideoBack() { onBackPressed(); }
@@ -297,6 +303,7 @@ public final class BunkrGalleryActivity extends Activity {
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
+                if (position != requestedPhotoPosition) retriedBunkrPhoto = "";
                 requestedPhotoPosition = position;
                 pendingVideoPosition = -1;
                 releasePlayer();

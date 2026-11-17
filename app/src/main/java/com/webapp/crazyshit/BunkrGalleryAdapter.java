@@ -325,7 +325,6 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         tile.setLayoutParams(tileParams);
 
         ImageView image = new ImageView(parent.getContext());
-        image.setScaleType(adaptiveAspectRatios ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
         image.setBackgroundColor(Color.rgb(20, 20, 23));
         tile.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
@@ -470,6 +469,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         NativeContentItem item = items.get(position);
         holder.favorite.setVisibility(favoriteUrls.contains(item.url) ? View.VISIBLE : View.GONE);
         ViewCompat.setTransitionName(holder.image, GalleryMediaTransition.transitionName(item));
+        holder.image.setScaleType(adaptiveAspectRatios && !BunkrRepository.isBunkrUrl(item.url)
+                ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
         holder.tile.setAspectRatio(adaptiveAspectRatios
                 ? aspectRatios.getOrDefault(item.url, item.aspectRatioHint > 0f ? item.aspectRatioHint : 1f)
                 : 1f);
@@ -783,13 +784,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     ) {
         if (resource == null || resource.getIntrinsicWidth() <= 0 ||
                 resource.getIntrinsicHeight() <= 0) return;
-        float ratio = item.aspectRatioHint > 0f ? item.aspectRatioHint
-                : (float) resource.getIntrinsicWidth() / resource.getIntrinsicHeight();
+        float ratio = (float) resource.getIntrinsicWidth() / resource.getIntrinsicHeight();
+        if (item.aspectRatioHint > 0f && !BunkrRepository.isBunkrUrl(item.url)) {
+            ratio = item.aspectRatioHint;
+        }
         if (!Float.isFinite(ratio) || ratio <= 0f) return;
         aspectRatios.put(item.url, ratio);
-        int current = holder.getBindingAdapterPosition();
-        if (current == RecyclerView.NO_POSITION || current >= items.size() ||
-                !item.url.equals(items.get(current).url)) return;
+        // The request's binding generation is valid even before RecyclerView assigns a position.
         // A delayed decode changes this tile and its neighbors' layout coordinates.
         // An earlier favorite snapshot must not translate those new bounds.
         if (holder.tile.setAspectRatio(ratio)) stopFavoriteMoves();
