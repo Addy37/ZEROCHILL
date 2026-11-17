@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat;
 
 public class SettingsActivity extends ComponentActivity {
     public static final String EXTRA_CHECK_FOR_UPDATES = "check_for_updates";
+    private static final int PICK_INSTALLER_TEST_APK = 7394;
 
     private SharedPreferences prefs;
     private AppUpdater appUpdater;
@@ -110,6 +111,15 @@ public class SettingsActivity extends ComponentActivity {
                     if (appUpdater != null) appUpdater.check(true);
                 }
         );
+        if (AppUpdater.isInstallerTestBuild()) {
+            addAction(
+                    notifications,
+                    "Test APK installer",
+                    "Choose the newer signed test APK from Downloads. Nothing is published.",
+                    "",
+                    this::pickInstallerTestApk
+            );
+        }
         if (getPackageName().endsWith(".dev")) {
             addAction(
                     notifications,
@@ -563,9 +573,32 @@ public class SettingsActivity extends ComponentActivity {
         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
     }
 
+    private void pickInstallerTestApk() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {
+                "application/vnd.android.package-archive",
+                "application/octet-stream"
+        });
+        try {
+            startActivityForResult(intent, PICK_INSTALLER_TEST_APK);
+        } catch (Exception ignored) {
+            ZeroChillToast.makeText(this, "Couldn't open Files to choose the test APK.",
+                    ZeroChillToast.LENGTH_LONG).show();
+        }
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PICK_INSTALLER_TEST_APK) {
+            if (resultCode == RESULT_OK && data != null
+                    && data.getData() != null && appUpdater != null) {
+                appUpdater.installPickedTestApk(data.getData());
+            }
+            return;
+        }
         if (backup != null) {
             backup.onResult(requestCode, resultCode, data);
         }

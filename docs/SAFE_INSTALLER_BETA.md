@@ -26,3 +26,20 @@ Source: current approved 7.2.0 main lineage; Android production package/signing 
 The new manifest install permission could cause Play Protect to classify ZEROCHILL differently. A passing single-device beta scan is not a guarantee for subsequent releases. Nothing changes for users until a separately approved stable release.
 
 No Supabase, remote source config, schema, signing, app ID or data migration changes.
+
+## Private two-APK confirmation test
+
+PR #453 adds a **test-only** action under Settings > Notifications & updates > Test APK installer. It appears only in signed builds with the version name prefix `7.2.1-installer-beta.` and must be removed before the eventual production merge.
+
+The one-shot GitHub Actions artifact contains:
+- **Harness**: version code 7002002. Install this APK over the existing signed installer beta (7002001) with Play Protect enabled.
+- **Fixture**: version code 7002003. Download it to the phone but **do not install by tapping the APK**.
+- On the harness, tap Settings > Test APK installer and choose the fixture via Android Files. The app validates package identity and a higher version, stages it through the **same PackageInstaller session code** as a real DownloadManager update, and Android requests installation confirmation.
+- Accept the prompt and verify version 7002003 plus intact sign-in, history, favorites, downloaded content, preferences and backups.
+- Retest installation permission denied and installer cancellation if convenient.
+
+### What this tests and what remains
+
+This privately tests the real Android PackageInstaller handoff, permission prompt, APK identity/version guards, Android's signing check, and upgrade preservation without publishing any release. It **does not** test private remote downloading or update auto-detection. Production still obtains APKs through the unchanged, previously working DownloadManager path; a future public update or controlled opt-in HTTPS endpoint is needed to validate that integration end to end.
+
+**No public release, Supabase changes, remote config changes, app ID change, signing change, or migrations.**

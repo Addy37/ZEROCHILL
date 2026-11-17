@@ -13,6 +13,20 @@ public class AppUpdaterInstallerTest {
         assertFalse(AppUpdater.validDownloadedSize(21, 20));
     }
 
+    @Test public void testHarnessIsLimitedToInstallerBetas() {
+        assertTrue(AppUpdater.isInstallerTestVersion("7.2.1-installer-beta.2"));
+        assertTrue(AppUpdater.isInstallerTestVersion("7.2.1-installer-beta.3"));
+        assertFalse(AppUpdater.isInstallerTestVersion("7.2.0"));
+        assertFalse(AppUpdater.isInstallerTestVersion("7.2.1"));
+        assertFalse(AppUpdater.isInstallerTestVersion(null));
+    }
+
+    @Test public void higherVersionIsRequiredBeforeInstalling() {
+        assertTrue(AppUpdater.isNewerPackageVersion(7002003, 7002002));
+        assertFalse(AppUpdater.isNewerPackageVersion(7002002, 7002002));
+        assertFalse(AppUpdater.isNewerPackageVersion(7002000, 7002002));
+    }
+
     @Test public void acceptsExactOrUnknownLengthWhenNonEmpty() {
         assertTrue(AppUpdater.validDownloadedSize(23222568, 23222568));
         assertTrue(AppUpdater.validDownloadedSize(1024, -1));
