@@ -310,7 +310,8 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (item == null) return;
         ensureContext(result.image.getContext());
         result.boundUrl = item.url == null ? "" : item.url;
-        fades.show(result.card, itemKey(entry));
+        result.entranceKey = itemKey(entry);
+        fades.bind(result.card, result.entranceKey);
         LinearLayout.LayoutParams imageSize = (LinearLayout.LayoutParams) result.image.getLayoutParams();
         imageSize.width = dp(result.image, item.isCreator() ? 72 : 100);
         imageSize.height = dp(result.image, item.isCreator() ? 72 : 75);
@@ -561,10 +562,26 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     @Override
+    public void onViewAttachedToWindow(@NonNull RecyclerView.ViewHolder holder) {
+        super.onViewAttachedToWindow(holder);
+        if (holder instanceof ResultHolder) {
+            ResultHolder result = (ResultHolder) holder;
+            if (!result.entranceKey.isEmpty()) fades.show(result.card, result.entranceKey);
+        }
+    }
+
+    @Override
+    public void onViewDetachedFromWindow(@NonNull RecyclerView.ViewHolder holder) {
+        if (holder instanceof ResultHolder) SearchResultFades.recycle(((ResultHolder) holder).card);
+        super.onViewDetachedFromWindow(holder);
+    }
+
+    @Override
     public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
         if (holder instanceof ResultHolder) {
             ResultHolder result = (ResultHolder) holder;
             result.boundUrl = "";
+            result.entranceKey = "";
             SearchResultFades.recycle(result.card);
             Glide.with(result.image).clear(result.image);
             result.card.setOnClickListener(null);
@@ -599,6 +616,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         final TextView meta;
         final TextView favorite;
         String boundUrl = "";
+        String entranceKey = "";
 
         ResultHolder(MaterialCardView card, ImageView image, TextView title, TextView meta, TextView favorite) {
             super(card);

@@ -203,7 +203,7 @@ final class OnlyFapCreatorSearchAdapter
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         NativeContentItem item = items.get(position);
         holder.bound = item;
-        fades.show(holder.card, creatorKey(item));
+        fades.bind(holder.card, creatorKey(item));
         holder.name.setText(item.title);
         holder.handle.setText(creatorHandle(item));
         holder.meta.setText(metaText(item));
@@ -223,6 +223,18 @@ final class OnlyFapCreatorSearchAdapter
             // The source supplies one avatar URL, not a distinct media preview.
             holder.imageUrl = item.imageUrl;
         }
+    }
+
+    @Override
+    public void onViewAttachedToWindow(@NonNull Holder holder) {
+        super.onViewAttachedToWindow(holder);
+        if (holder.bound != null) fades.show(holder.card, creatorKey(holder.bound));
+    }
+
+    @Override
+    public void onViewDetachedFromWindow(@NonNull Holder holder) {
+        SearchResultFades.recycle(holder.card);
+        super.onViewDetachedFromWindow(holder);
     }
 
     @Override
