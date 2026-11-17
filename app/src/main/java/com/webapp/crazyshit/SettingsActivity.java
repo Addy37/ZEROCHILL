@@ -110,17 +110,6 @@ public class SettingsActivity extends ComponentActivity {
                     if (appUpdater != null) appUpdater.check(true);
                 }
         );
-        if (AppUpdater.isInstallerTestHarness(BuildConfig.VERSION_NAME)) {
-            addAction(
-                    notifications,
-                    "Check installer test update",
-                    "Fetch the signed test update from GitHub. No manual APK selection.",
-                    "",
-                    () -> {
-                        if (appUpdater != null) appUpdater.checkInstallerEndToEndTest();
-                    }
-            );
-        }
         if (getPackageName().endsWith(".dev")) {
             addAction(
                     notifications,

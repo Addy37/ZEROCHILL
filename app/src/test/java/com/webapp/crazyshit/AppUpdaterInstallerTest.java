@@ -13,11 +13,10 @@ public class AppUpdaterInstallerTest {
         assertFalse(AppUpdater.validDownloadedSize(21, 20));
     }
 
-    @Test public void installerTestChannelIsLimitedToExactVersion() {
-        assertTrue(AppUpdater.isInstallerTestHarness("7.2.1-installer-e2e.4"));
-        assertFalse(AppUpdater.isInstallerTestHarness("7.2.1-installer-e2e.5"));
-        assertFalse(AppUpdater.isInstallerTestHarness("7.2.0"));
-        assertFalse(AppUpdater.isInstallerTestHarness(null));
+    @Test public void higherVersionCheckHandlesLargeVersionCodes() {
+        assertTrue(AppUpdater.isNewerPackageVersion(7_002_006L, 7_002_005L));
+        assertFalse(AppUpdater.isNewerPackageVersion(7_002_005L, 7_002_005L));
+        assertFalse(AppUpdater.isNewerPackageVersion(7_002_004L, 7_002_005L));
     }
 
     @Test public void higherVersionIsRequiredBeforeInstalling() {
