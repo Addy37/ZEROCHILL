@@ -18,10 +18,12 @@ signing certificate, sources, backend routing and persisted user data are preser
 No backend deployment or data migration is included.
 
 Local update summary, What's New, update card and overflow tests: 21 passed.
-One explicit `v7.2.0` tag push will run the existing signed release workflow with
-focused tests and fail-closed source, notes, package, certificate and upgrade checks.
-The standing release workflow will be restored to manual-only once that run starts.
-Publication remains unverified until the signed job and public assets are checked.
+PR #452 merged release preparation at
+`20e4fd47dc7f23873ece2c3f1ff735b3f85b4bf0`. Tag `v7.2.0` points to that exact
+commit. Its single signed release run `44111217600` started with focused tests and
+fail-closed source, notes, package, certificate and upgrade checks. The standing
+release workflow is restored to manual-only after this run started. Publication
+remains unverified until the signed job and public assets are checked.
 
 ## Flat comments header and search entrance test candidate
 

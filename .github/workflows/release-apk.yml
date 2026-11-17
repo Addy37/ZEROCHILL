@@ -1,8 +1,6 @@
 name: Publish ZeroChill Signed APK Release
 
 on:
-  push:
-    tags: ['v7.2.0']
   workflow_dispatch:
     inputs:
       version:
@@ -14,10 +12,8 @@ permissions:
 
 jobs:
   release:
-    # One explicit 7.2.0 tag event; restore manual-only after this run starts.
-    if: >-
-      (github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch')
-      || (github.ref == 'refs/tags/v7.2.0' && github.event_name == 'push')
+    # All future releases require an explicit manual action on main.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       ZEROCHILL_V7_TRAFFIC: 'true'
@@ -33,8 +29,6 @@ jobs:
     steps:
       - name: Check out project
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Resolve release version and branding
         env:
@@ -46,15 +40,11 @@ jobs:
             VERSION="$(tr -d '[:space:]' < RELEASE_VERSION)"
           fi
           test -n "$VERSION" || { echo "Release version is empty"; exit 1; }
-          git merge-base --is-ancestor aad94818736d961b7acc7fa835afc0caf1f21ec9 HEAD
-          test "$VERSION" = "7.2.0"
-          test "$(git rev-parse v7.2.0^{commit})" = "$GITHUB_SHA"
 
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "APP_VERSION_NAME=$VERSION" >> "$GITHUB_ENV"
           python3 - "$VERSION" <<'PY'
           import os, re, sys
-          from pathlib import Path
           match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", sys.argv[1])
           if not match:
               raise SystemExit("Stable version must be major.minor.patch")
@@ -66,15 +56,6 @@ jobs:
           code = major * 1_000_000 + minor * 1000 + patch
           if not 0 < code <= 2_100_000_000:
               raise SystemExit("Version code is outside Android limits")
-          assert code == 7002000 and code > 7001003, 'Release must upgrade every approved test APK'
-          release = Path('RELEASE_NOTES.md').read_text()
-          bundled = Path('app/src/main/res/raw/whats_new_7_0.md').read_text()
-          heading = '# ZEROCHILL ' + sys.argv[1] + '\n'
-          assert release.startswith(heading) and bundled.startswith(heading)
-          bullets = lambda value: [line[2:].strip() for line in value.splitlines() if line.startswith('- ')]
-          assert len(bullets(release)) == 6 and bullets(release) == bullets(bundled), 'Update/Whats New highlights differ'
-          summary = release.split('\n\n')[1]
-          assert 0 < len(summary) <= 180 and not summary.startswith('- '), 'Update summary must fit the dialog'
           with open(os.environ["GITHUB_ENV"], "a") as output:
               output.write(f"APP_VERSION_CODE={code}\n")
           PY
@@ -132,11 +113,7 @@ jobs:
           PY
 
       - name: Build signed release APK
-        run: >-
-          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
-          :app:testReleaseUnitTest --tests com.webapp.crazyshit.ReleaseNotesSummaryTest
-          --tests com.webapp.crazyshit.WhatsNewTest --tests com.webapp.crazyshit.UpdateCardControllerTest
-          --tests com.webapp.crazyshit.UpdateCardOverflowTest :app:assembleRelease
+        run: gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 :app:testReleaseUnitTest :app:assembleRelease
 
       - name: Prepare and verify release files
         run: |
@@ -161,15 +138,11 @@ jobs:
               dex = b''.join(package.read(name) for name in package.namelist()
                              if name.endswith('.dex'))
               assert b'aavjpykssueavbseqdlf' in dex, 'New Supabase project not found'
-              notes = pathlib.Path('app/src/main/res/raw/whats_new_7_0.md').read_bytes()
-              found_notes = False
               for name in package.namelist():
                   data = package.read(name)
-                  if data == notes: found_notes = True
                   assert b'fketutffusxgjxjlckci' not in data, 'Old backend marker: ' + name
                   assert 'fketutffusxgjxjlckci'.encode('utf-16le') not in data
-              assert found_notes, 'New bundled Whats New copy missing from APK'
-          print('Release is New Zerochill only and contains the approved source and 7.2.0 Whats New copy')
+          print('Release is New Zerochill only and contains the reviewed main source')
           PY
 
       - name: Verify upgrade from previous stable release
@@ -193,12 +166,9 @@ jobs:
           PREVIOUS_CODE="$(printf '%s\n' "$PREVIOUS_INFO" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
           test -n "$CURRENT_CODE" && test -n "$PREVIOUS_CODE"
           test "$CURRENT_CODE" -gt "$PREVIOUS_CODE"
-          test "$CURRENT_CODE" -gt 7001003
-          test "$CURRENT_CODE" -eq 7002000
           CURRENT_CERT="$("$SIGNER" verify --print-certs "$APK_PRIMARY" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
           PREVIOUS_CERT="$("$SIGNER" verify --print-certs "$PREVIOUS" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print $2; exit}')"
           test -n "$CURRENT_CERT" && test "$CURRENT_CERT" = "$PREVIOUS_CERT"
-          test "$CURRENT_CERT" = 04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356
           echo "Same package and certificate; versionCode $CURRENT_CODE > $PREVIOUS_CODE."
 
       - name: Upload signed APK artifact
@@ -219,7 +189,6 @@ jobs:
           gh release create "v${VERSION}" \
             "$APK_PRIMARY" \
             SHA256SUMS.txt \
-            --verify-tag \
             --target "$GITHUB_SHA" \
             --title "$RELEASE_TITLE" \
             --notes-file RELEASE_NOTES.md \
