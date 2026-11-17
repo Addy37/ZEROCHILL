@@ -218,7 +218,7 @@ final class UpdateCardController {
         showCard();
     }
 
-    void showReady(String version, Action openDownloads, Action later) {
+    void showReady(String version, Action install, Action openDownloads) {
         downloading = false;
         // The system download notification remains available if the user hid the panel.
         if (downloadHidden) {
@@ -228,14 +228,28 @@ final class UpdateCardController {
         ensureAttached();
         eyebrow.setText("VERSION " + cleanVersion(version) + " · DOWNLOADED");
         title.setText(cleanVersion(version) + " is ready to install");
-        body.setText("Open Downloads, then tap the ZEROCHILL APK to finish the update.");
+        body.setText("Tap Install update. Android will ask you to confirm.");
         percent.setText("✓");
         percent.setTextColor(AppearanceTheme.accent(activity));
         progress.setVisibility(View.VISIBLE);
         progress.setIndeterminate(false);
         progress.setProgress(1000);
+        configureButton(primary, "Install update", install, true);
+        configureButton(secondary, "Open Downloads", openDownloads, false);
+        showCard();
+    }
+
+    void showInstallFallback(String version, Action openDownloads, Action retry) {
+        downloading = false;
+        downloadHidden = false;
+        ensureAttached();
+        eyebrow.setText("VERSION " + cleanVersion(version) + " · DOWNLOADED");
+        title.setText("Install from Downloads");
+        body.setText("Android couldn't start the installer. Your APK is still in Downloads.");
+        percent.setText("");
+        progress.setVisibility(View.GONE);
         configureButton(primary, "Open Downloads", openDownloads, true);
-        configureButton(secondary, "Later", later, false);
+        configureButton(secondary, "Try again", retry, false);
         showCard();
     }
 
