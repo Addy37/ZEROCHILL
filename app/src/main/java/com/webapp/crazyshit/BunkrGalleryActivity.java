@@ -435,26 +435,26 @@ public final class BunkrGalleryActivity extends Activity {
                     BunkrGallerySessionStore.Snapshot currentCreator = isCreatorGallery()
                             ? BunkrGallerySessionStore.snapshot(sessionId) : null;
                     int added = adapter.append(currentCreator == null ? visibleResult : filterMedia(currentCreator.items));
+                    // A pictures-only viewer can receive a page containing only videos.
+                    // Advance the shared album cursor using all files, not the visible filter.
+                    int albumAdded = isCreatorGallery() ? 0 : BunkrGallerySessionStore.append(
+                            sessionId, result, requestPage, false);
                     if (finishingInitialLoad && added > 0) initialLoading.finish();
                     else if (!finishingInitialLoad) initialLoading.setVisibility(View.GONE);
                     if (currentCreator != null) {
                         currentPage = currentCreator.currentPage;
                         endReached = currentCreator.endReached;
                     } else if (isCreatorGallery()) endReached = completed;
-                    else if (result.isEmpty() || added == 0) endReached = true;
+                    else if (result.isEmpty() || albumAdded == 0) endReached = true;
                     else currentPage = requestPage;
                     if (currentCreator == null && isCreatorGallery() && added > 0) currentPage = requestPage;
-                    if (!isCreatorGallery()) BunkrGallerySessionStore.append(
-                            sessionId,
-                            result,
-                            currentPage,
-                            endReached
-                    );
+                    if (!isCreatorGallery()) BunkrGallerySessionStore.updatePaging(
+                            sessionId, currentPage, endReached);
                     BunkrGallerySessionStore.persist(this, sessionId);
                     updateChrome(pager.getCurrentItem());
                     preloadNeighbors(pager.getCurrentItem());
                     if (fapelloFailure != null) showFapelloFailure(fapelloFailure);
-                    if (isCreatorGallery() && added == 0 && !endReached) {
+                    if ((isCreatorGallery() || !FILTER_ALL.equals(mediaFilter)) && added == 0 && !endReached) {
                         if (adapter.getItemCount() == 0) {
                             initialLoading.setVisibility(View.VISIBLE);
                         } else {

@@ -1,5 +1,18 @@
 # ZEROCHILL build lineage
 
+## Five fixes signed physical-test candidate
+
+`feature/zerochill-five-fixes` starts at verified current `main`
+`8964653bb5a25948d587d477077e8a13162548b0`, the complete released 7.1.0 lineage.
+Fetched historical `rebrand/zerochill` (`2f9a489a`) is an ancestor of this baseline.
+Candidate `7.1.1-test.1-five-fixes` (`7001001`) preserves the production package,
+signing certificate and New Zerochill routing. See `docs/FIVE_FIXES_TEST_APK.md`
+for the five scoped fixes, focused validation and physical-test limitations.
+The single signed Actions artifact records its exact source branch/SHA and verifies
+upgrade compatibility against published 7.1.0. No merge, tag, public release,
+updater publication, backend/source-config change, data migration or integration
+branch synchronization is authorized. Physical OnePlus approval remains pending.
+
 ## ZEROCHILL 7.1.0 publication
 
 User approved PR #449 after on-device review of the compact ShitTok share menu.

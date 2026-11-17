@@ -2,7 +2,7 @@ package com.webapp.crazyshit;
 
 import android.content.Intent;
 
-/** Shows manual fullscreen remains available; automatic fullscreen follows the user's rotation setting. */
+/** Shows follows Android USER rotation; explicit fullscreen can override rotation lock. */
 final class ShowsPlaybackOrientationPolicy {
     static final String EXTRA_MANUAL_LANDSCAPE_FULLSCREEN =
             "manual_landscape_fullscreen";

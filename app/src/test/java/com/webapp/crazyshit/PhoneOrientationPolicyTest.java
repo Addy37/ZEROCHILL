@@ -21,6 +21,25 @@ import static org.junit.Assert.assertTrue;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class PhoneOrientationPolicyTest {
+    @Test public void showsWatchRegistrationSurvivesLifecyclePolicyAndUsesAndroidRotationLock() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        for (int autoRotate : new int[]{0, 1}) {
+            android.provider.Settings.System.putInt(activity.getContentResolver(),
+                    android.provider.Settings.System.ACCELEROMETER_ROTATION, autoRotate);
+            PhoneOrientationPolicy.enterShowsPlayback(activity);
+            PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+            assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER, activity.getRequestedOrientation());
+            assertEquals(autoRotate == 1, ShowsPlaybackOrientationPolicy.autoRotateEnabled(activity));
+            PhoneOrientationPolicy.enterSensorFullscreen(activity);
+            PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+            assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, activity.getRequestedOrientation());
+            PhoneOrientationPolicy.enterShowsPlayback(activity);
+            PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+            assertEquals(ActivityInfo.SCREEN_ORIENTATION_USER, activity.getRequestedOrientation());
+        }
+        PhoneOrientationPolicy.onActivityDestroyed(activity);
+        activity.finish();
+    }
     @Test public void launchAndBrowsingActivitiesStartPortraitBeforeOnCreate() throws Exception {
         Application app = RuntimeEnvironment.getApplication();
         Class<?>[] activities = {

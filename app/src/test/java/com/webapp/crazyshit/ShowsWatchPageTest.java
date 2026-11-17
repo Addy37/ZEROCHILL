@@ -195,6 +195,25 @@ public class ShowsWatchPageTest {
         assertSame(surface, player.getVideoSurfaceView());
     }
 
+    @Test public void manualShowsFullscreenOverridesLockAndExitRestoresUserRotation() {
+        VideoDetailActivity activity = watch(item("1"), item("2"));
+        android.provider.Settings.System.putInt(activity.getContentResolver(),
+                android.provider.Settings.System.ACCELEROMETER_ROTATION, 0);
+        PlayerView player = ReflectionHelpers.getField(activity, "playerView");
+        View surface = player.getVideoSurfaceView();
+        ReflectionHelpers.callInstanceMethod(activity, "setRotatableFullscreen",
+                ReflectionHelpers.ClassParameter.from(boolean.class, true));
+        PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+        assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+                activity.getRequestedOrientation());
+        ReflectionHelpers.callInstanceMethod(activity, "setRotatableFullscreen",
+                ReflectionHelpers.ClassParameter.from(boolean.class, false));
+        PhoneOrientationPolicy.applyBrowsingOrientation(activity);
+        assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER, activity.getRequestedOrientation());
+        assertSame(surface, player.getVideoSurfaceView());
+        PhoneOrientationPolicy.onActivityDestroyed(activity);
+    }
+
     @Test @Config(qualifiers = "w800dp-h360dp-land-mdpi")
     public void videoFillsFittedViewportAsRailHidesAndReversesFromCurrentBounds() throws Exception {
         VideoDetailActivity activity = watch(item("1"), item("2"));

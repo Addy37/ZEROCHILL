@@ -9,7 +9,10 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputFilter;
+import android.text.SpannableString;
 import android.text.TextUtils;
+import android.text.method.LinkMovementMethod;
+import android.text.style.URLSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -33,11 +36,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** One-to-one ZEROCHILL direct-message thread. */
 public final class ZeroChillMessageActivity extends Activity {
     static final String EXTRA_USER_ID = "zerochill_dm_user_id";
     private static final long REFRESH_MS = 2500L;
+    private static final Pattern MESSAGE_URL = Pattern.compile("(?i)https?://[^\\s<>\"']+");
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable refreshRunnable = new Runnable() {
@@ -526,15 +532,7 @@ public final class ZeroChillMessageActivity extends Activity {
         selectionActions.removeAllViews();
         selectionActions.setVisibility(View.VISIBLE);
         if (canCopy(item))
-            selectionAction(
-                    "Copy",
-                    () -> {
-                        ((android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE))
-                                .setPrimaryClip(
-                                        android.content.ClipData.newPlainText(
-                                                "Message", item.body));
-                        clearSelection();
-                    });
+            selectionAction("Copy", () -> copyMessage(item));
         if (partnerId.equals(item.senderId))
             selectionAction(
                     "Report",
@@ -543,10 +541,13 @@ public final class ZeroChillMessageActivity extends Activity {
                         showReportDialog(item.id);
                     });
         adapter.notifyDataSetChanged();
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(5), dp(3), dp(5), dp(5));
+        panel.setBackground(inputBackground());
         LinearLayout choices = new LinearLayout(this);
         choices.setGravity(Gravity.CENTER);
-        choices.setPadding(dp(5), dp(3), dp(5), dp(3));
-        choices.setBackground(inputBackground());
+        panel.addView(choices, new LinearLayout.LayoutParams(-1, dp(48)));
         for (String emoji : new String[] {"❤️", "😂", "🔥", "👍", "😮", "👎"}) {
             TextView choice = text(emoji, 24, Color.WHITE, false);
             choice.setGravity(Gravity.CENTER);
@@ -574,8 +575,22 @@ public final class ZeroChillMessageActivity extends Activity {
                                                 }));
                     });
         }
+        if (canCopy(item)) {
+            TextView copy = text("Copy message", 14, Color.BLACK, true);
+            copy.setGravity(Gravity.CENTER);
+            copy.setContentDescription("Copy full message");
+            GradientDrawable copyBackground = new GradientDrawable();
+            copyBackground.setColor(AppearanceTheme.accent(this));
+            copyBackground.setCornerRadius(dp(10));
+            copy.setBackground(copyBackground);
+            LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(-1, dp(40));
+            copyParams.topMargin = dp(3);
+            panel.addView(copy, copyParams);
+            copy.setOnClickListener(v -> copyMessage(item));
+        }
         int popupWidth = Math.min(dp(274), getResources().getDisplayMetrics().widthPixels - dp(16));
-        reactionPopup = new android.widget.PopupWindow(choices, popupWidth, dp(54), false);
+        int popupHeight = dp(canCopy(item) ? 99 : 56);
+        reactionPopup = new android.widget.PopupWindow(panel, popupWidth, popupHeight, false);
         reactionPopup.setBackgroundDrawable(
                 new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         reactionPopup.setOutsideTouchable(true);
@@ -588,9 +603,9 @@ public final class ZeroChillMessageActivity extends Activity {
         int x =
                 Math.max(
                         bounds.left + dp(8), Math.min(point[0], bounds.right - popupWidth - dp(8)));
-        int y = point[1] - dp(60);
+        int y = point[1] - popupHeight - dp(6);
         if (y < bounds.top + dp(56))
-            y = Math.min(point[1] + anchor.getHeight() + dp(6), bounds.bottom - dp(60));
+            y = Math.min(point[1] + anchor.getHeight() + dp(6), bounds.bottom - popupHeight - dp(6));
         reactionPopup.showAtLocation(
                 recycler, Gravity.TOP | Gravity.LEFT, x, Math.max(bounds.top, y));
     }
@@ -601,11 +616,72 @@ public final class ZeroChillMessageActivity extends Activity {
                         || (!item.body.equals("Photo") && !item.body.equals("GIF")));
     }
 
+    private void copyMessage(ZeroChillSocialRepository.DirectMessage item) {
+        ((android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE))
+                .setPrimaryClip(android.content.ClipData.newPlainText("Message", item.body));
+        clearSelection();
+        ZeroChillToast.makeText(this, "Message copied", ZeroChillToast.LENGTH_SHORT).show();
+    }
+
+    /** Link explicit web URLs only; leave the stored body unchanged for Copy. */
+    static void bindMessageLinks(TextView view, String body, int accent) {
+        if (ZeroChillVideoCard.decode(body) != null) {
+            view.setMovementMethod(null);
+            return;
+        }
+        SpannableString linked = new SpannableString(body);
+        Matcher matcher = MESSAGE_URL.matcher(body);
+        boolean hasLinks = false;
+        while (matcher.find()) {
+            int end = trimUrlEnd(body, matcher.start(), matcher.end());
+            if (end == matcher.start()) continue;
+            String url = body.substring(matcher.start(), end);
+            try {
+                java.net.URI uri = new java.net.URI(url);
+                if (uri.getHost() == null || uri.getHost().isEmpty()
+                        || !("http".equalsIgnoreCase(uri.getScheme())
+                        || "https".equalsIgnoreCase(uri.getScheme()))) continue;
+                linked.setSpan(new URLSpan(url), matcher.start(), end, 0);
+                hasLinks = true;
+            } catch (java.net.URISyntaxException ignored) { }
+        }
+        view.setText(hasLinks ? linked : body);
+        view.setLinkTextColor(accent);
+        view.setMovementMethod(hasLinks ? LinkMovementMethod.getInstance() : null);
+    }
+
+    private static int trimUrlEnd(String body, int start, int end) {
+        while (end > start) {
+            int codePoint = body.codePointBefore(end);
+            if (".,!?;:".indexOf(codePoint) >= 0 || codePoint == 0xFE0F
+                    || Character.getType(codePoint) == Character.OTHER_SYMBOL) {
+                end -= Character.charCount(codePoint);
+                continue;
+            }
+            char close = (char) codePoint;
+            char open = close == ')' ? '(' : close == ']' ? '[' : close == '}' ? '{' : 0;
+            if (open != 0) {
+                int balance = 0;
+                for (int i = start; i < end; i++) {
+                    if (body.charAt(i) == open) balance++;
+                    else if (body.charAt(i) == close) balance--;
+                }
+                if (balance < 0) {
+                    end--;
+                    continue;
+                }
+            }
+            break;
+        }
+        return end;
+    }
+
     private void selectionAction(String label, Runnable action) {
         TextView button = text(label, 13, AppearanceTheme.accent(ZeroChillMessageActivity.this), true);
         button.setGravity(Gravity.CENTER);
         button.setPadding(dp(12), 0, dp(12), 0);
         button.setMinHeight(dp(48));
+        button.setContentDescription(label.equals("Copy") ? "Copy full message" : label + " message");
         button.setOnClickListener(v -> action.run());
         selectionActions.addView(button);
     }
@@ -1000,6 +1076,7 @@ public final class ZeroChillMessageActivity extends Activity {
             if(selectedMessage!=null&&selectedMessage.id.equals(item.id)){background.setColor(AppearanceTheme.selectionSurface(ZeroChillMessageActivity.this));background.setStroke(dp(2),AppearanceTheme.accent(ZeroChillMessageActivity.this));}
             holder.bubble.setBackground(background);
             ZeroChillVideoCard.bind(ZeroChillMessageActivity.this, holder.body, item.body);
+            bindMessageLinks(holder.body, item.body, AppearanceTheme.accent(ZeroChillMessageActivity.this));
             holder.body.setOnLongClickListener(v -> {
                 showReactions(holder.bubble, item);
                 return true;

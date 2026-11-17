@@ -74,6 +74,12 @@ final class PhoneOrientationPolicy {
         );
     }
 
+    /** Register the watch page so lifecycle callbacks do not restore the browsing lock. */
+    static void enterShowsPlayback(Activity activity) {
+        if (activity == null || activity.isFinishing()) return;
+        requestFullscreen(activity, ActivityInfo.SCREEN_ORIENTATION_USER);
+    }
+
     private static void requestFullscreen(Activity activity, int orientation) {
         FULLSCREEN_ACTIVITIES.put(activity, orientation);
         PORTRAIT_LOCKED_ACTIVITIES.remove(activity);
