@@ -181,7 +181,7 @@ final class InlineCommentsDialog extends BottomSheetDialog {
         LinearLayout header = new LinearLayout(activity);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(0, 0, 0, 0);
-        header.setBackground(ZeroChillUi.sheetGlass(activity));
+        header.setBackgroundColor(Color.TRANSPARENT);
         header.addView(new View(activity),new LinearLayout.LayoutParams(dp(48),dp(48)));
         shell.addView(header, new LinearLayout.LayoutParams(-1, dp(48)));
 
