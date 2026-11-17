@@ -1,9 +1,16 @@
-# Five fixes physical-test candidate
+# Five fixes approved physical-test candidate
 
 Branch: `feature/zerochill-five-fixes`. Baseline: fetched `main`
 `8964653bb5a25948d587d477077e8a13162548b0`, including released 7.1.0.
 Historical `rebrand/zerochill` (`2f9a489a`) is an ancestor of this main.
 The artifact's `VALIDATION.txt` records the exact source SHA.
+
+On 2026-11-17 the user confirmed personal phone testing and approved the APK from
+`8f219b32da76c99bc6955826d3a786b902bf4302`, built by successful
+[Actions run 44020022617](https://github.com/Addy37/ZEROCHILL/actions/runs/44020022617).
+The approved artifact is `ZeroChill-Five-Fixes-signed-8f219b32da76c99bc6955826d3a786b902bf4302`
+(artifact ID `14300043579`). Merge preparation changes documentation only; app
+code, tests and build configuration remain identical to that tested commit.
 
 ## Changes
 
@@ -50,14 +57,14 @@ Local `:app:testDebugUnitTest` passed these 85 tests (11 classes):
 The first comments attempt was blocked before execution by the Android 16
 Robolectric jar redirecting to a mirror denied by this environment. Retrying an
 allowed Maven entry point reached the same blocked redirect. Local comments tests
-then passed with cached API 35. The single candidate Actions workflow runs the
-two comments classes on APIs 35 and 36, followed by one release APK build; its
+then passed with cached API 35. The single candidate Actions workflow passed the
+two comments classes on APIs 35 and 36, followed by one signed release APK build; its
 XML results are included in the artifact. A new paging fixture was corrected to
 drive pager posts explicitly because its viewer is not attached to a window.
 
 No full suite, debug APK assembly, lint audit, or live source/backend test was run.
 `git diff --check` passed. The referenced recordings were not present in the
-workspace; physical keyboard, sensor and source playback acceptance remains pending.
+workspace. The user subsequently confirmed personal phone testing and approval.
 
 ## Identity and scope
 
@@ -71,6 +78,7 @@ public updater metadata, tag, merge, or GitHub Release change is part of this wo
 The existing New Zerochill endpoints and disabled analytics remain unchanged.
 
 One branch-scoped workflow is triggered by the final push containing its workflow
-file. Subsequent app-only pushes do not trigger it. No PR is opened during this
-candidate build, to avoid unrelated automatic PR workflows. Phone approval is
-required before any later merge or release.
+file. Subsequent app-only or documentation-only pushes do not trigger it. No PR
+was opened during the candidate build, to avoid unrelated automatic PR workflows.
+Following phone approval, PR preparation against `main` is authorized. No new APK,
+manual workflow run, merge or publication is part of merge preparation.

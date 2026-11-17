@@ -1,6 +1,6 @@
 # ZEROCHILL build lineage
 
-## Five fixes signed physical-test candidate
+## Five fixes approved physical-test candidate
 
 `feature/zerochill-five-fixes` starts at verified current `main`
 `8964653bb5a25948d587d477077e8a13162548b0`, the complete released 7.1.0 lineage.
@@ -11,7 +11,11 @@ for the five scoped fixes, focused validation and physical-test limitations.
 The single signed Actions artifact records its exact source branch/SHA and verifies
 upgrade compatibility against published 7.1.0. No merge, tag, public release,
 updater publication, backend/source-config change, data migration or integration
-branch synchronization is authorized. Physical OnePlus approval remains pending.
+branch synchronization is authorized. On 2026-11-17 the user confirmed personal
+phone testing and approved the APK built from
+`8f219b32da76c99bc6955826d3a786b902bf4302` in Actions run `44020022617`.
+PR preparation against current `main` is authorized; merging and publication are
+separate actions. Subsequent merge-preparation changes update documentation only.
 
 ## ZEROCHILL 7.1.0 publication
 
