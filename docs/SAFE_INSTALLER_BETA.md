@@ -44,3 +44,16 @@ The private file-picker code and both one-off Actions workflows have now been re
 - Play Protect assessment can vary for each new build and must be reviewed on the final release candidate.
 
 No GitHub release, Supabase, remote-config, signing, app ID or persisted-data change was made as part of the private test.
+
+## Isolated GitHub download-to-install acceptance test
+
+The previous private APK picker test confirmed the Android installer session but not the download handoff. The user approved one dedicated **end-to-end** test.
+
+- One private Actions workflow builds **two** production-signed APKs from the same source, each with the normal `com.addy37.crazyshitunofficial` application ID.
+- Harness `7.2.1-installer-e2e.4`, versionCode `7002004`, upgrades the user's installed `7002003`.
+- Fixture `7.2.1-installer-e2e.5`, versionCode `7002005`, is uploaded as `ZeroChill-installer-e2e-test.apk` to the **public GitHub prerelease** `v7.2.1-installer-e2e.5`. Public prerelease assets are accessible to anyone browsing the release page; they are **excluded from normal stable latest-release API checks** and will not trigger updates to regular ZEROCHILL users. The prerelease is explicitly marked `latest=false`.
+- Only the exact harness version shows **Settings > Notifications & updates > Check installer test update**. That control fetches the exact tagged prerelease, validates its tag and expected asset URL, then uses the **unchanged** update card, DownloadManager URL download, download progress, Android PackageInstaller session and system confirmation.
+- The test update asset must be available and verified before asking the user to install the harness.
+- Phone test: install harness once, tap **Check installer test update**, tap **Download update**, let it finish, then tap **Install update**. No file picker. Confirm code 7002005, favorites/history/accounts/settings retained, and Play Protect behavior with scanning enabled.
+- Do not merge this test-only Settings row or test endpoint into production. Remove both once accepted, and run scoped regression checks on the clean production candidate.
+- Do not tag/merge/publish a stable release for this test. No Supabase, remote-config, app ID, signing, or migration changes.

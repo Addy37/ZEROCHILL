@@ -42,6 +42,10 @@ final class AppUpdater {
     private static final String PREF_CARD_LATER_VERSION = "update_card_later_version";
     private static final String PREF_CARD_LATER_UNTIL = "update_card_later_until";
     private static final String PREF_PREVIEW_NEXT_RESUME = "beta_update_preview_next_resume";
+    // Private test only. This feature-branch harness is removed before production.
+    private static final String INSTALLER_TEST_HARNESS = "7.2.1-installer-e2e.4";
+    private static final String INSTALLER_TEST_TAG = "v7.2.1-installer-e2e.5";
+    private static final String INSTALLER_TEST_ASSET = "ZeroChill-installer-e2e-test.apk";
 
     private final Activity activity;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
@@ -123,6 +127,68 @@ final class AppUpdater {
                                 ZeroChillToast.LENGTH_SHORT
                         ).show();
                     }
+                });
+            }
+        });
+    }
+
+    static boolean isInstallerTestHarness(String version) {
+        return INSTALLER_TEST_HARNESS.equals(version);
+    }
+
+    /**
+     * Opt-in test channel for ONE exact GitHub prerelease, never used by the
+     * production automatic or manual stable update checks.
+     */
+    void checkInstallerEndToEndTest() {
+        if (!isInstallerTestHarness(BuildConfig.VERSION_NAME)) return;
+        if (checking) {
+            ZeroChillToast.makeText(activity, "Already checking for an update.",
+                    ZeroChillToast.LENGTH_SHORT).show();
+            return;
+        }
+        checking = true;
+        ZeroChillToast.makeText(activity, "Checking installer test update...",
+                ZeroChillToast.LENGTH_SHORT).show();
+        io.execute(() -> {
+            try {
+                String api = "https://api.github.com/repos/"
+                        + ZeroChillReleaseEndpoints.PRIMARY_REPOSITORY
+                        + "/releases/tags/" + INSTALLER_TEST_TAG;
+                JSONObject result = new JSONObject(httpGet(api));
+                if (result.optBoolean("draft", false)
+                        || !result.optBoolean("prerelease", false)
+                        || !INSTALLER_TEST_TAG.equals(result.optString("tag_name", ""))) {
+                    throw new IOException("Test prerelease not available");
+                }
+                ReleaseInfo info = parseRelease(result, true);
+                String expectedUrl = "https://github.com/"
+                        + ZeroChillReleaseEndpoints.PRIMARY_REPOSITORY
+                        + "/releases/download/" + INSTALLER_TEST_TAG + "/"
+                        + INSTALLER_TEST_ASSET;
+                if (info == null
+                        || !INSTALLER_TEST_ASSET.equals(info.apkName)
+                        || !expectedUrl.equals(info.apkUrl)) {
+                    throw new IOException("Expected signed test APK asset not found");
+                }
+                String current = currentVersion();
+                boolean newer = compareVersions(info.version, current) > 0;
+                activity.runOnUiThread(() -> {
+                    checking = false;
+                    if (newer) {
+                        showUpdateCard(info, current);
+                    } else {
+                        ZeroChillToast.makeText(activity, "No newer test update available.",
+                                ZeroChillToast.LENGTH_SHORT).show();
+                    }
+                });
+            } catch (Exception error) {
+                Log.w("ZeroChillInstaller", "Private installer test update unavailable", error);
+                activity.runOnUiThread(() -> {
+                    checking = false;
+                    ZeroChillToast.makeText(activity,
+                            "Couldn't find the signed test update on GitHub.",
+                            ZeroChillToast.LENGTH_LONG).show();
                 });
             }
         });
