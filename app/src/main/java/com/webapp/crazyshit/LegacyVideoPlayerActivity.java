@@ -47,6 +47,9 @@ public final class LegacyVideoPlayerActivity extends Activity {
     private long resumeAtMs;
     private boolean playOnStart = true;
     private boolean seeking;
+    private boolean active;
+    private boolean pauseAfterStart;
+    private boolean reachedEnd;
     private String mediaUrl;
     private String referer;
 
@@ -120,6 +123,7 @@ public final class LegacyVideoPlayerActivity extends Activity {
                 vlcPlayer.pause();
             } else {
                 playOnStart = true;
+                if (reachedEnd) { vlcPlayer.setTime(0L); reachedEnd = false; }
                 vlcPlayer.play();
             }
             updatePlayButton();
@@ -151,8 +155,9 @@ public final class LegacyVideoPlayerActivity extends Activity {
 
     @Override protected void onStart() {
         super.onStart();
+        active = true;
         if (videoLayout != null) videoLayout.post(() -> {
-            if (!isFinishing() && !isDestroyed() && vlcPlayer == null) startPlayback();
+            if (active && !isFinishing() && !isDestroyed() && vlcPlayer == null) startPlayback();
         });
     }
 
@@ -162,30 +167,38 @@ public final class LegacyVideoPlayerActivity extends Activity {
             MediaPlayer started = new MediaPlayer(libVlc);
             vlcPlayer = started;
             started.attachViews(videoLayout, null, false, false);
-            started.setEventListener(event -> runOnUiThread(() -> {
+            started.setEventListener(event -> {
+                int type = event.type;
+                runOnUiThread(() -> {
                 if (vlcPlayer != started || isFinishing()) return;
-                if (event.type == MediaPlayer.Event.Playing) {
+                if (type == MediaPlayer.Event.Playing) {
                     if (resumeAtMs > 0L) {
                         started.setTime(resumeAtMs);
                         resumeAtMs = 0L;
                     }
                     stateText.setVisibility(View.GONE);
+                    if (pauseAfterStart) {
+                        pauseAfterStart = false;
+                        started.pause();
+                    }
                     updatePlayButton();
-                } else if (event.type == MediaPlayer.Event.TimeChanged
-                        || event.type == MediaPlayer.Event.LengthChanged) {
+                } else if (type == MediaPlayer.Event.TimeChanged
+                        || type == MediaPlayer.Event.LengthChanged) {
                     updateSeek();
-                } else if (event.type == MediaPlayer.Event.Paused) {
+                } else if (type == MediaPlayer.Event.Paused) {
                     updatePlayButton();
-                } else if (event.type == MediaPlayer.Event.EndReached) {
+                } else if (type == MediaPlayer.Event.EndReached) {
                     playOnStart = false;
+                    reachedEnd = true;
                     playButton.setText("Replay");
-                } else if (event.type == MediaPlayer.Event.EncounteredError) {
+                } else if (type == MediaPlayer.Event.EncounteredError) {
                     playOnStart = false;
                     stateText.setText("This video could not play. Go back to the gallery to retry.");
                     stateText.setVisibility(View.VISIBLE);
                     updatePlayButton();
                 }
-            }));
+                });
+            });
             Media media = new Media(libVlc, Uri.parse(mediaUrl));
             media.setHWDecoderEnabled(true, false);
             media.addOption(":http-user-agent=" + USER_AGENT);
@@ -194,12 +207,9 @@ public final class LegacyVideoPlayerActivity extends Activity {
             }
             started.setMedia(media);
             media.release();
-            if (playOnStart) started.play();
-            else {
-                // Restored paused playback still needs parsing before a seek is possible.
-                started.play();
-                started.pause();
-            }
+            // Parse and seek before restoring a paused session.
+            pauseAfterStart = !playOnStart;
+            started.play();
         } catch (RuntimeException | LinkageError failure) {
             releasePlayer();
             stateText.setText("Legacy playback isn't available on this device.");
@@ -247,6 +257,7 @@ public final class LegacyVideoPlayerActivity extends Activity {
     }
 
     @Override protected void onStop() {
+        active = false;
         if (vlcPlayer != null) {
             resumeAtMs = Math.max(0L, vlcPlayer.getTime());
             playOnStart = vlcPlayer.isPlaying();
