@@ -197,6 +197,8 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
     implementation("androidx.media3:media3-inspector-frame:$media3Version")
+    // Media3 remains primary; LibVLC handles legacy ASF/WMV and unsupported containers.
+    implementation("org.videolan.android:libvlc-all:3.7.7")
 }
 
 baselineProfile {

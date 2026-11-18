@@ -184,6 +184,11 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".LegacyVideoPlayerActivity"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false" />
+
+        <activity
             android:name=".BunkrGalleryActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:enableOnBackInvokedCallback="true"
