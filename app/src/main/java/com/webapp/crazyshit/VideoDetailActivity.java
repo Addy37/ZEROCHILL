@@ -193,6 +193,8 @@ public class VideoDetailActivity extends Activity {
     private String commentCountPageUrl = "";
     private int commentCountRequestGeneration;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
+    private static final int REQUEST_LEGACY_BUNKR_PLAYER = 7092;
+    private String legacyBunkrOpenedUrl = "";
     private boolean recoveryResumed;
     private long requestedStartPosition;
     private int resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
@@ -373,6 +375,7 @@ public class VideoDetailActivity extends Activity {
         if (mediaUrl != null && !mediaUrl.trim().isEmpty()) {
             deferredShowsResolve = false;
         }
+        if (state != null) legacyBunkrOpenedUrl = clean(state.getString("legacy_bunkr_opened_url"));
 
         if ((mediaUrl == null || mediaUrl.trim().isEmpty()) && !deferredShowsResolve) {
             finish();
@@ -1190,6 +1193,13 @@ public class VideoDetailActivity extends Activity {
         portraitVideo = false;
         if (portraitFullscreen) setPortraitFullscreen(false);
         else updatePortraitFullscreenButton();
+        // Bunkr album episodes use this watch player rather than BunkrGalleryActivity.
+        // Never send an ASF/WMV container through Media3, which cannot extract it.
+        if (BunkrRepository.isBunkrUrl(pageUrl)
+                && LegacyVideoFormatSupport.requiresVlc(mediaUrl)) {
+            openLegacyBunkrPlayer();
+            return;
+        }
         if (showsOrigin && player != null) {
             failureShown = false;
             showStartupPoster();
@@ -1300,6 +1310,9 @@ public class VideoDetailActivity extends Activity {
                 AnalyticsTracker.failure(VideoDetailActivity.this,"playback_failure",AnalyticsV2Policy.playbackCategory(error.errorCode));
                 if (showsOrigin && showsSavedOnExit) return;
                 dismissStartupPoster();
+                if (BunkrRepository.isBunkrUrl(pageUrl)
+                        && LegacyVideoFormatSupport.retryWithVlc(mediaUrl, error.errorCode)
+                        && openLegacyBunkrPlayer()) return;
                 if (!recoverPlayback(error)) showPlaybackFailure();
             }
 
@@ -1344,6 +1357,29 @@ public class VideoDetailActivity extends Activity {
             }
         });
         player.prepare();
+    }
+
+    /** Opens the legacy Bunkr video inside ZEROCHILL, without changing episode state. */
+    private boolean openLegacyBunkrPlayer() {
+        if (!BunkrRepository.isBunkrUrl(pageUrl)
+                || !LegacyVideoFormatSupport.validHttpsMedia(mediaUrl)) return false;
+        if (mediaUrl.equals(legacyBunkrOpenedUrl)) return true;
+        legacyBunkrOpenedUrl = mediaUrl;
+        releasePlayer();
+        dismissStartupPoster();
+        String referer = mediaReferer == null || mediaReferer.isEmpty() ? pageUrl : mediaReferer;
+        startActivityForResult(LegacyVideoPlayerActivity.intent(this, pageUrl, mediaUrl, referer),
+                REQUEST_LEGACY_BUNKR_PLAYER);
+        return true;
+    }
+
+    @Override @SuppressWarnings("deprecation")
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_LEGACY_BUNKR_PLAYER) {
+            // Return to the episode list, not to an unplayable native Media3 session.
+            finish();
+        }
     }
 
     private MediaItem mediaItem() {
@@ -3450,6 +3486,7 @@ public class VideoDetailActivity extends Activity {
     protected void onSaveInstanceState(Bundle outState) {
         outState.putBoolean("social_comments_opened", socialCommentsOpened);
         outState.putBoolean("social_comments_visible", activeComments != null && activeComments.isShowing());
+        outState.putString("legacy_bunkr_opened_url", legacyBunkrOpenedUrl);
         if (showsOrigin) {
             outState.putString("shows_media", mediaUrl);
             outState.putString("shows_page", pageUrl);
