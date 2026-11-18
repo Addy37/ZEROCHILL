@@ -24,8 +24,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7002006'
-      APP_VERSION_NAME: '7.2.1-codec-test.1'
+      APP_VERSION_CODE: '7002007'
+      APP_VERSION_NAME: '7.2.1-codec-test.2'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
@@ -36,6 +36,7 @@ jobs:
           set -euo pipefail
           git merge-base --is-ancestor 20e4fd47dc7f23873ece2c3f1ff735b3f85b4bf0 HEAD
           test -f app/src/main/java/com/webapp/crazyshit/LegacyVideoPlayerActivity.java
+          grep -q 'openLegacyBunkrPlayer()' app/src/main/java/com/webapp/crazyshit/VideoDetailActivity.java
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -108,7 +109,7 @@ jobs:
           pkg, version = ident(new)
           old_pkg, old_version = ident(old)
           assert pkg == old_pkg == "com.addy37.crazyshitunofficial", "Application ID changed"
-          assert version == 7002006 and version > max(old_version, 7002005), "Candidate cannot upgrade installed version"
+          assert version == 7002007 and version > max(old_version, 7002006), "Candidate cannot upgrade installed version"
           assert cert(new) == cert(old), "Signing certificate changed"
           with zipfile.ZipFile(new) as apk:
               libraries = [s for s in apk.namelist() if s.startswith("lib/") and s.endswith(".so")]
@@ -117,14 +118,14 @@ jobs:
           size = new.stat().st_size
           print("Signed candidate bytes:", size)
           assert size < 500_000_000, "Candidate APK too large for direct testing"
-          out = pathlib.Path("candidate") / f"ZeroChill-7.2.1-codec-test-{os.environ['GITHUB_SHA'][:7]}.apk"
+          out = pathlib.Path("candidate") / f"ZeroChill-7.2.1-codec-test2-{os.environ['GITHUB_SHA'][:7]}.apk"
           out.write_bytes(new.read_bytes())
           PY
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
       - name: Upload signed installable test APK
         uses: actions/upload-artifact@v4
         with:
-          name: ZEROCHILL-7.2.1-Bunkr-Legacy-Codec-Test
+          name: ZEROCHILL-7.2.1-Bunkr-Legacy-Codec-Test-2
           path: candidate/
           retention-days: 14
           if-no-files-found: error
