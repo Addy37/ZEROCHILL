@@ -70,7 +70,7 @@ jobs:
           cp feedbackadmin/build/outputs/apk/release/feedbackadmin-release.apk ZeroChill-Admin.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs ZeroChill-Admin.apk | tee admin-signing.txt
           grep -qi '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356' admin-signing.txt
-          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging ZeroChill-Admin.apk | grep "package: name='com.addy37.crazyshitadmin' versionCode='7000001'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging ZeroChill-Admin.apk | grep "package: name='com.addy37.crazyshitadmin' versionCode='7000002'"
           SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           SOURCE_REF="${{ github.head_ref || github.ref_name }}"
           SAFE_REF="$(printf '%s' "$SOURCE_REF" | tr '/ ' '--')"
