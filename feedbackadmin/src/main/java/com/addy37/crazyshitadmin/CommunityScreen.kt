@@ -141,12 +141,6 @@ import androidx.compose.ui.unit.sp
                                 StatusTag("${conversation.reportCount} REPORT", Danger)
                         }
                     }
-                    // Latest page arrives newest-first. Show messages oldest-first like a chat.
-                    if ("dmMessages" in state.busy && state.dmMessages.isEmpty())
-                        item { InitialLoad("Loading conversation") }
-                    else if (state.dmMessages.isEmpty())
-                        item { EmptyPanel("No messages", "This conversation is empty.", Icons.Outlined.MailOutline) }
-                    else items(state.dmMessages.asReversed(), key={it.id}) { DmRow(it) }
                     if (state.dmNextCursor.isNotBlank()) item {
                         OutlinedButton(
                             onClick=state::loadOlderDmMessages,
@@ -156,6 +150,12 @@ import androidx.compose.ui.unit.sp
                             Text(if ("dmMessages" in state.busy) "Loading…" else "Load older messages")
                         }
                     }
+                    // Latest page arrives newest-first. Show messages oldest-first like a chat.
+                    if ("dmMessages" in state.busy && state.dmMessages.isEmpty())
+                        item { InitialLoad("Loading conversation") }
+                    else if (state.dmMessages.isEmpty())
+                        item { EmptyPanel("No messages", "This conversation is empty.", Icons.Outlined.MailOutline) }
+                    else items(state.dmMessages.asReversed(), key={it.id}) { DmRow(it) }
                 }
             }
             "social" -> {
