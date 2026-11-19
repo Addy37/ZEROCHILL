@@ -21,7 +21,10 @@ internal interface AdminGateway {
     fun accountDetail(token: String, userId: String): CommunityRepository.AccountDetail
     fun socialActivity(token: String, query: String, filter: String): List<CommunityRepository.SocialActivity>
     fun reports(token: String, query: String, filter: String): List<CommunityRepository.Report>
-    fun dmMessages(token: String, cursor: String): CommunityRepository.DmPage = CommunityRepository.dmMessages(token, cursor)
+    fun dmConversations(token: String, query: String, filter: String): List<CommunityRepository.DmConversation> =
+        CommunityRepository.dmConversations(token, query, filter)
+    fun dmMessages(token: String, cursor: String, participantA: String, participantB: String): CommunityRepository.DmPage =
+        CommunityRepository.dmMessages(token, cursor, participantA, participantB)
 }
 internal object RepositoryGateway : AdminGateway {
     override fun list(token: String) = AdminRepository.list(token)
@@ -41,5 +44,8 @@ internal object RepositoryGateway : AdminGateway {
     override fun accountDetail(token: String, userId: String) = CommunityRepository.accountDetail(token, userId)
     override fun socialActivity(token: String, query: String, filter: String) = CommunityRepository.activity(token, query, filter)
     override fun reports(token: String, query: String, filter: String) = CommunityRepository.reports(token, query, filter)
-    override fun dmMessages(token: String, cursor: String) = CommunityRepository.dmMessages(token, cursor)
+    override fun dmConversations(token: String, query: String, filter: String) =
+        CommunityRepository.dmConversations(token, query, filter)
+    override fun dmMessages(token: String, cursor: String, participantA: String, participantB: String) =
+        CommunityRepository.dmMessages(token, cursor, participantA, participantB)
 }
