@@ -35,3 +35,13 @@ gradle --no-daemon :feedbackadmin:connectedDebugAndroidTest -Pandroid.testInstru
 CI also builds the PR base's release APK with the same signing bundle, seeds a synthetic token using `TokenUpgradeTest#seed`, installs the new release with `adb install -r`, and checks decryption using `TokenUpgradeTest#verify`. These methods run explicitly, separately from the fixture suite. Debug/test APKs use the persistent signing configuration when supplied by CI; local builds keep the normal local debug key.
 
 The existing admin workflow produces an identifiable signed APK and test/visual artifacts. Hosted production replies, deletion, publishing and rollback still require a real admin session and device review. A fixture test is not physical testing or a production operation.
+    
+## 7.0.1 owner DM reader candidate
+
+Community includes a read-only DMs section showing all direct-message bodies,
+participants, read state and dates. It pages 50 messages at a time without
+loading or storing an entire archive. Private photo/GIF attachments use
+short-lived signed URLs. No admin send, delete, or read-receipt mutations
+are added. The matching New Zerochill migration and Edge Function must be
+deployed together, after privacy disclosure and access-control review.
+

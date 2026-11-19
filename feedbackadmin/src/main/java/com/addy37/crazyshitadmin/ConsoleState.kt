@@ -26,6 +26,8 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
     var communityAccounts by mutableStateOf<List<CommunityRepository.Account>>(emptyList()); private set
     var communityActivity by mutableStateOf<List<CommunityRepository.SocialActivity>>(emptyList()); private set
     var communityReports by mutableStateOf<List<CommunityRepository.Report>>(emptyList()); private set
+    var dmMessages by mutableStateOf<List<CommunityRepository.DmMessage>>(emptyList()); private set
+    var dmNextCursor by mutableStateOf(""); private set
     var accountDetail by mutableStateOf<CommunityRepository.AccountDetail?>(null); private set
     var communitySection by mutableStateOf(saved.get<String>("communitySection") ?: "accounts"); private set
     var communityQuery by mutableStateOf(saved.get<String>("communityQuery") ?: ""); private set
@@ -86,6 +88,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         SecureTokenStore.clear(getApplication()); paired = false
         items = emptyList(); analytics = null; activeCounts = null; config = null; history = emptyList(); thread = null
         communityOverview = null; communityAccounts = emptyList(); communityActivity = emptyList(); communityReports = emptyList(); accountDetail = null
+        dmMessages = emptyList(); dmNextCursor = ""
         communitySection = "accounts"; communityQuery = ""; communityFilterValue = "all"
         saved["communitySection"] = communitySection; saved["communityQuery"] = communityQuery; saved["communityFilter"] = communityFilterValue
         threadId = ""; saved["threadId"] = ""; busy = emptySet(); errors = emptyMap(); notice = ""
@@ -111,6 +114,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
     fun refreshCommunity() { loadCommunityOverview(); loadCommunityList() }
     fun navigateCommunitySection(value: String) {
         communitySection = value; communityQuery = ""; communityFilterValue = "all"; accountDetail = null
+        if (value == "dms") { dmMessages = emptyList(); dmNextCursor = "" }
         saved["communitySection"] = value; saved["communityQuery"] = ""; saved["communityFilter"] = "all"
         loadCommunityList()
     }
@@ -121,6 +125,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         communityFilterValue = value; saved["communityFilter"] = value; loadCommunityList()
     }
     fun loadCommunityList() {
+        if (communitySection == "dms") { loadDmMessages(true); return }
         val section = communitySection
         val query = communityQuery
         val filter = communityFilterValue
@@ -140,6 +145,20 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
                 }
             }
         }
+    }
+
+    private fun loadDmMessages(reset: Boolean) {
+        val cursor = if (reset) "" else dmNextCursor
+        request("dmMessages") { token ->
+            val page = withContext(Dispatchers.IO) { gateway.dmMessages(token, cursor) }
+            if (communitySection == "dms") {
+                dmMessages = if (reset) page.items else (dmMessages + page.items).distinctBy { it.id }
+                dmNextCursor = page.nextCursor
+            }
+        }
+    }
+    fun loadOlderDmMessages() {
+        if (dmNextCursor.isNotBlank() && "dmMessages" !in busy) loadDmMessages(false)
     }
     fun loadAccountDetail(userId: String) = request("accountDetail") { token ->
         accountDetail = withContext(Dispatchers.IO) { gateway.accountDetail(token, userId) }

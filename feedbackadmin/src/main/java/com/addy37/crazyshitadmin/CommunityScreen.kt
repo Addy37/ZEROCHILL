@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.sp
     val filters = when(state.communitySection) {
         "social" -> listOf("all" to "All", "comments" to "Comments", "likes" to "Likes", "messages" to "Messages")
         "reports" -> listOf("all" to "All", "spam" to "Spam", "harassment" to "Harassment", "other" to "Other")
+        "dms" -> emptyList()
         else -> listOf("all" to "All", "active" to "Active", "unconfirmed" to "Unconfirmed", "banned" to "Banned")
     }
 
@@ -52,7 +54,7 @@ import androidx.compose.ui.unit.sp
                     }
                     StatusTag("READ ONLY", Good)
                 }
-                Text("No moderation actions in this first pass. Direct-message bodies stay private.", color=Muted, fontSize=12.sp)
+                Text("Read-only admin access. Community DMs include full message text.", color=Muted, fontSize=12.sp)
             }
         }
         item {
@@ -74,10 +76,11 @@ import androidx.compose.ui.unit.sp
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 SectionChip("Accounts", "accounts", state) { search="" }
                 SectionChip("Social", "social", state) { search="" }
+                SectionChip("DMs", "dms", state) { search="" }
                 SectionChip("Reports", "reports", state) { search="" }
             }
         }
-        item {
+        if (state.communitySection != "dms") item {
             OutlinedTextField(
                 value=search,
                 onValueChange={search=it},
@@ -95,7 +98,7 @@ import androidx.compose.ui.unit.sp
                 keyboardActions=KeyboardActions(onSearch={state.searchCommunity(search);focus.clearFocus()})
             )
         }
-        item {
+        if (state.communitySection != "dms") item {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 filters.forEach { (value,label) ->
                     val selected = state.communityFilter == value
@@ -107,9 +110,22 @@ import androidx.compose.ui.unit.sp
         item {
             ErrorPanel(state.errors["communityOverview"], state::loadCommunityOverview)
             ErrorPanel(state.errors["communityList"], state::loadCommunityList)
+            ErrorPanel(state.errors["dmMessages"], state::loadCommunityList)
             ErrorPanel(state.errors["accountDetail"])
         }
         when(state.communitySection) {
+            "dms" -> {
+                if ("dmMessages" in state.busy && state.dmMessages.isEmpty()) item { InitialLoad("Loading direct messages") }
+                else if (state.dmMessages.isEmpty()) item { EmptyPanel("No direct messages", "No messages found in New Zerochill.", Icons.Outlined.MailOutline) }
+                else items(state.dmMessages, key={it.id}) { DmRow(it) }
+                if (state.dmNextCursor.isNotBlank()) item {
+                    OutlinedButton(
+                        onClick=state::loadOlderDmMessages,
+                        enabled="dmMessages" !in state.busy,
+                        modifier=Modifier.fillMaxWidth()
+                    ) { Text(if ("dmMessages" in state.busy) "Loading…" else "Load older messages") }
+                }
+            }
             "social" -> {
                 if("communityList" in state.busy && state.communityActivity.isEmpty()) item { InitialLoad("Loading social activity") }
                 else if(state.communityActivity.isEmpty()) item { EmptyPanel("No social activity", "Nothing matches this search or filter.", Icons.Outlined.Forum) }
@@ -129,10 +145,14 @@ import androidx.compose.ui.unit.sp
         item {
             val count = when(state.communitySection) {
                 "social" -> state.communityActivity.size
+                "dms" -> state.dmMessages.size
                 "reports" -> state.communityReports.size
                 else -> state.communityAccounts.size
             }
-            Text("Showing ${number(count.toLong())} recent result${if(count==1) "" else "s"}. Lists are capped at 100 items per request.", color=Muted, fontSize=12.sp)
+            Text(if (state.communitySection == "dms")
+                "Showing ${number(count.toLong())} messages. Load older messages to read further back."
+                else "Showing ${number(count.toLong())} recent result${if(count==1) "" else "s"}. Lists are capped at 100 items per request.",
+                color=Muted, fontSize=12.sp)
         }
     }
 
@@ -188,6 +208,33 @@ private fun searchLabel(section: String) = when(section) {
         }
         if(item.text.isNotBlank()) Text(item.text, maxLines=4, overflow=TextOverflow.Ellipsis)
         if(item.secondary.isNotBlank()) Text(item.secondary, color=Muted, fontSize=12.sp, maxLines=2, overflow=TextOverflow.Ellipsis)
+    }
+}
+
+
+@Composable private fun DmRow(item: CommunityRepository.DmMessage) {
+    val uriHandler = LocalUriHandler.current
+    ConsolePanel(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.Top, horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+            Icon(Icons.Outlined.MailOutline, null, tint=Cyan)
+            Column(Modifier.weight(1f), verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                Text("${item.senderName} → ${item.recipientName}", fontWeight=FontWeight.SemiBold)
+                Text(dateLabel(item.createdAt), color=Muted, fontSize=12.sp)
+            }
+            StatusTag(if (item.readAt.isBlank()) "UNREAD" else "READ")
+        }
+        if (item.body.isNotBlank()) Text(item.body)
+        if (item.hasAttachment) {
+            if (item.mediaUrl.startsWith("https://")) {
+                TextButton(onClick={uriHandler.openUri(item.mediaUrl)}) {
+                    Icon(Icons.Outlined.Image, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Open ${item.attachmentKind.ifBlank { "attachment" }}")
+                }
+            } else {
+                Text("Attachment unavailable. Refresh to retry.", color=Muted, fontSize=12.sp)
+            }
+        }
     }
 }
 

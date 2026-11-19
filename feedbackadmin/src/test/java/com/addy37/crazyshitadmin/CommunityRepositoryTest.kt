@@ -41,4 +41,30 @@ class CommunityRepositoryTest {
         assertEquals("To Other User", detail.recentMessages[0].secondary)
         assertEquals("spam", detail.recentReports[0].reason)
     }
+    @Test fun dmPageParsesFullMessageAndAttachmentWithoutChangingMetadataView() {
+        val page = CommunityRepository.DmPage(JSONObject("""
+        {
+            "items": [
+              {"id":"a1","sender_id":"u1","sender_name":"Sender",
+               "recipient_id":"u2","recipient_name":"Recipient",
+               "body":"Full private message, not a preview","created_at":"2026-11-19T14:00:00Z",
+               "read_at":null,"has_attachment":true,"attachment_kind":"Photo",
+               "media_url":"https://example.supabase.co/storage/v1/object/sign/test"}
+            ],
+            "next_cursor":"2026-11-19T14:00:00Z|a1"
+        }
+        """.trimIndent()))
+        assertEquals(1, page.items.size)
+        val message = page.items[0]
+        assertEquals("Full private message, not a preview", message.body)
+        assertEquals("Sender", message.senderName)
+        assertEquals("Recipient", message.recipientName)
+        assertEquals("", message.readAt)
+        assertTrue(message.hasAttachment)
+        assertEquals("Photo", message.attachmentKind)
+        assertTrue(message.mediaUrl.startsWith("https://"))
+        assertEquals("2026-11-19T14:00:00Z|a1", page.nextCursor)
+        assertEquals("", CommunityRepository.DmPage(JSONObject("{\"items\":[]}")).nextCursor)
+    }
+
 }

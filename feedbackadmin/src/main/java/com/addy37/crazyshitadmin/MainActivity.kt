@@ -112,7 +112,7 @@ class AnalyticsActivity : ComponentActivity() {
         title={ Text("Admin session") }, text={ Column(verticalArrangement=Arrangement.spacedBy(16.dp)) {
             Text("ZeroChill Admin ${BuildConfig.VERSION_NAME}")
             Text("Notifications: " + if(NotificationManagerCompat.from(context).areNotificationsEnabled()) "Allowed" else "Off in Android settings", color=Muted)
-            Text("New Zerochill only. Community controls are read-only. Direct-message bodies are not exposed.", color=Muted)
+            Text("New Zerochill only. Community controls are read-only. The private DMs section shows full message text.", color=Muted)
             Text("Lock removes the admin token from this device. You will need it to connect again.", color=Muted)
         } }, confirmButton={ TextButton(onClick={settings=false;lock=true}) { Text("Lock session", color=Danger) } },
         dismissButton={ TextButton(onClick={settings=false}) { Text("Close") } })

@@ -102,6 +102,43 @@ final class CommunityRepository {
         }
     }
 
+
+    /** A single message in the owner's bounded, read-only DM archive. */
+    static final class DmMessage {
+        final String id, senderId, senderName, recipientId, recipientName, body, createdAt, readAt;
+        final String attachmentKind, mediaUrl;
+        final boolean hasAttachment;
+
+        DmMessage(JSONObject value) {
+            id = value.optString("id");
+            senderId = value.optString("sender_id");
+            senderName = value.optString("sender_name");
+            recipientId = value.optString("recipient_id");
+            recipientName = value.optString("recipient_name");
+            body = value.optString("body");
+            createdAt = value.optString("created_at");
+            readAt = nullable(value, "read_at");
+            attachmentKind = value.optString("attachment_kind");
+            mediaUrl = nullable(value, "media_url");
+            hasAttachment = value.optBoolean("has_attachment");
+        }
+    }
+
+    static final class DmPage {
+        final List<DmMessage> items;
+        final String nextCursor;
+
+        DmPage(JSONObject value) {
+            items = new ArrayList<>();
+            JSONArray rows = value.optJSONArray("items");
+            if (rows != null) for (int i = 0; i < rows.length(); i++) {
+                JSONObject row = rows.optJSONObject(i);
+                if (row != null) items.add(new DmMessage(row));
+            }
+            nextCursor = nullable(value, "next_cursor");
+        }
+    }
+
     static final class AccountDetail {
         final Account account;
         final long comments, videoLikes, commentLikes, messagesSent, messagesReceived;
@@ -180,6 +217,14 @@ final class CommunityRepository {
                 .put("filter", filter == null ? "all" : filter)
                 .put("limit", 100));
         return reportRows(result.optJSONArray("items"));
+    }
+
+
+    static DmPage dmMessages(String token, String cursor) throws Exception {
+        JSONObject result = request(token, new JSONObject()
+                .put("action", "admin_dm_messages")
+                .put("cursor", cursor == null ? "" : cursor));
+        return new DmPage(result);
     }
 
     private static List<SocialActivity> activities(JSONArray rows) {
