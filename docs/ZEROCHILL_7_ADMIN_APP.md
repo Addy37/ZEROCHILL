@@ -62,10 +62,9 @@ messaging policies, write permissions, user data and notifications are unchanged
 This migration and the matching Edge Function deployment are required before
 the new admin app can read message contents.
 
-## Consumer privacy and rollout dependency
+## Privacy and rollout dependency
 
-The matching consumer app change adds an always-visible DM notice in the inbox
-and a Privacy Notice entry in Settings. The owner should communicate the policy
-change to existing users before enabling full admin DM reads in production.
-Do not enable backend DM body access solely by merging this PR; update the
-public privacy disclosure and release an appropriate app notice first.
+The consumer inbox banner and Settings shortcut were removed from this draft
+at the owner's request. The public privacy policy text remains in `PRIVACY.md`.
+Do not deploy full admin DM reading without appropriate notice to users, a
+review of privacy requirements, and successful access-control tests.
