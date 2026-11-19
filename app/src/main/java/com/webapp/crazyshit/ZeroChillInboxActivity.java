@@ -190,13 +190,6 @@ public final class ZeroChillInboxActivity extends Activity {
         header.setMinimumHeight(dp(58));
         root.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
-        // Explicit notice at the point people use direct messages.
-        TextView privacyNote = BrowseUi.text(this,
-                "The ZEROCHILL owner can read all DMs, including unreported messages.",
-                11, BrowseUi.MUTED);
-        privacyNote.setPadding(dp(18), 0, dp(18), dp(8));
-        root.addView(privacyNote, new LinearLayout.LayoutParams(-1, -2));
-
         progress = new ZeroChillProgressBar(this);
         ZeroChillUi.styleProgress(progress);
         LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(dp(40), dp(40));
