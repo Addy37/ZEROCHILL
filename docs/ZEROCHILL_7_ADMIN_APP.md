@@ -46,20 +46,10 @@ Using the encrypted New Zerochill Vault token **inside the project database only
 
 The Android application ID, signing identity, existing source-config format, and private admin token authentication model are retained. Only admin token and notification cursors move to new local namespaces. No app user data, legacy cloud projects or New Zerochill data rows change. The New project receives only the documented service-role read grants.
 
-## All-DM read-only admin reader (proposed update)
+## Consumer privacy and rollout dependency
 
-The owner has approved reading all direct messages, not only reports. The new
-`admin_dm_messages` action is behind the same private admin token verified on the
-server before any query. It returns 50 messages per page, ordered by timestamp and
-message ID with a cursor for older messages; returns sender/recipient names and
-full message bodies; and issues 5-minute signed links to the message's actual
-private photo/GIF attachment. It does not alter the consumer app's RLS, read state,
-message contents, or notifications. The Social activity endpoint still omits DM
-bodies.
-
-Apply `202611190001_admin_dm_readonly_access.sql` only to New Zerochill, and
-deploy the matching `feedback-admin` function before testing the new admin APK.
-Keep these changes staged until the owner-facing privacy disclosure is published
-and the client and server pass access-control checks. Do not deploy the new
-backend automatically from a PR or publish an admin APK publicly.
-
+The matching consumer app change adds an always-visible DM notice in the inbox
+and a Privacy Notice entry in Settings. The owner should communicate the policy
+change to existing users before enabling full admin DM reads in production.
+Do not enable backend DM body access solely by merging this PR; update the
+public privacy disclosure and release an appropriate app notice first.
