@@ -644,6 +644,81 @@ Deno.serve(async (request) => {
       });
     }
 
+
+    // Owner-only, read-only DM archive. Existing app-user RLS and inboxes are unchanged.
+    // Results are bounded and fetched only when the private admin explicitly opens DMs.
+    if (action === "admin_dm_messages") {
+      const cursor = clean(body.cursor);
+      let beforeAt = "";
+      let beforeId = "";
+      if (cursor) {
+        const separator = cursor.lastIndexOf("|");
+        beforeAt = cursor.slice(0, separator);
+        beforeId = cursor.slice(separator + 1);
+        if (separator < 1 || !Number.isFinite(Date.parse(beforeAt)) || !userIdPattern.test(beforeId)) {
+          return response({ error: "Invalid DM page cursor." }, 400);
+        }
+      }
+
+      const pageSize = 50;
+      let query = db
+        .from("direct_messages")
+        .select("id,sender_id,recipient_id,body,attachment_bucket,attachment_path,created_at,read_at")
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(pageSize + 1);
+      if (cursor) {
+        query = query.or(`created_at.lt.${beforeAt},and(created_at.eq.${beforeAt},id.lt.${beforeId})`);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      const rows = (data ?? []).slice(0, pageSize);
+      const people = [...new Set(rows.flatMap((message) => [
+        clean(message.sender_id), clean(message.recipient_id),
+      ]))];
+      const profiles = new Map<string, any>();
+      if (people.length) {
+        const { data: identities, error: identitiesError } = await db
+          .from("profiles")
+          .select("user_id,username,display_name")
+          .in("user_id", people);
+        if (identitiesError) throw identitiesError;
+        for (const profile of identities ?? []) profiles.set(clean(profile.user_id), profile);
+      }
+      const items = await Promise.all(rows.map(async (message) => {
+        const senderId = clean(message.sender_id);
+        const recipientId = clean(message.recipient_id);
+        const bucket = clean(message.attachment_bucket);
+        const path = clean(message.attachment_path);
+        let mediaUrl: string | null = null;
+        // Never accept a caller-provided storage path. Short-lived links are
+        // generated solely from an existing, validated message attachment.
+        if (["social-photos", "social-gifs"].includes(bucket) &&
+            path === `${senderId}/${clean(message.id)}`) {
+          const { data: signed } = await db.storage.from(bucket).createSignedUrl(path, 300);
+          mediaUrl = signed?.signedUrl ?? null;
+        }
+        return {
+          id: clean(message.id),
+          sender_id: senderId,
+          sender_name: profileName(profiles.get(senderId), senderId),
+          recipient_id: recipientId,
+          recipient_name: profileName(profiles.get(recipientId), recipientId),
+          body: clean(message.body),
+          created_at: clean(message.created_at),
+          read_at: message.read_at ?? null,
+          has_attachment: Boolean(path),
+          attachment_kind: bucket === "social-gifs" ? "GIF" : bucket === "social-photos" ? "Photo" : "",
+          media_url: mediaUrl,
+        };
+      }));
+      const last = rows[rows.length - 1];
+      const nextCursor = (data ?? []).length > pageSize && last
+        ? `${clean(last.created_at)}|${clean(last.id)}`
+        : null;
+      return response({ items, next_cursor: nextCursor });
+    }
+
     if (action === "social_activity") {
       const query = lower(body.query);
       const filter = clean(body.filter) || "all";
