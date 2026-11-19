@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.sp
     val filters = when(state.communitySection) {
         "social" -> listOf("all" to "All", "comments" to "Comments", "likes" to "Likes", "messages" to "Messages")
         "reports" -> listOf("all" to "All", "spam" to "Spam", "harassment" to "Harassment", "other" to "Other")
-        "dms" -> emptyList()
+        "dms" -> listOf("all" to "All", "reported" to "Reported")
         else -> listOf("all" to "All", "active" to "Active", "unconfirmed" to "Unconfirmed", "banned" to "Banned")
     }
 
@@ -80,7 +80,7 @@ import androidx.compose.ui.unit.sp
                 SectionChip("Reports", "reports", state) { search="" }
             }
         }
-        if (state.communitySection != "dms") item {
+        if (state.communitySection != "dms" || state.selectedDmConversation == null) item {
             OutlinedTextField(
                 value=search,
                 onValueChange={search=it},
@@ -98,7 +98,7 @@ import androidx.compose.ui.unit.sp
                 keyboardActions=KeyboardActions(onSearch={state.searchCommunity(search);focus.clearFocus()})
             )
         }
-        if (state.communitySection != "dms") item {
+        if (state.communitySection != "dms" || state.selectedDmConversation == null) item {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 filters.forEach { (value,label) ->
                     val selected = state.communityFilter == value
@@ -110,20 +110,52 @@ import androidx.compose.ui.unit.sp
         item {
             ErrorPanel(state.errors["communityOverview"], state::loadCommunityOverview)
             ErrorPanel(state.errors["communityList"], state::loadCommunityList)
+            ErrorPanel(state.errors["dmConversations"], state::loadCommunityList)
             ErrorPanel(state.errors["dmMessages"], state::loadCommunityList)
             ErrorPanel(state.errors["accountDetail"])
         }
         when(state.communitySection) {
             "dms" -> {
-                if ("dmMessages" in state.busy && state.dmMessages.isEmpty()) item { InitialLoad("Loading direct messages") }
-                else if (state.dmMessages.isEmpty()) item { EmptyPanel("No direct messages", "No messages found in New Zerochill.", Icons.Outlined.MailOutline) }
-                else items(state.dmMessages, key={it.id}) { DmRow(it) }
-                if (state.dmNextCursor.isNotBlank()) item {
-                    OutlinedButton(
-                        onClick=state::loadOlderDmMessages,
-                        enabled="dmMessages" !in state.busy,
-                        modifier=Modifier.fillMaxWidth()
-                    ) { Text(if ("dmMessages" in state.busy) "Loading…" else "Load older messages") }
+                val conversation = state.selectedDmConversation
+                if (conversation == null) {
+                    if ("dmConversations" in state.busy && state.dmConversations.isEmpty())
+                        item { InitialLoad("Loading conversations") }
+                    else if (state.dmConversations.isEmpty())
+                        item { EmptyPanel("No conversations", "No matching conversations found.", Icons.Outlined.MailOutline) }
+                    else items(state.dmConversations, key={it.key()}) { item ->
+                        DmConversationRow(item) { state.openDmConversation(item) }
+                    }
+                } else {
+                    item {
+                        ConsolePanel(Modifier.fillMaxWidth()) {
+                            TextButton(onClick=state::closeDmConversation) {
+                                Icon(Icons.Outlined.ArrowBack, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("All conversations")
+                            }
+                            Text("${conversation.participantAName} ↔ ${conversation.participantBName}",
+                                fontWeight=FontWeight.SemiBold)
+                            Text("${number(conversation.messageCount)} messages · ${number(conversation.unreadCount)} unread",
+                                color=Muted, fontSize=12.sp)
+                            if (conversation.reportCount > 0L)
+                                StatusTag("${conversation.reportCount} REPORT", Danger)
+                        }
+                    }
+                    // Latest page arrives newest-first. Show messages oldest-first like a chat.
+                    if ("dmMessages" in state.busy && state.dmMessages.isEmpty())
+                        item { InitialLoad("Loading conversation") }
+                    else if (state.dmMessages.isEmpty())
+                        item { EmptyPanel("No messages", "This conversation is empty.", Icons.Outlined.MailOutline) }
+                    else items(state.dmMessages.asReversed(), key={it.id}) { DmRow(it) }
+                    if (state.dmNextCursor.isNotBlank()) item {
+                        OutlinedButton(
+                            onClick=state::loadOlderDmMessages,
+                            enabled="dmMessages" !in state.busy,
+                            modifier=Modifier.fillMaxWidth()
+                        ) {
+                            Text(if ("dmMessages" in state.busy) "Loading…" else "Load older messages")
+                        }
+                    }
                 }
             }
             "social" -> {
@@ -145,12 +177,14 @@ import androidx.compose.ui.unit.sp
         item {
             val count = when(state.communitySection) {
                 "social" -> state.communityActivity.size
-                "dms" -> state.dmMessages.size
+                "dms" -> if (state.selectedDmConversation != null) state.dmMessages.size else state.dmConversations.size
                 "reports" -> state.communityReports.size
                 else -> state.communityAccounts.size
             }
-            Text(if (state.communitySection == "dms")
-                "Showing ${number(count.toLong())} messages. Load older messages to read further back."
+            Text(if (state.communitySection == "dms" && state.selectedDmConversation == null)
+                "Showing ${number(count.toLong())} conversations, most recent first."
+                else if (state.communitySection == "dms")
+                "Showing ${number(count.toLong())} messages in this conversation."
                 else "Showing ${number(count.toLong())} recent result${if(count==1) "" else "s"}. Lists are capped at 100 items per request.",
                 color=Muted, fontSize=12.sp)
         }
@@ -166,6 +200,7 @@ import androidx.compose.ui.unit.sp
 }
 
 private fun searchLabel(section: String) = when(section) {
+    "dms" -> "Search people or message text"
     "social" -> "Search people, comments, or content"
     "reports" -> "Search reporter, account, or reason"
     else -> "Search username, email, account ID, or bio"
@@ -212,6 +247,31 @@ private fun searchLabel(section: String) = when(section) {
 }
 
 
+@Composable private fun DmConversationRow(item: CommunityRepository.DmConversation, open: () -> Unit) {
+    ConsolePanel(Modifier.fillMaxWidth().clickable(onClick=open)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.Top,
+            horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+            Icon(Icons.Outlined.Forum, null, tint=Cyan)
+            Column(Modifier.weight(1f), verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                Text("${item.participantAName} ↔ ${item.participantBName}",
+                    fontWeight=FontWeight.SemiBold, maxLines=2)
+                Text("${item.lastSenderName}: ${item.lastMessageBody}",
+                    color=Muted, maxLines=2, overflow=TextOverflow.Ellipsis)
+                Text(dateLabel(item.lastCreatedAt), color=Muted, fontSize=12.sp)
+                Text("${number(item.messageCount)} messages · ${number(item.unreadCount)} unread",
+                    color=Muted, fontSize=12.sp)
+                if (item.reportReasons.isNotEmpty())
+                    Text(item.reportReasons.joinToString(", "), color=Danger, fontSize=12.sp)
+            }
+            Column(horizontalAlignment=Alignment.End) {
+                if (item.reportCount > 0L)
+                    StatusTag("${item.reportCount} REPORT", Danger)
+                Icon(Icons.Outlined.ChevronRight, null, tint=Muted)
+            }
+        }
+    }
+}
+
 @Composable private fun DmRow(item: CommunityRepository.DmMessage) {
     val uriHandler = LocalUriHandler.current
     ConsolePanel(Modifier.fillMaxWidth()) {
@@ -223,6 +283,7 @@ private fun searchLabel(section: String) = when(section) {
             }
             StatusTag(if (item.readAt.isBlank()) "UNREAD" else "READ")
         }
+        if (item.reportCount > 0L) StatusTag("${item.reportCount} REPORT", Danger)
         if (item.body.isNotBlank()) Text(item.body)
         if (item.hasAttachment) {
             if (item.mediaUrl.startsWith("https://")) {
