@@ -103,11 +103,43 @@ final class CommunityRepository {
     }
 
 
+    /** One conversation per unordered pair, with its latest preview and moderation counts. */
+    static final class DmConversation {
+        final String participantAId, participantAName, participantBId, participantBName;
+        final String lastMessageId, lastMessageBody, lastSenderName, lastCreatedAt;
+        final long messageCount, unreadCount, reportCount;
+        final List<String> reportReasons;
+
+        DmConversation(JSONObject value) {
+            participantAId = value.optString("participant_a_id");
+            participantAName = value.optString("participant_a_name");
+            participantBId = value.optString("participant_b_id");
+            participantBName = value.optString("participant_b_name");
+            lastMessageId = value.optString("last_message_id");
+            lastMessageBody = value.optString("last_message_body");
+            lastSenderName = value.optString("last_sender_name");
+            lastCreatedAt = value.optString("last_created_at");
+            messageCount = value.optLong("message_count");
+            unreadCount = value.optLong("unread_count");
+            reportCount = value.optLong("report_count");
+            reportReasons = new ArrayList<>();
+            JSONArray reasons = value.optJSONArray("report_reasons");
+            if (reasons != null) for (int i = 0; i < reasons.length(); i++) {
+                String reason = reasons.optString(i);
+                if (!reason.isEmpty()) reportReasons.add(reason);
+            }
+        }
+
+        String key() { return participantAId + ":" + participantBId; }
+    }
+
     /** A single message in the owner's bounded, read-only DM archive. */
     static final class DmMessage {
         final String id, senderId, senderName, recipientId, recipientName, body, createdAt, readAt;
         final String attachmentKind, mediaUrl;
         final boolean hasAttachment;
+        final long reportCount;
+        final List<String> reportReasons;
 
         DmMessage(JSONObject value) {
             id = value.optString("id");
@@ -121,6 +153,13 @@ final class CommunityRepository {
             attachmentKind = value.optString("attachment_kind");
             mediaUrl = nullable(value, "media_url");
             hasAttachment = value.optBoolean("has_attachment");
+            reportCount = value.optLong("report_count");
+            reportReasons = new ArrayList<>();
+            JSONArray reasons = value.optJSONArray("report_reasons");
+            if (reasons != null) for (int i = 0; i < reasons.length(); i++) {
+                String reason = reasons.optString(i);
+                if (!reason.isEmpty()) reportReasons.add(reason);
+            }
         }
     }
 
@@ -220,10 +259,26 @@ final class CommunityRepository {
     }
 
 
-    static DmPage dmMessages(String token, String cursor) throws Exception {
+    static List<DmConversation> dmConversations(String token, String query, String filter) throws Exception {
+        JSONObject result = request(token, new JSONObject()
+                .put("action", "admin_dm_conversations")
+                .put("query", query == null ? "" : query.trim())
+                .put("filter", filter == null ? "all" : filter));
+        List<DmConversation> items = new ArrayList<>();
+        JSONArray rows = result.optJSONArray("items");
+        if (rows != null) for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.optJSONObject(i);
+            if (row != null) items.add(new DmConversation(row));
+        }
+        return items;
+    }
+
+    static DmPage dmMessages(String token, String cursor, String participantA, String participantB) throws Exception {
         JSONObject result = request(token, new JSONObject()
                 .put("action", "admin_dm_messages")
-                .put("cursor", cursor == null ? "" : cursor));
+                .put("cursor", cursor == null ? "" : cursor)
+                .put("participant_a_id", participantA)
+                .put("participant_b_id", participantB));
         return new DmPage(result);
     }
 
