@@ -211,14 +211,6 @@ public class SettingsActivity extends ComponentActivity {
         SettingsComposeScreen.Section privacy = addGroup("Privacy");
         addAction(
                 privacy,
-                "Privacy notice",
-                "How ZEROCHILL handles your account data and messages.",
-                "",
-                () -> startActivity(new Intent(Intent.ACTION_VIEW,
-                        android.net.Uri.parse("https://github.com/Addy37/ZEROCHILL/blob/main/PRIVACY.md")))
-        );
-        addAction(
-                privacy,
                 "Clear site data",
                 "Sign out of websites and remove cookies and local storage.",
                 "",
