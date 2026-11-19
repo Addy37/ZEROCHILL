@@ -67,4 +67,50 @@ class CommunityRepositoryTest {
         assertEquals("", CommunityRepository.DmPage(JSONObject("{\"items\":[]}")).nextCursor)
     }
 
+    @Test fun threadedConversationSummaryParsesParticipantsCountsAndReports() {
+        val conversation = CommunityRepository.DmConversation(JSONObject("""
+        {
+            "participant_a_id":"11111111-1111-4111-8111-111111111111",
+            "participant_a_name":"Addy",
+            "participant_b_id":"22222222-2222-4222-8222-222222222222",
+            "participant_b_name":"@vjplus",
+            "last_message_id":"33333333-3333-4333-8333-333333333333",
+            "last_message_body":"Recent message",
+            "last_sender_name":"Addy",
+            "last_created_at":"2026-11-19T15:30:00Z",
+            "message_count":18,
+            "unread_count":2,
+            "report_count":1,
+            "report_reasons":["spam"]
+        }
+        """.trimIndent()))
+        assertEquals("11111111-1111-4111-8111-111111111111:22222222-2222-4222-8222-222222222222", conversation.key())
+        assertEquals("@vjplus", conversation.participantBName)
+        assertEquals("Recent message", conversation.lastMessageBody)
+        assertEquals(18L, conversation.messageCount)
+        assertEquals(2L, conversation.unreadCount)
+        assertEquals(1L, conversation.reportCount)
+        assertEquals(listOf("spam"), conversation.reportReasons)
+    }
+
+    @Test fun scopedMessagePageParsesReportMarkersAndOlderCursor() {
+        val page = CommunityRepository.DmPage(JSONObject("""
+        {
+            "items":[
+                {"id":"dm1","sender_id":"userA","sender_name":"User A",
+                 "recipient_id":"userB","recipient_name":"User B","body":"An older message",
+                 "created_at":"2026-11-18T10:00:00Z",
+                 "report_count":2,"report_reasons":["harassment","spam"],
+                 "read_at":null,"has_attachment":false}
+            ],
+            "next_cursor":"2026-11-18T10:00:00Z|dm1"
+        }
+        """.trimIndent()))
+        assertEquals(1, page.items.size)
+        assertEquals("An older message", page.items[0].body)
+        assertEquals(2L, page.items[0].reportCount)
+        assertEquals(listOf("harassment", "spam"), page.items[0].reportReasons)
+        assertEquals("2026-11-18T10:00:00Z|dm1", page.nextCursor)
+    }
+
 }
