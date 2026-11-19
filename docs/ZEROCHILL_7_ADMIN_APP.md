@@ -46,6 +46,22 @@ Using the encrypted New Zerochill Vault token **inside the project database only
 
 The Android application ID, signing identity, existing source-config format, and private admin token authentication model are retained. Only admin token and notification cursors move to new local namespaces. No app user data, legacy cloud projects or New Zerochill data rows change. The New project receives only the documented service-role read grants.
 
+
+## All-DM read-only admin reader (7.0.1 draft)
+
+The owner approved reading all New Zerochill direct messages, not only those
+reported. The `admin_dm_messages` action uses the existing private admin-token
+boundary. It returns 50 messages per page with a timestamp and ID cursor, plus
+sender/recipient names, full text and read state. Photo/GIF attachments open
+through 5-minute signed URLs. The Android admin reader remains read-only.
+Existing social activity endpoints still expose only message metadata.
+
+`202611190001_admin_dm_readonly_access.sql` grants SELECT on DM body and
+attachment columns only to the backend `service_role`. Existing consumer
+messaging policies, write permissions, user data and notifications are unchanged.
+This migration and the matching Edge Function deployment are required before
+the new admin app can read message contents.
+
 ## Consumer privacy and rollout dependency
 
 The matching consumer app change adds an always-visible DM notice in the inbox
