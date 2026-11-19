@@ -15,8 +15,8 @@ android {
         minSdk = 26
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         targetSdk = 34
-        versionCode = 7_000_001
-        versionName = "7.0.1"
+        versionCode = 7_000_002
+        versionName = "7.0.2"
         // 7.0 Admin is exclusive to New Zerochill. No environment override can
         // silently redirect it to the retired project.
         buildConfigField("String", "ADMIN_FEEDBACK_ENDPOINT",
