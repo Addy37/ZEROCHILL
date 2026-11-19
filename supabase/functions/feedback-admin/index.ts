@@ -661,16 +661,16 @@ Deno.serve(async (request) => {
       }
 
       const pageSize = 50;
-      let query = db
+      const query = db
         .from("direct_messages")
-        .select("id,sender_id,recipient_id,body,attachment_bucket,attachment_path,created_at,read_at")
+        .select("id,sender_id,recipient_id,body,attachment_bucket,attachment_path,created_at,read_at");
+      const filtered = cursor
+        ? query.or(`created_at.lt.${beforeAt},and(created_at.eq.${beforeAt},id.lt.${beforeId})`)
+        : query;
+      const { data, error } = await filtered
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
         .limit(pageSize + 1);
-      if (cursor) {
-        query = query.or(`created_at.lt.${beforeAt},and(created_at.eq.${beforeAt},id.lt.${beforeId})`);
-      }
-      const { data, error } = await query;
       if (error) throw error;
       const rows = (data ?? []).slice(0, pageSize);
       const people = [...new Set(rows.flatMap((message) => [
@@ -704,7 +704,7 @@ Deno.serve(async (request) => {
           sender_name: profileName(profiles.get(senderId), senderId),
           recipient_id: recipientId,
           recipient_name: profileName(profiles.get(recipientId), recipientId),
-          body: clean(message.body),
+          body: String(message.body ?? ""),
           created_at: clean(message.created_at),
           read_at: message.read_at ?? null,
           has_attachment: Boolean(path),

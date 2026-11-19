@@ -50,7 +50,7 @@ import androidx.compose.ui.unit.sp
                     Column(Modifier.weight(1f), verticalArrangement=Arrangement.spacedBy(7.dp)) {
                         Eyebrow("03 / COMMUNITY", color=Cyan)
                         Text("Community", style=MaterialTheme.typography.headlineLarge)
-                        Text("Accounts, social activity, and reports.", color=Muted)
+                        Text("Accounts, social activity, DMs, and reports.", color=Muted)
                     }
                     StatusTag("READ ONLY", Good)
                 }
@@ -249,7 +249,7 @@ private fun searchLabel(section: String) = when(section) {
             StatusTag(item.reason.uppercase(), Danger)
         }
         if(item.details.isNotBlank()) Text(item.details, maxLines=5, overflow=TextOverflow.Ellipsis)
-        if(item.directMessageId.isNotBlank()) Text("Direct-message report · message body is not exposed", color=Muted, fontSize=12.sp)
+        if(item.directMessageId.isNotBlank()) Text("Direct-message report · full text is available in DMs", color=Muted, fontSize=12.sp)
     }
 }
 
