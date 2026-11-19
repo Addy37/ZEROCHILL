@@ -254,16 +254,20 @@ final class OnlyFapViewerChrome extends FrameLayout {
     }
     /** Readable static optics: never samples a playing video or continuously records the pager. */
     private android.graphics.drawable.Drawable glass(int radius) {
-        Context c = getContext(); int accent = AppearanceTheme.accent(c);
+        return watchGlass(getContext(), radius);
+    }
+
+    static android.graphics.drawable.Drawable watchGlass(Context c, int radius) {
+        int accent = AppearanceTheme.accent(c);
         float transparency = AppearanceTheme.glassTransparency(c);
         boolean off = AppearanceTheme.glassPreset(c) == AppearanceTheme.GlassPreset.OFF;
         int opacity = off ? 250 : Math.round(205 + AppearanceTheme.menuTint(c) * 30 - transparency * 58);
-        GradientDrawable base = new GradientDrawable(); base.setCornerRadius(dp(radius));
+        GradientDrawable base = new GradientDrawable(); base.setCornerRadius(Math.round(radius * c.getResources().getDisplayMetrics().density));
         base.setColor(Color.argb(opacity, 14, 18, 24));
-        base.setStroke(dp(1), Color.argb(Math.round(28 + AppearanceTheme.glassEdge(c) * 35), 220, 236, 255));
+        base.setStroke(Math.round(c.getResources().getDisplayMetrics().density), Color.argb(Math.round(28 + AppearanceTheme.glassEdge(c) * 35), 220, 236, 255));
         GradientDrawable sheen = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 new int[]{off ? Color.TRANSPARENT : 0x16FFFFFF, Color.TRANSPARENT, off ? Color.TRANSPARENT : (accent & 0xFFFFFF) | 0x10000000});
-        sheen.setCornerRadius(dp(radius));
+        sheen.setCornerRadius(Math.round(radius * c.getResources().getDisplayMetrics().density));
         return new LayerDrawable(new android.graphics.drawable.Drawable[]{base, sheen});
     }
     private android.graphics.drawable.Drawable circle() {

@@ -955,6 +955,11 @@ public final class BunkrGalleryActivity extends Activity {
             String requestReferer
     ) {
         if (mediaUrl == null || mediaUrl.isEmpty()) return;
+        if (BunkrRepository.isBunkrUrl(item.url)
+                && LegacyVideoFormatSupport.requiresVlc(mediaUrl)) {
+            launchLegacyPlayer(position, item, mediaUrl, requestReferer);
+            return;
+        }
         releasePlayer();
 
         DefaultHttpDataSource.Factory httpFactory = videoHttpFactory(mediaUrl,
@@ -1017,6 +1022,11 @@ public final class BunkrGalleryActivity extends Activity {
             @Override
             public void onPlayerError(PlaybackException error) {
                 if (player != startedPlayer || !canApplyMediaResult(generation)) return;
+                if (BunkrRepository.isBunkrUrl(item.url)
+                        && LegacyVideoFormatSupport.retryWithVlc(mediaUrl, error.errorCode)) {
+                    launchLegacyPlayer(position, item, mediaUrl, requestReferer);
+                    return;
+                }
                 BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
                 videoReferers.remove(item.url);
                 adapter.setResolvedUrl(position, "");
@@ -1052,6 +1062,20 @@ public final class BunkrGalleryActivity extends Activity {
         player.setPlayWhenReady(true);
         player.prepare();
         setChromeVisible(true);
+    }
+
+    /** This does not change any resolved media or favorite state. Back returns to the same album. */
+    private void launchLegacyPlayer(int position, NativeContentItem item,
+            String mediaUrl, String requestReferer) {
+        if (!LegacyVideoFormatSupport.validHttpsMedia(mediaUrl)
+                || pager == null || pager.getCurrentItem() != position || isFinishing()) {
+            if (adapter != null) adapter.setFailed(position, true);
+            return;
+        }
+        releasePlayer();
+        adapter.setFailed(position, false);
+        startActivity(LegacyVideoPlayerActivity.intent(this, item.url, mediaUrl,
+                requestReferer == null || requestReferer.isEmpty() ? item.url : requestReferer));
     }
 
     private DefaultHttpDataSource.Factory videoHttpFactory(String mediaUrl, String requestReferer) {
