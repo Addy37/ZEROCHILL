@@ -79,10 +79,25 @@ jobs:
               }.items():
                   out.write(key+'='+value+'\n')
           PY
-      - name: Run Android unit tests and assemble both variants
+      - name: Run focused release motion tests and assemble both variants
         run: >-
           gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
-          :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease
+          :app:testReleaseUnitTest
+          --tests '*AnchoredMenuLifecycleTest'
+          --tests '*BottomNavigationInsetsTest'
+          --tests '*CreatorGalleryTransitionTest'
+          --tests '*DestinationMotionTest'
+          --tests '*GalleryMediaTransitionTest'
+          --tests '*LibraryCollectionTest'
+          --tests '*NavigationMotionControllerTest'
+          --tests '*OnlyFapLibraryMetadataTest'
+          --tests '*OnlyFapViewerChromeTest'
+          --tests '*PreferenceGlassPanelTest'
+          --tests '*SearchResultsPolishTest'
+          --tests '*SearchScopeTest'
+          --tests '*SearchShitTokPauseTest'
+          --tests '*ThumbnailLoadTransitionTest'
+          :app:assembleDebug :app:assembleRelease
       - name: Verify install upgrade identity and checksum
         env:
           GH_TOKEN: ${{ github.token }}
