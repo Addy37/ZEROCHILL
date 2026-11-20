@@ -55,19 +55,11 @@ jobs:
       - name: Check out project
         uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
       - name: Verify current ZEROCHILL build lineage
-        run: |
-          set -euo pipefail
-          BASELINE="8dad094162bef8b537daa9474e8cd647f55e910b"
-          SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
-          test -f ZEROCHILL_BUILD_LINEAGE.md
-          git merge-base --is-ancestor "$BASELINE" "$SOURCE_SHA" || {
-            echo "This branch predates the approved complete ZEROCHILL baseline $BASELINE."
-            echo "Build from integration/zerochill-current or a descendant instead."
-            exit 1
-          }
+        run: bash tools/verify-android-build-lineage.sh
 
       - name: Verify production ShitShow script extraction
         run: node --test --test-reporter=tap tools/test_shitshow_harvest.mjs
@@ -704,6 +696,7 @@ jobs:
         id: apk_lineage
         run: |
           set -euo pipefail
+          bash tools/verify-android-build-lineage.sh APK-LINEAGE.txt
           REF_NAME="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           SAFE_REF="$(printf '%s' "$REF_NAME" | tr '/ ' '--' | tr -cd 'A-Za-z0-9._-')"
           SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
@@ -721,7 +714,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ZeroChill-debug
-          path: ${{ steps.apk_lineage.outputs.debug_apk }}
+          path: |
+            ${{ steps.apk_lineage.outputs.debug_apk }}
+            APK-LINEAGE.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -730,6 +725,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ZeroChill-release
-          path: ${{ steps.apk_lineage.outputs.release_apk }}
+          path: |
+            ${{ steps.apk_lineage.outputs.release_apk }}
+            APK-LINEAGE.txt
           if-no-files-found: error
           retention-days: 14

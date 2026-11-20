@@ -175,13 +175,13 @@ See **[NOTICE.md](NOTICE.md)** and the **[MIT License](LICENSE)**.
 
 <br>
 
-Current ZEROCHILL development uses **`rebrand/zerochill`** as the source-of-truth branch until it is merged into `main`.
+Current ZEROCHILL development and test APKs use **`main`** as the source of truth. For an installable side-by-side beta, cut a feature branch from current `main`, target `main` in its PR, then push the exact PR commit to a `test-apk/*` branch. The signed workflow records the base and build commits in the artifact.
 
 Use:
 
 - Java 17
-- Gradle 8.7
-- Android SDK 35
+- Gradle 8.11.1
+- Android SDK 36
 
 The main Android module is `app`. The private feedback and analytics companion is `feedbackadmin`.
 

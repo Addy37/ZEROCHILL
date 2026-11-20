@@ -31,6 +31,10 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Verify current ZEROCHILL build lineage
+        run: bash tools/verify-android-build-lineage.sh
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -354,6 +358,9 @@ jobs:
           print(f"Upgrade candidate version: {name} ({code})")
           PY
 
+      - name: Recheck main before signing
+        run: bash tools/verify-android-build-lineage.sh
+
       - name: Restore production signing key
         env:
           SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
@@ -609,6 +616,7 @@ jobs:
       - name: Verify and upload signed beta
         run: |
           set -euo pipefail
+          bash tools/verify-android-build-lineage.sh APK-LINEAGE.txt
           REF_NAME="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           SAFE_REF="$(printf '%s' "$REF_NAME" | tr '/ ' '--' | tr -cd 'A-Za-z0-9._-')"
           SOURCE_SHA="$(git rev-parse HEAD)"
@@ -626,6 +634,7 @@ jobs:
           path: |
             ZeroChill-Beta-*.apk
             SHA256SUMS-beta.txt
+            APK-LINEAGE.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -764,6 +773,7 @@ jobs:
           path: |
             ZeroChill-upgrade-candidate*.apk
             SHA256SUMS-upgrade-candidate.txt
+            APK-LINEAGE.txt
           if-no-files-found: error
           retention-days: 14
 
