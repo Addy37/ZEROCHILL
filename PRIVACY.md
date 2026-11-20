@@ -4,6 +4,14 @@
 
 ZeroChill for Android is a native Android client with Media3 / ExoPlayer playback. It sends aggregate usage events and optional feedback to a project-operated service. It does not require a project account or include an advertising network.
 
+## ZEROCHILL ID direct messages
+
+When you use a ZEROCHILL ID to send a direct message, New Zerochill stores the message text, sender and recipient IDs, timestamps, read state, and any photo or GIF attachment. The recipient can read messages through the app.
+
+**The ZEROCHILL project owner can also read all direct messages, including unreported conversations, through a separately authenticated private admin app.** This access is for operating and moderating the service. The admin reader does not send messages, mark them read, or change conversations. Photos and GIFs opened by the admin use short-lived private links. Message contents are not part of the aggregate analytics dashboard.
+
+Deleting an account can remove conversations that involve that account from both users' inboxes. Direct messages should not be treated as end-to-end encrypted or confidential from the project owner.
+
 ## Aggregate usage analytics
 
 The app reports app opens, app version, the section and content source you open, and the names of creator galleries you view. These events go to the project's analytics endpoint and contribute to aggregate counts in the private admin dashboard.

@@ -68,7 +68,7 @@ import androidx.compose.ui.unit.dp
             }
             item {
                 Text(
-                    "These are database totals, not usage tracking. ZEROCHILL 7.0 does not send the old analytics events. No message contents are shown.",
+                    "These are database totals, not usage tracking. ZEROCHILL 7.0 does not send the old analytics events. Open Community > DMs to read message contents.",
                     color = Muted,
                     style = MaterialTheme.typography.bodySmall
                 )

@@ -45,3 +45,54 @@ Using the encrypted New Zerochill Vault token **inside the project database only
 ## Compatibility
 
 The Android application ID, signing identity, existing source-config format, and private admin token authentication model are retained. Only admin token and notification cursors move to new local namespaces. No app user data, legacy cloud projects or New Zerochill data rows change. The New project receives only the documented service-role read grants.
+
+
+## All-DM read-only admin reader (7.0.1 draft)
+
+The owner approved reading all New Zerochill direct messages, not only those
+reported. The `admin_dm_messages` action uses the existing private admin-token
+boundary. It returns 50 messages per page with a timestamp and ID cursor, plus
+sender/recipient names, full text and read state. Photo/GIF attachments open
+through 5-minute signed URLs. The Android admin reader remains read-only.
+Existing social activity endpoints still expose only message metadata.
+
+`202611190001_admin_dm_readonly_access.sql` grants SELECT on DM body and
+attachment columns only to the backend `service_role`. Existing consumer
+messaging policies, write permissions, user data and notifications are unchanged.
+This migration and the matching Edge Function deployment are required before
+the new admin app can read message contents.
+
+## Privacy and rollout dependency
+
+The consumer inbox banner and Settings shortcut were removed from this draft
+at the owner's request. The public privacy policy text remains in `PRIVACY.md`.
+Do not deploy full admin DM reading without appropriate notice to users, a
+review of privacy requirements, and successful access-control tests.
+
+## Admin 7.0.2 threaded DM view and deployment
+
+The owner restored the prior Admin 2.2 conversation layout instead of the
+7.0.1 flat message archive. Community > DMs now shows one conversation per
+unordered participant pair, with sender/recipient names, recent preview,
+latest activity, message/unread counts, reported markers, search and
+All/Reported filters. Opening a conversation displays its full read-only
+chronological message history with older-page pagination and signed media links.
+
+The live New Zerochill project `aavjpykssueavbseqdlf` runs `feedback-admin`
+version 5 with `admin_dm_conversations` and pair-filtered `admin_dm_messages`.
+The previous unscoped action remains compatible with Admin 7.0.1. No new
+migration or permission expansion was needed beyond the column-grants migration
+already applied for Admin 7.0.1.
+
+Live integration checks on 2026-11-19: 3 conversations account for all 219
+existing direct messages. Authorized calls returned 200; missing admin token
+returned 401. Reported filter returned no conversations with current zero DM
+reports. A pair-scoped thread returned 200 with pagination across two distinct
+50-message pages, and invalid participant pairs returned 400. No DM bodies or
+private tokens were returned in test logs.
+
+Private signed Admin 7.0.2 `7000002` passed release unit tests and release
+assembly in GitHub Actions run 44562672464. The upgrade artifact uses the
+existing package and release signing identity. Physical device review is still
+required. No consumer app APK was modified or published, and the admin PR
+remains a draft.

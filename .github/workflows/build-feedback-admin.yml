@@ -3,6 +3,11 @@ name: Build Private Feedback Admin APK
 # Manual only: physical device testing replaces automatic UI/emulator suites.
 on:
   workflow_dispatch:
+    inputs:
+      quick_build:
+        description: 'Release unit tests and signed APK only (skip emulator)'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -53,12 +58,19 @@ jobs:
           PY
 
       - name: Build private admin APK
-        run: gradle --no-daemon :feedbackadmin:testDebugUnitTest :feedbackadmin:testReleaseUnitTest :feedbackadmin:assembleDebug :feedbackadmin:assembleRelease :feedbackadmin:assembleDebugAndroidTest
+        run: |
+          if [ "${{ inputs.quick_build }}" = "true" ]; then
+            gradle --no-daemon :feedbackadmin:testReleaseUnitTest :feedbackadmin:assembleRelease
+          else
+            gradle --no-daemon :feedbackadmin:testDebugUnitTest :feedbackadmin:testReleaseUnitTest :feedbackadmin:assembleDebug :feedbackadmin:assembleRelease :feedbackadmin:assembleDebugAndroidTest
+          fi
 
       - name: Prepare APK
         run: |
           cp feedbackadmin/build/outputs/apk/release/feedbackadmin-release.apk ZeroChill-Admin.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs ZeroChill-Admin.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs ZeroChill-Admin.apk | tee admin-signing.txt
+          grep -qi '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356' admin-signing.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging ZeroChill-Admin.apk | grep "package: name='com.addy37.crazyshitadmin' versionCode='7000002'"
           SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           SOURCE_REF="${{ github.head_ref || github.ref_name }}"
           SAFE_REF="$(printf '%s' "$SOURCE_REF" | tr '/ ' '--')"
@@ -87,12 +99,14 @@ jobs:
           git worktree remove --force "$RUNNER_TEMP/admin-baseline"
 
       - name: Enable emulator acceleration
+        if: ${{ !inputs.quick_build }}
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
       - name: Compose flow checks and visual capture
+        if: ${{ !inputs.quick_build }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35

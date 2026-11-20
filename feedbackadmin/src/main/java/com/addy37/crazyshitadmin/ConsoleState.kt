@@ -26,6 +26,10 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
     var communityAccounts by mutableStateOf<List<CommunityRepository.Account>>(emptyList()); private set
     var communityActivity by mutableStateOf<List<CommunityRepository.SocialActivity>>(emptyList()); private set
     var communityReports by mutableStateOf<List<CommunityRepository.Report>>(emptyList()); private set
+    var dmConversations by mutableStateOf<List<CommunityRepository.DmConversation>>(emptyList()); private set
+    var selectedDmConversation by mutableStateOf<CommunityRepository.DmConversation?>(null); private set
+    var dmMessages by mutableStateOf<List<CommunityRepository.DmMessage>>(emptyList()); private set
+    var dmNextCursor by mutableStateOf(""); private set
     var accountDetail by mutableStateOf<CommunityRepository.AccountDetail?>(null); private set
     var communitySection by mutableStateOf(saved.get<String>("communitySection") ?: "accounts"); private set
     var communityQuery by mutableStateOf(saved.get<String>("communityQuery") ?: ""); private set
@@ -55,7 +59,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         saved["configPublished"] = config?.published
     }
     private fun request(key: String, block: suspend (String) -> Unit) {
-        val replaceable = key == "thread" || key == "communityList" || key == "accountDetail"
+        val replaceable = key == "thread" || key == "communityList" || key == "accountDetail" || key == "dmMessages" || key == "dmConversations"
         if (key in busy && !replaceable) return
         if (replaceable) tasks.remove(key)?.cancel()
         val requestId = (requestIds[key] ?: 0) + 1
@@ -86,6 +90,7 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
         SecureTokenStore.clear(getApplication()); paired = false
         items = emptyList(); analytics = null; activeCounts = null; config = null; history = emptyList(); thread = null
         communityOverview = null; communityAccounts = emptyList(); communityActivity = emptyList(); communityReports = emptyList(); accountDetail = null
+        dmConversations = emptyList(); selectedDmConversation = null; dmMessages = emptyList(); dmNextCursor = ""
         communitySection = "accounts"; communityQuery = ""; communityFilterValue = "all"
         saved["communitySection"] = communitySection; saved["communityQuery"] = communityQuery; saved["communityFilter"] = communityFilterValue
         threadId = ""; saved["threadId"] = ""; busy = emptySet(); errors = emptyMap(); notice = ""
@@ -111,16 +116,27 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
     fun refreshCommunity() { loadCommunityOverview(); loadCommunityList() }
     fun navigateCommunitySection(value: String) {
         communitySection = value; communityQuery = ""; communityFilterValue = "all"; accountDetail = null
+        selectedDmConversation = null
+        dmMessages = emptyList(); dmNextCursor = ""
+        if (value == "dms") dmConversations = emptyList()
         saved["communitySection"] = value; saved["communityQuery"] = ""; saved["communityFilter"] = "all"
         loadCommunityList()
     }
     fun searchCommunity(value: String) {
-        communityQuery = value.trim(); saved["communityQuery"] = communityQuery; loadCommunityList()
+        communityQuery = value.trim(); saved["communityQuery"] = communityQuery
+        if (communitySection == "dms") dmConversations = emptyList()
+        loadCommunityList()
     }
     fun setCommunityFilter(value: String) {
-        communityFilterValue = value; saved["communityFilter"] = value; loadCommunityList()
+        communityFilterValue = value; saved["communityFilter"] = value
+        if (communitySection == "dms") dmConversations = emptyList()
+        loadCommunityList()
     }
     fun loadCommunityList() {
+        if (communitySection == "dms") {
+            if (selectedDmConversation != null) loadDmMessages(true) else loadDmConversations()
+            return
+        }
         val section = communitySection
         val query = communityQuery
         val filter = communityFilterValue
@@ -140,6 +156,50 @@ internal class ConsoleState @JvmOverloads constructor(application: Application, 
                 }
             }
         }
+    }
+
+    private fun loadDmConversations() {
+        val query = communityQuery
+        val filter = communityFilterValue
+        request("dmConversations") { token ->
+            val loaded = withContext(Dispatchers.IO) { gateway.dmConversations(token, query, filter) }
+            if (communitySection == "dms" && selectedDmConversation == null &&
+                communityQuery == query && communityFilterValue == filter) {
+                dmConversations = loaded
+            }
+        }
+    }
+
+    fun openDmConversation(item: CommunityRepository.DmConversation) {
+        selectedDmConversation = item
+        dmMessages = emptyList(); dmNextCursor = ""
+        loadDmMessages(true)
+    }
+
+    fun closeDmConversation() {
+        tasks.remove("dmMessages")?.cancel()
+        selectedDmConversation = null
+        dmMessages = emptyList(); dmNextCursor = ""
+        errors = errors - "dmMessages"
+        if (communitySection == "dms") loadDmConversations()
+    }
+
+    private fun loadDmMessages(reset: Boolean) {
+        val selected = selectedDmConversation ?: return
+        val cursor = if (reset) "" else dmNextCursor
+        request("dmMessages") { token ->
+            val page = withContext(Dispatchers.IO) {
+                gateway.dmMessages(token, cursor, selected.participantAId, selected.participantBId)
+            }
+            if (communitySection == "dms" && selectedDmConversation?.key() == selected.key()) {
+                dmMessages = if (reset) page.items else (dmMessages + page.items).distinctBy { it.id }
+                dmNextCursor = page.nextCursor
+            }
+        }
+    }
+    fun loadOlderDmMessages() {
+        if (selectedDmConversation != null && dmNextCursor.isNotBlank() && "dmMessages" !in busy)
+            loadDmMessages(false)
     }
     fun loadAccountDetail(userId: String) = request("accountDetail") { token ->
         accountDetail = withContext(Dispatchers.IO) { gateway.accountDetail(token, userId) }
