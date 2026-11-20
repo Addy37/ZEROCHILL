@@ -156,7 +156,7 @@ public class HeaderProfileAvatarTest {
         view.close();
     }
 
-    @Test public void shittokSelectorKeepsItsPositionWhenSigningOutAndBackIn() {
+    @Test public void shittokSelectorStaysNearCenterWhenSigningOutAndRestoresOnSignIn() {
         NativeMainActivity main = Robolectric.buildActivity(NativeMainActivity.class).get();
         AccountProfileCache.record(main, state("a", ""));
         ContentPreference.set(main, ContentPreference.ALL);
@@ -168,7 +168,7 @@ public class HeaderProfileAvatarTest {
         assertEquals(View.VISIBLE, selector.getVisibility());
         assertEquals(View.VISIBLE, view.getVisibility());
 
-        for (int width : new int[]{320, 412}) {
+        for (int width : new int[]{320, 360, 412}) {
             layoutHeader(bar, width);
             int signedInLeft = selector.getLeft();
             int signedInRight = selector.getRight();
@@ -180,8 +180,15 @@ public class HeaderProfileAvatarTest {
             view.refresh();
             layoutHeader(bar, width);
             assertEquals(View.INVISIBLE, view.getVisibility());
-            assertEquals(signedInLeft, selector.getLeft());
-            assertEquals(signedInRight, selector.getRight());
+            if (width == 412) {
+                assertEquals(signedInLeft, selector.getLeft());
+                assertEquals(signedInRight, selector.getRight());
+                assertEquals(BrowseUi.dp(main, 44), view.getWidth());
+            } else {
+                assertTrue(selector.getLeft() > signedInLeft);
+                int inset = Math.abs((selector.getLeft() + selector.getRight()) / 2 - bar.getWidth() / 2);
+                assertTrue(inset <= BrowseUi.dp(main, 6));
+            }
 
             user = "a";
             view.refresh();

@@ -571,7 +571,27 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private View buildTopBar() {
-        LinearLayout bar = new LinearLayout(this);
+        int actionWidth = dp(44);
+        int sourceWidth = dp(120);
+        int sourceGap = dp(4);
+        int moreGap = dp(2);
+        LinearLayout bar = new LinearLayout(this) {
+            @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                if (headerProfileAvatar != null) {
+                    int avatarWidth = actionWidth;
+                    if (headerProfileAvatar.getVisibility() == View.INVISIBLE
+                            && MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.EXACTLY) {
+                        // Narrow signed-out headers can use a smaller gap to leave room for the title.
+                        int actionAreaWidth = getPaddingEnd() + 2 * actionWidth + moreGap;
+                        int availableGap = (MeasureSpec.getSize(widthMeasureSpec) - sourceWidth) / 2
+                                - actionAreaWidth;
+                        avatarWidth = Math.max(0, Math.min(actionWidth, availableGap));
+                    }
+                    headerProfileAvatar.getLayoutParams().width = avatarWidth;
+                }
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            }
+        };
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(18), 0, dp(12), 0);
@@ -600,8 +620,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         bar.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
         shitTokSourceSelector = new ShitTokSourceControl(this);
-        LinearLayout.LayoutParams sourceParams = new LinearLayout.LayoutParams(dp(120), dp(40));
-        sourceParams.setMarginEnd(dp(4));
+        LinearLayout.LayoutParams sourceParams = new LinearLayout.LayoutParams(sourceWidth, dp(40));
+        sourceParams.setMarginEnd(sourceGap);
         bar.addView(shitTokSourceSelector, sourceParams);
 
         ImageView search = new ImageView(this);
@@ -617,10 +637,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             haptic(v);
             openContextualSearch();
         });
-        bar.addView(search, new LinearLayout.LayoutParams(dp(44), dp(48)));
+        bar.addView(search, new LinearLayout.LayoutParams(actionWidth, dp(48)));
 
         headerProfileAvatar = new HeaderProfileAvatar(this);
-        bar.addView(headerProfileAvatar, new LinearLayout.LayoutParams(dp(44), dp(48)));
+        bar.addView(headerProfileAvatar, new LinearLayout.LayoutParams(actionWidth, dp(48)));
 
         ImageView more = new ImageView(this);
         more.setImageResource(R.drawable.ic_more_overflow);
@@ -635,8 +655,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             showMoreSheet(v);
         });
         LinearLayout.LayoutParams moreParams =
-                new LinearLayout.LayoutParams(dp(44), dp(48));
-        moreParams.setMarginStart(dp(2));
+                new LinearLayout.LayoutParams(actionWidth, dp(48));
+        moreParams.setMarginStart(moreGap);
         bar.addView(more, moreParams);
         setShitTokSourceSelectorVisible(shitTokSourceSelectorVisible);
         return bar;
