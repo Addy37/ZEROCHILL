@@ -564,8 +564,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         shitTokSourceSelectorVisible = visible;
         if (shitTokSourceSelector == null) return;
         shitTokSourceSelector.refresh(false);
-        shitTokSourceSelector.setVisibility(screen == Screen.CHAOS && visible
-                && ContentPreference.get(this) == ContentPreference.ALL ? View.VISIBLE : View.GONE);
+        boolean showSelector = screen == Screen.CHAOS && visible
+                && ContentPreference.get(this) == ContentPreference.ALL;
+        shitTokSourceSelector.setVisibility(showSelector ? View.VISIBLE : View.GONE);
+        if (headerProfileAvatar != null) headerProfileAvatar.setReserveSpaceWhenSignedOut(showSelector);
     }
 
     private View buildTopBar() {
@@ -601,7 +603,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         LinearLayout.LayoutParams sourceParams = new LinearLayout.LayoutParams(dp(120), dp(40));
         sourceParams.setMarginEnd(dp(4));
         bar.addView(shitTokSourceSelector, sourceParams);
-        setShitTokSourceSelectorVisible(shitTokSourceSelectorVisible);
 
         ImageView search = new ImageView(this);
         headerSearchControl = search;
@@ -637,6 +638,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 new LinearLayout.LayoutParams(dp(44), dp(48));
         moreParams.setMarginStart(dp(2));
         bar.addView(more, moreParams);
+        setShitTokSourceSelectorVisible(shitTokSourceSelectorVisible);
         return bar;
     }
 

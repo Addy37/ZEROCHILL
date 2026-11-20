@@ -5,7 +5,6 @@ import android.app.Application;
 import android.content.Context;
 import android.os.Looper;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import org.junit.Before;
@@ -135,26 +134,75 @@ public class HeaderProfileAvatarTest {
         recreated.close();
     }
 
-    @Test public void nativeHeaderKeepsSearchAvatarMoreOrderAndFitsNarrowWidth() throws Exception {
-        // Construct just the header to avoid unrelated feeds or network work.
+    @Test public void nativeHeaderKeepsSearchAvatarMoreOrderAndFitsNarrowWidth() {
         NativeMainActivity main = Robolectric.buildActivity(NativeMainActivity.class).get();
         AccountProfileCache.record(main, state("a", ""));
-        java.lang.reflect.Method method = NativeMainActivity.class.getDeclaredMethod("buildTopBar");
-        method.setAccessible(true);
-        LinearLayout bar = (LinearLayout) method.invoke(main);
+        LinearLayout bar = ReflectionHelpers.callInstanceMethod(main, "buildTopBar");
         android.widget.TextView title = ReflectionHelpers.getField(main, "headerTitle");
         title.setText("ZEROCHILL Shows");
-        HeaderProfileAvatar view = (HeaderProfileAvatar) bar.getChildAt(2);
+        main.setShitTokSourceSelectorVisible(false);
+        View search = ReflectionHelpers.getField(main, "headerSearchControl");
+        HeaderProfileAvatar view = ReflectionHelpers.getField(main, "headerProfileAvatar");
+        View more = bar.getChildAt(bar.getChildCount() - 1);
         view.resume();
-        assertEquals("Search", bar.getChildAt(1).getContentDescription());
-        assertEquals("More", bar.getChildAt(3).getContentDescription());
-        int width = BrowseUi.dp(main, 320), height = BrowseUi.dp(main, 58);
-        bar.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
-        bar.layout(0, 0, width, height);
-        assertTrue(bar.getChildAt(3).getRight() <= width);
+        assertEquals("Search", search.getContentDescription());
+        assertEquals("More", more.getContentDescription());
+        layoutHeader(bar, 320);
+        assertTrue(search.getRight() <= view.getLeft());
+        assertTrue(view.getRight() <= more.getLeft());
+        assertTrue(more.getRight() <= bar.getWidth());
         assertTrue(title.getLayout().getLineWidth(0) <= title.getWidth());
         assertTrue(view.getWidth() >= BrowseUi.dp(main, 44));
         view.close();
+    }
+
+    @Test public void shittokSelectorKeepsItsPositionWhenSigningOutAndBackIn() {
+        NativeMainActivity main = Robolectric.buildActivity(NativeMainActivity.class).get();
+        AccountProfileCache.record(main, state("a", ""));
+        ContentPreference.set(main, ContentPreference.ALL);
+        LinearLayout bar = ReflectionHelpers.callInstanceMethod(main, "buildTopBar");
+        View selector = bar.findViewWithTag("shittok_source_control");
+        HeaderProfileAvatar view = ReflectionHelpers.getField(main, "headerProfileAvatar");
+        main.setShitTokSourceSelectorVisible(true);
+        view.resume();
+        assertEquals(View.VISIBLE, selector.getVisibility());
+        assertEquals(View.VISIBLE, view.getVisibility());
+
+        for (int width : new int[]{320, 412}) {
+            layoutHeader(bar, width);
+            int signedInLeft = selector.getLeft();
+            int signedInRight = selector.getRight();
+            if (width == 412) {
+                int inset = Math.abs((signedInLeft + signedInRight) / 2 - bar.getWidth() / 2);
+                assertTrue(inset <= BrowseUi.dp(main, 5));
+            }
+            user = "";
+            view.refresh();
+            layoutHeader(bar, width);
+            assertEquals(View.INVISIBLE, view.getVisibility());
+            assertEquals(signedInLeft, selector.getLeft());
+            assertEquals(signedInRight, selector.getRight());
+
+            user = "a";
+            view.refresh();
+            layoutHeader(bar, width);
+            assertEquals(View.VISIBLE, view.getVisibility());
+            assertEquals(signedInLeft, selector.getLeft());
+        }
+
+        user = "";
+        view.refresh();
+        main.setShitTokSourceSelectorVisible(false);
+        assertEquals(View.GONE, selector.getVisibility());
+        assertEquals(View.GONE, view.getVisibility());
+        view.close();
+    }
+
+    private static void layoutHeader(LinearLayout bar, int widthDp) {
+        int width = BrowseUi.dp(bar.getContext(), widthDp);
+        int height = BrowseUi.dp(bar.getContext(), 58);
+        bar.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        bar.layout(0, 0, width, height);
     }
 }
