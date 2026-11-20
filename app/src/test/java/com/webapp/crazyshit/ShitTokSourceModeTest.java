@@ -41,10 +41,10 @@ public class ShitTokSourceModeTest {
             try {
                 NativeContentItem item = new NativeContentItem("media", "fixture", "https://kaotic.com/video/fixture", "", "", "Kaotic", "");
                 ShitTokSeenStore store = ShitTokSeenStore.get(activity.get());
-                assertFalse(feed.shouldDeferHistory(item, Collections.emptySet()));
-                assertTrue(feed.shouldDeferHistory(item, Collections.singleton(item.url)));
+                assertFalse(feed.hasWatchHistory(item, Collections.emptySet()));
+                assertTrue(feed.hasWatchHistory(item, Collections.singleton(item.url)));
                 store.heart(item.url, null);
-                assertTrue(feed.shouldDeferHistory(item, Collections.emptySet()));
+                assertTrue(feed.hasWatchHistory(item, Collections.emptySet()));
                 store.watch(item.url, null);
                 assertFalse(ReflectionHelpers.callInstanceMethod(feed, "discoveryExcluded",
                         from(NativeContentItem.class, item), from(CrazyShitRepository.StreamInfo.class, null)));

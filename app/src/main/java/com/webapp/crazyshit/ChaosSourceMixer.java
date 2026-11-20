@@ -230,11 +230,6 @@ final class ChaosSourceMixer {
 
     List<NativeContentItem> loadRandomBatch(Context context, boolean continuityOnly,
             java.util.function.Consumer<List<NativeContentItem>> onCandidates) {
-        return loadRandomBatch(context, continuityOnly, onCandidates, MIX_BATCH_BUDGET_MS);
-    }
-
-    List<NativeContentItem> loadRandomBatch(Context context, boolean continuityOnly,
-            java.util.function.Consumer<List<NativeContentItem>> onCandidates, long budgetMs) {
         ContentPreference mode = ContentPreference.get(context);
         if (ShitTokSourceMode.get(context).creatorInventory(mode)) {
             // Only the authoritative category loader can produce a filtered candidate.
@@ -247,7 +242,7 @@ final class ChaosSourceMixer {
         }
         recoverSources(context);
         ArrayList<NativeContentItem> result = new ArrayList<>();
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(budgetMs);
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(MIX_BATCH_BUDGET_MS);
         // The consumer can stop admission at any time. Provider work retains its own bounded
         // session buffers and survives that decision, until explicit lifecycle/mode cancellation.
         while (!Thread.currentThread().isInterrupted() && System.nanoTime() < deadline) {

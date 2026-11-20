@@ -53,6 +53,33 @@ public class ShitTokInventoryAdmissionTest {
         }
     }
 
+    @Test public void historyPrefersUnseenWithinTheSameSourceWithoutDroppingWatchedClips() {
+        ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> .5f, () -> 0L);
+        BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(4);
+        NativeContentItem watched = item("watched"), unseen = item("unseen");
+        java.util.function.Predicate<NativeContentItem> history = candidate -> candidate == watched;
+        queue.add(watched);
+        queue.add(unseen);
+        try {
+            assertSame(unseen, nextCandidate(gate, queue, history));
+            assertSame(watched, nextCandidate(gate, queue, history));
+            queue.add(watched);
+            queue.add(unseen);
+            assertSame(watched, nextCandidate(gate, queue, candidate -> false));
+        } finally { gate.close(); }
+    }
+
+    private static NativeContentItem nextCandidate(ShitTokOrientationAdmission gate,
+            BlockingQueue<NativeContentItem> queue, java.util.function.Predicate<NativeContentItem> history) {
+        return org.robolectric.util.ReflectionHelpers.callInstanceMethod(gate, "nextCandidate",
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(BlockingQueue.class, queue),
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(Collection.class, Collections.emptyList()),
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(boolean.class, true),
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(List.class, new ArrayList<>()),
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(int.class, 0),
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(java.util.function.Predicate.class, history));
+    }
+
     @Test public void cancelledResolutionSlotWaitDefersWithoutUnplayableCooldown() {
         ShitTokOrientationAdmission gate = new ShitTokOrientationAdmission((s, allowed) -> .5f, () -> 0L);
         BlockingQueue<NativeContentItem> queue = new ArrayBlockingQueue<>(48);

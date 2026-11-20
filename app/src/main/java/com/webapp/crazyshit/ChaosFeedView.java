@@ -133,8 +133,6 @@ public final class ChaosFeedView extends FrameLayout {
     private static final int MAX_RECENT = 500;
     private static final int MAX_HIDDEN = 600;
     private static final int LOAD_AHEAD_AT = 5;
-    private static final long UNSEEN_EXPLORATION_MS = 3_800L;
-    private static final int MAX_HISTORY_FALLBACK = 16;
     private final ShitTokRunwayPolicy runway = new ShitTokRunwayPolicy();
     private long belowRunwayAt, belowRunwayMs;
     private int physicalTailHits;
@@ -1281,18 +1279,17 @@ public final class ChaosFeedView extends FrameLayout {
     final Set<String> blockedSnapshot = new HashSet<>(blockedCreatorKeys);
 
     final boolean startupBatch = items.isEmpty();
-    final boolean historyExplorationSpent = consecutiveDryLoads >= 3;
+    // Use history to rank choices once playback has a runway. During startup and
+    // recovery, there is no extra history gate between the provider and admission.
+    final boolean rankByHistory = !startupBatch && usableUpcomingCount() > 0;
     io.execute(() -> {
         if (work.cancelled || batchGeneration != feedGeneration || closed) return;
         if (startupBatch) AppPerformance.startup("feed_worker");
         long batchStartedAt = android.os.SystemClock.elapsedRealtime();
-        long explorationDeadline = System.nanoTime()
-                + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(UNSEEN_EXPLORATION_MS);
         java.util.concurrent.BlockingQueue<NativeContentItem> candidates =
                 new java.util.concurrent.ArrayBlockingQueue<>(48);
-        java.util.concurrent.BlockingQueue<NativeContentItem> historyFallback =
-                new java.util.concurrent.ArrayBlockingQueue<>(MAX_HISTORY_FALLBACK);
         Set<String> offered = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        Set<String> historicalCandidates = java.util.concurrent.ConcurrentHashMap.newKeySet();
         Set<String> resolvedIdentities = java.util.concurrent.ConcurrentHashMap.newKeySet();
         resolvedIdentities.addAll(identitySnapshot);
         java.util.concurrent.atomic.AtomicBoolean productionDone = new java.util.concurrent.atomic.AtomicBoolean();
@@ -1320,11 +1317,8 @@ public final class ChaosFeedView extends FrameLayout {
                 // Partial provider results appear again in the final mix. Do not count this
                 // internal replay as a new fetched duplicate or spend another lookup.
                 if (!offered.add(identity)) continue;
-                if (shouldDeferHistory(item, recentSnapshot)) {
-                    if (!historyFallback.offer(item)) sourceMixer.abandon(item);
-                } else {
-                    fresh.add(item);
-                }
+                if (rankByHistory && hasWatchHistory(item, recentSnapshot)) historicalCandidates.add(item.url);
+                fresh.add(item);
             }
             synchronized (candidates) { for (NativeContentItem item : fresh) {
                 if (work.cancelled || !acceptingCandidates.get() || batchGeneration != feedGeneration || closed) {
@@ -1352,22 +1346,8 @@ public final class ChaosFeedView extends FrameLayout {
                     offer.accept(recovered);
                     offer.accept(pendingCandidates);
                     if (recovered.isEmpty() && pendingCandidates.isEmpty()) {
-                        List<NativeContentItem> mixed = sourceMixer.loadRandomBatch(activity, protectedRefill, offer,
-                                UNSEEN_EXPLORATION_MS);
+                        List<NativeContentItem> mixed = sourceMixer.loadRandomBatch(activity, protectedRefill, offer);
                         offer.accept(mixed); // URL dedup keeps partial results singular.
-                    }
-                    // Reuse the source decks. Draining watched results frees provider slots
-                    // for their next pages without adding work to the swipe path.
-                    while (!historyExplorationSpent && !historyFallback.isEmpty() && !work.cancelled && acceptingCandidates.get()
-                            && continuityWorkNeeded && batchGeneration == feedGeneration
-                            && System.nanoTime() < explorationDeadline
-                            && !Thread.currentThread().isInterrupted()) {
-                        if (candidates.remainingCapacity() >= ShitTokSourcePool.MAX_READY_PER_SOURCE) {
-                            offer.accept(sourceMixer.takeReadyCandidates());
-                            sourceMixer.recoverSources(activity);
-                        }
-                        try { Thread.sleep(75L); }
-                        catch (InterruptedException cancelled) { Thread.currentThread().interrupt(); break; }
                     }
                 } else {
                     offer.accept(pendingCandidates);
@@ -1379,8 +1359,6 @@ public final class ChaosFeedView extends FrameLayout {
                             && batchPreference == ContentPreference.get(activity)
                             && batchSources == ShitTokSourceMode.get(activity)
                             && android.os.SystemClock.elapsedRealtime() < until
-                            && (historyFallback.isEmpty() || (!historyExplorationSpent
-                                    && System.nanoTime() < explorationDeadline))
                             && !Thread.currentThread().isInterrupted()) {
                         if (candidates.remainingCapacity() >= ShitTokSourcePool.MAX_READY_PER_SOURCE)
                             offer.accept(sourceMixer.takePreference(batchPreference, item -> orientationAdmission.canOffer(item, candidates)));
@@ -1390,13 +1368,6 @@ public final class ChaosFeedView extends FrameLayout {
                     }
                 }
             } finally {
-                synchronized (candidates) {
-                    NativeContentItem item;
-                    while ((item = historyFallback.poll()) != null) {
-                        if (work.cancelled || !acceptingCandidates.get() || batchGeneration != feedGeneration
-                                || closed || !candidates.offer(item)) sourceMixer.abandon(item);
-                    }
-                }
                 productionDone.set(true);
                 ShitTokPoolDiagnostics.record("harvest", "ms=" + (android.os.SystemClock.elapsedRealtime() - batchStartedAt));
                 Trace.endSection();
@@ -1406,7 +1377,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (work.cancelled) harvest.cancel(true);
         final int[] publishedFresh = {0};
         ShitTokOrientationAdmission.Result verified = orientationAdmission.admitConcurrent(candidates, productionDone::get,
-                item -> {
+                item -> historicalCandidates.contains(item.url), item -> {
                     long at = android.os.SystemClock.elapsedRealtime();
                     inventoryResolutionSlots.acquire();
                     inventoryResolutions.incrementAndGet();
@@ -1872,13 +1843,13 @@ public final class ChaosFeedView extends FrameLayout {
                 && (!sources.creatorInventory(mode) || sourceMixer.matchesPreference(item, mode));
     }
 
-    boolean shouldDeferHistory(NativeContentItem item, Set<String> recent) {
+    boolean hasWatchHistory(NativeContentItem item, Set<String> recent) {
         return recent.contains(item.url) || seenStore.seen(item.url, null) || seenStore.liked(item.url, null);
     }
 
     private boolean discoveryExcluded(NativeContentItem item, CrazyShitRepository.StreamInfo stream) {
         if (!eligiblePreference(item, ContentPreference.get(activity))) return true;
-        // Historical viewing and likes are deferred at admission and remain eligible as fallback.
+        // History influences scheduling only when there is playable inventory ahead.
         return false;
     }
 
