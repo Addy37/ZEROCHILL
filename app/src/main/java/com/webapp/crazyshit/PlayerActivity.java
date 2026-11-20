@@ -15,7 +15,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Rational;
-import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
@@ -60,6 +59,7 @@ public class PlayerActivity extends Activity {
     private ExoPlayer player;
     private PlayerView playerView;
     private ShowsFullscreenControls fullscreenControls;
+    private FullscreenVideoGestures seekGestures;
     private FrameLayout videoSurface;
     private View menuButton;
     private TextView titleView;
@@ -269,30 +269,10 @@ public class PlayerActivity extends Activity {
     }
 
     private void configureGestures() {
-        FullscreenVideoGestures seekGestures = new FullscreenVideoGestures(
-                playerView, () -> player, fullscreenControls, () -> !dragMinimize);
-        final GestureDetector detector = new GestureDetector(this,
-                new GestureDetector.SimpleOnGestureListener() {
-                    @Override
-                    public boolean onDown(MotionEvent e) {
-                        return true;
-                    }
-
-                    @Override
-                    public boolean onSingleTapConfirmed(MotionEvent e) {
-                        if (dragMinimize) return true;
-                        fullscreenControls.onVideoTap();
-                        return true;
-                    }
-
-                    @Override
-                    public boolean onDoubleTap(MotionEvent e) {
-                        if (player == null || dragMinimize) return true;
-                        seekGestures.seek(e.getX() >= playerView.getWidth() / 2f);
-                        haptic(playerView);
-                        return true;
-                    }
-                });
+        seekGestures = new FullscreenVideoGestures(playerView, () -> player,
+                fullscreenControls::onVideoTap,
+                () -> !dragMinimize && !minimizing && !isInPictureInPictureMode(), false,
+                () -> haptic(playerView));
 
         playerView.setOnTouchListener(new View.OnTouchListener() {
             float downX;
@@ -305,7 +285,7 @@ public class PlayerActivity extends Activity {
 
             @Override
             public boolean onTouch(View v, MotionEvent event) {
-                detector.onTouchEvent(event);
+                seekGestures.onTouch(v, event);
 
                 switch (event.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
@@ -698,6 +678,7 @@ public class PlayerActivity extends Activity {
             else if (resumed) orientationListener.enable();
         }
         resetMinimizeTransform();
+        if (seekGestures != null) seekGestures.cancel();
         if (gestureLabel != null) gestureLabel.setVisibility(View.GONE);
         if (fullscreenControls != null) fullscreenControls.suspend(isInPictureInPictureMode);
         if (playerView != null) playerView.setUseController(!isInPictureInPictureMode);
@@ -834,6 +815,7 @@ public class PlayerActivity extends Activity {
     @Override
     protected void onPause() {
         resumed = false;
+        if (seekGestures != null) seekGestures.cancel();
         if (orientationListener != null) orientationListener.disable();
         super.onPause();
     }

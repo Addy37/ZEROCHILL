@@ -156,7 +156,7 @@ public class ShowsFullscreenControlsTest {
         Player player = player(new AtomicBoolean(true));
         controls.bind(player);
         FullscreenVideoGestures shows = new FullscreenVideoGestures(view,
-                () -> player, controls, () -> true, true);
+                () -> player, controls::onVideoTap, () -> true, true, () -> {});
         long time = android.os.SystemClock.uptimeMillis();
         MotionEvent down = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, 30, 30, 0);
         MotionEvent up = MotionEvent.obtain(time, time + 40, MotionEvent.ACTION_UP, 30, 30, 0);
@@ -165,7 +165,7 @@ public class ShowsFullscreenControlsTest {
         assertFalse("Shows tap should not wait for double-tap timeout", controls.isVisible());
         controls.show();
         FullscreenVideoGestures legacy = new FullscreenVideoGestures(view,
-                () -> player, controls, () -> true);
+                () -> player, controls::onVideoTap, () -> true);
         legacy.onTouch(view, down);
         legacy.onTouch(view, up);
         assertTrue("Legacy tap waits for confirmation", controls.isVisible());

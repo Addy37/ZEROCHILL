@@ -37,13 +37,14 @@ public class OnlyFapViewerGesturesTest {
             return null;
         });
         FullscreenVideoGestures gallery = new FullscreenVideoGestures(surface, () -> player,
-                controls, () -> true, true, () -> taps[0]++);
+                () -> taps[0]++, () -> true, true, () -> {});
         tap(gallery, surface, 1000L);
         assertEquals(1, taps[0]); assertFalse(controls.isVisible());
-        gallery.seek(true); assertEquals(13000L, target[0]);
+        tap(gallery, surface, 1100L);
+        assertEquals(13000L, target[0]);
         assertFalse(controls.isVisible()); // Unified chrome remains the normal presentation.
         gallery.cancel(); controls.suspend(false); controls.hide();
-        FullscreenVideoGestures original = new FullscreenVideoGestures(surface, () -> player, controls, () -> true, true);
+        FullscreenVideoGestures original = new FullscreenVideoGestures(surface, () -> player, controls::onVideoTap, () -> true, true, () -> {});
         tap(original, surface, 2000L);
         assertTrue(controls.isVisible()); assertEquals(1, taps[0]);
         original.cancel(); controls.release(); host.finish();

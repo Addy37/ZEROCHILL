@@ -9,4 +9,9 @@
     <string name="fullscreen_like">Like this video</string>
     <string name="fullscreen_remaining_zero">-0:00</string>
     <string name="fullscreen_enter">Fullscreen</string>
+    <string name="video_toggle_controls">Show or hide video controls</string>
+    <string name="video_rewind_action">Rewind 10 seconds</string>
+    <string name="video_forward_action">Forward 10 seconds</string>
+    <string name="video_seek_rewind">‹‹ -%1$ds</string>
+    <string name="video_seek_forward">+%1$ds ››</string>
 </resources>

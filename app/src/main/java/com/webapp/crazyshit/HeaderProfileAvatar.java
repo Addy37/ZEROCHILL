@@ -32,6 +32,7 @@ final class HeaderProfileAvatar extends FrameLayout {
     private String attemptedOwner = "";
     private boolean active;
     private boolean profileInContent;
+    private boolean reserveSpaceWhenSignedOut;
     private int generation;
 
     HeaderProfileAvatar(Activity activity) {
@@ -84,7 +85,30 @@ final class HeaderProfileAvatar extends FrameLayout {
 
     void setProfileInContent(boolean value) {
         profileInContent = value;
-        setVisibility(value || owner.isEmpty() || !owner.equals(session.current(activity)) ? GONE : VISIBLE);
+        updateVisibility();
+    }
+
+    void setReserveSpaceWhenSignedOut(boolean value) {
+        if (reserveSpaceWhenSignedOut == value) return;
+        reserveSpaceWhenSignedOut = value;
+        updateVisibility();
+    }
+
+    private void updateVisibility() {
+        int previous = getVisibility();
+        int visibility;
+        if (profileInContent) {
+            visibility = GONE;
+        } else if (!owner.isEmpty() && owner.equals(session.current(activity))) {
+            visibility = VISIBLE;
+        } else {
+            visibility = reserveSpaceWhenSignedOut ? INVISIBLE : GONE;
+        }
+        setVisibility(visibility);
+        if (previous != visibility && (previous == INVISIBLE || visibility == INVISIBLE)) {
+            // The header can measure its invisible slot at a different width.
+            requestLayout();
+        }
     }
 
     void close() {
@@ -108,7 +132,7 @@ final class HeaderProfileAvatar extends FrameLayout {
             image.setImageDrawable(null);
         }
         if (owner.isEmpty()) {
-            setVisibility(GONE);
+            updateVisibility();
             return;
         }
         SharedPreferences cache = AccountProfileCache.preferences(activity);
@@ -119,7 +143,7 @@ final class HeaderProfileAvatar extends FrameLayout {
             AccountAvatarImages.bind(image, owner, path);
         }
         setContentDescription("Your profile" + (known ? ": " + cache.getString("name", "") : ""));
-        setVisibility(profileInContent ? GONE : VISIBLE);
+        updateVisibility();
         // Older installs have no derived profile cache. Hydrate once for this account/view.
         // Normal sign-in, profile save and upload already publish the same cache.
         if (!known && !owner.equals(attemptedOwner)) {
