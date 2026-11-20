@@ -1,6 +1,29 @@
 # ZEROCHILL build lineage
 
-`main` is the active source for development and test APKs. The signed 7.2.0 release and subsequent device-approved changes are on `main`. Historical branches and release records below are rollback references.
+`main` is the active source for development and test APKs. The signed 7.3.0 release and its device-approved changes are on `main`. Historical branches and release records below are rollback references.
+
+## ZEROCHILL 7.3.0 verified publication
+
+The owner passed the final phone test and authorized publication of the exact signed
+candidate from Actions run `44802051524`, artifact `14660134296`, built from
+`d8d41d2ceb7e468e9181d19ac85d3cc3ef85ebf4`. The candidate includes approved PRs
+#457 and #460 plus PR #461, which applies the active Appearance accent to seek
+feedback and updates the matching release notes and bundled What's New. The app
+tree and release metadata match the merged `main` commit
+`77a975e5cc6fc8418983de12b9dad43ace2d2ae7`, the target of tag `v7.3.0`.
+
+Version code `7003000` keeps the production package and signing certificate.
+The candidate passed 156 focused release tests. Both Android 15 upgrade tests,
+from stable `7002000` and phone-approved `7002011`, preserved the original
+installation, app UID, and seeded settings, saved videos, and playback history.
+
+Actions publication run `44805003548` verified the candidate archive and APK
+checksums, production signature, and uploaded asset digests before publishing the
+exact phone-tested APK. The latest stable release is
+https://github.com/Addy37/ZEROCHILL/releases/tag/v7.3.0, with `ZeroChill.apk`
+(233,672,096 bytes) and `SHA256SUMS.txt`. The APK SHA-256 is
+`bbf0f7cb4e613d00a5eecc50f8fd0db2f01591c9eb41d807a7c7d5a18d185727`.
+The standing release workflow remains manual-only.
 
 ## ZEROCHILL 7.2.0 approved publication
 
