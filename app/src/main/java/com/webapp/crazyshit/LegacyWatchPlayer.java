@@ -28,7 +28,6 @@ import java.util.Collections;
 /** Exposes LibVLC playback to the same controls and lifecycle as the regular watch player. */
 @UnstableApi
 final class LegacyWatchPlayer extends SimpleBasePlayer {
-    private final Context context;
     private final LibVLC libVlc;
     private final MediaPlayer engine;
     private final MediaItem media;
@@ -51,11 +50,10 @@ final class LegacyWatchPlayer extends SimpleBasePlayer {
 
     LegacyWatchPlayer(Context context, VLCVideoLayout video, MediaItem media, String referer, String userAgent) {
         super(Looper.getMainLooper());
-        this.context = context;
         this.media = media;
         this.referer = referer;
         this.userAgent = userAgent;
-        libVlc = new LibVLC(context, Collections.emptyList());
+        libVlc = LegacyVideoPlayerActivity.createDecoder(context);
         MediaPlayer created = null;
         try {
             created = new MediaPlayer(libVlc);

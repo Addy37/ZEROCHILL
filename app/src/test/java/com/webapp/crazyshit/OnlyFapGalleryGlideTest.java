@@ -146,6 +146,55 @@ public class OnlyFapGalleryGlideTest {
         assertEquals(Math.round(first().itemView.getWidth() * .75f), first().itemView.getHeight());
     }
 
+    @Test public void bunkrThumbnailTrimsMatchingEmbeddedSidebarsBeforeSizingTile() throws Exception {
+        NativeContentItem photo = bunkrPhoto();
+        adapter.replace(Collections.singletonList(photo), false);
+        layout();
+        completeMattedPhoto(photo, 42, Color.rgb(20, 20, 23));
+
+        assertVisibleThumbnailRatio(108f / 192f);
+    }
+
+    @Test public void bunkrThumbnailPreservesAnUnpairedDarkEdge() throws Exception {
+        NativeContentItem photo = bunkrPhoto();
+        adapter.replace(Collections.singletonList(photo), false);
+        layout();
+        completeMattedPhoto(photo, 0, Color.rgb(20, 20, 23));
+
+        assertVisibleThumbnailRatio(1f);
+    }
+
+    @Test public void bunkrThumbnailTrimsMatchingTransparentSidebars() throws Exception {
+        NativeContentItem photo = bunkrPhoto();
+        adapter.replace(Collections.singletonList(photo), false);
+        layout();
+        completeMattedPhoto(photo, 42, Color.TRANSPARENT);
+
+        assertVisibleThumbnailRatio(108f / 192f);
+    }
+
+    private void assertVisibleThumbnailRatio(float expected) throws Exception {
+        await(() -> first().image.getDrawable() != null
+                && first().image.getDrawable().getIntrinsicWidth() > 0);
+        android.graphics.drawable.Drawable artwork = first().image.getDrawable();
+        float ratio = (float) artwork.getIntrinsicWidth() / artwork.getIntrinsicHeight();
+        assertEquals(expected, ratio, .015f);
+        assertEquals(Math.round(first().itemView.getWidth() / ratio), first().itemView.getHeight());
+    }
+
+    private void completeMattedPhoto(NativeContentItem photo, int rightPad, int matte) throws Exception {
+        Bitmap artwork = Bitmap.createBitmap(192, 192, Bitmap.Config.ARGB_8888);
+        artwork.eraseColor(matte);
+        android.graphics.Paint paint = new android.graphics.Paint();
+        paint.setColor(Color.CYAN);
+        new android.graphics.Canvas(artwork).drawRect(42, 0, 192 - rightPad, 192, paint);
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        artwork.compress(Bitmap.CompressFormat.PNG, 100, bytes);
+        artwork.recycle();
+        await(() -> pending.containsKey(photo.imageUrl));
+        pending.remove(photo.imageUrl).onDataReady(new ByteArrayInputStream(bytes.toByteArray()));
+    }
+
     @Test public void failedBunkrThumbnailDuringEntryDoesNotDiscardResolvedOriginal() throws Exception {
         NativeContentItem photo = bunkrPhoto();
         String original = "https://gallery.fixture/original.jpg";

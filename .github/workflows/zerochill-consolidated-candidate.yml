@@ -25,8 +25,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7002010'
-      APP_VERSION_NAME: '7.2.1-watch-polish-test.1'
+      APP_VERSION_CODE: '7002011'
+      APP_VERSION_NAME: '7.2.1-watch-polish-test.2'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
@@ -96,6 +96,7 @@ jobs:
                           '**/ShitTokContinuityTest.class',
                           '**/ShitTokFocusModeViewportTest.class',
                           '**/LegacyVideoFormatSupportTest.class',
+                          '**/LegacyVlcInitializationTest.class',
                           '**/AppUpdaterInstallerTest.class',
                           '**/ShowsWatchPageTest.class',
                           '**/ShowsWatchSessionTest.class',
@@ -135,7 +136,7 @@ jobs:
           pkg, version = ident(new)
           old_pkg, old_version = ident(old)
           assert pkg == old_pkg == "com.addy37.crazyshitunofficial", "Application ID changed"
-          assert version == 7002010 and version > max(old_version, 7002009), "Candidate cannot upgrade installed version"
+          assert version == 7002011 and version > max(old_version, 7002010), "Candidate cannot upgrade installed version"
           assert cert(new) == cert(old), "Signing certificate changed"
           with zipfile.ZipFile(new) as apk:
               libraries = [s for s in apk.namelist() if s.startswith("lib/") and s.endswith(".so")]
@@ -153,7 +154,7 @@ jobs:
       - name: Upload signed installable test APK
         uses: actions/upload-artifact@v4
         with:
-          name: ZEROCHILL-7.2.1-Watch-Polish-Test-1
+          name: ZEROCHILL-7.2.1-Watch-Polish-Test-2
           path: candidate/
           retention-days: 14
           if-no-files-found: error

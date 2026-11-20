@@ -1,9 +1,11 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.Rect;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -27,6 +29,7 @@ import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
 import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.load.resource.bitmap.DrawableTransformation;
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.bumptech.glide.request.target.Target;
 
@@ -42,6 +45,9 @@ import java.util.Map;
 /** Dense mixed-media grid used for Bunkr albums. */
 final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter.Holder> {
     private static final Object PAYLOAD_FAVORITE = new Object();
+    private static final BunkrThumbnailMatte BUNKR_MATTE = new BunkrThumbnailMatte();
+    private static final com.bumptech.glide.load.Transformation<BitmapDrawable> BUNKR_MATTE_DRAWABLE =
+            new DrawableTransformation(BUNKR_MATTE, false).asBitmapDrawable();
     private final java.util.Set<String> favoriteUrls = new java.util.HashSet<>();
     private final java.util.LinkedHashMap<String, Integer> normalOrder = new java.util.LinkedHashMap<>();
     private static final Object PAYLOAD_OVERLAY_DENSITY = new Object();
@@ -555,8 +561,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         return false;
                     }
                 });
-        request = adaptiveAspectRatios ? request.dontTransform().override(384, 384)
-                : request.centerCrop().override(360, 360);
+        int decodeSize = adaptiveAspectRatios ? 384 : 360;
+        request = formatThumbnail(request.override(decodeSize, decodeSize), item);
         if (isOnlyHavenImagePreview(item)) {
             RequestBuilder<Drawable> fallback = Glide.with(holder.image)
                     .load(withHeaders(item.url, imageReferer(item)))
@@ -639,7 +645,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         return false;
                     }
                 });
-        (adaptiveAspectRatios ? preview.dontTransform() : preview.centerCrop()).into(holder.image);
+        formatThumbnail(preview, item).into(holder.image);
     }
 
     private void cancelPreview(Holder holder) {
@@ -771,10 +777,19 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             RequestBuilder<Drawable> request = Glide.with(context)
                     .load(withHeaders(imageUrl, referer))
                     .diskCacheStrategy(DiskCacheStrategy.ALL);
-            if (adaptiveAspectRatios) request = request.dontTransform();
-            else request = request.centerCrop();
-            request.preload(adaptiveAspectRatios ? 384 : 360, adaptiveAspectRatios ? 384 : 360);
+            formatThumbnail(request, item).preload(adaptiveAspectRatios ? 384 : 360,
+                    adaptiveAspectRatios ? 384 : 360);
         }
+    }
+
+    private RequestBuilder<Drawable> formatThumbnail(RequestBuilder<Drawable> request, NativeContentItem item) {
+        if (item.isImage() && BunkrRepository.isBunkrUrl(item.url)) {
+            // GIF and other animated drawables keep their existing presentation.
+            return request.disallowHardwareConfig()
+                    .optionalTransform(Bitmap.class, BUNKR_MATTE)
+                    .optionalTransform(BitmapDrawable.class, BUNKR_MATTE_DRAWABLE);
+        }
+        return adaptiveAspectRatios ? request.dontTransform() : request.centerCrop();
     }
 
     private void applyAspectRatio(

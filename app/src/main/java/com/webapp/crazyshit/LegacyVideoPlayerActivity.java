@@ -23,7 +23,6 @@ import org.videolan.libvlc.Media;
 import org.videolan.libvlc.MediaPlayer;
 import org.videolan.libvlc.util.VLCVideoLayout;
 
-import java.util.ArrayList;
 import java.util.Locale;
 
 /**
@@ -55,6 +54,11 @@ public final class LegacyVideoPlayerActivity extends Activity {
     private boolean reachedEnd;
     private String mediaUrl;
     private String referer;
+
+    static LibVLC createDecoder(Context context) {
+        // LibVLC appends audio and display defaults to its option list.
+        return new LibVLC(context);
+    }
 
     static Intent intent(Context context, String pageUrl, String mediaUrl, String requestReferer) {
         return new Intent(context, LegacyVideoPlayerActivity.class)
@@ -168,7 +172,7 @@ public final class LegacyVideoPlayerActivity extends Activity {
 
     private void startPlayback() {
         try {
-            libVlc = new LibVLC(this, new ArrayList<>());
+            libVlc = createDecoder(this);
             MediaPlayer started = new MediaPlayer(libVlc);
             vlcPlayer = started;
             started.attachViews(videoLayout, null, false, false);
