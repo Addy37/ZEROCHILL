@@ -13,6 +13,7 @@ import androidx.media3.common.Player;
 import androidx.media3.ui.PlayerView;
 
 import java.util.function.BooleanSupplier;
+import java.util.function.LongPredicate;
 import java.util.function.Supplier;
 
 /** Surface taps only. Parents keep drag interception and controls keep their own touches. */
@@ -21,8 +22,8 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
     private static final int SEEK_SECONDS = 10;
     private static final long REPEAT_TIMEOUT_MS = 650L;
 
-    private final PlayerView surface;
-    private final Supplier<Player> player;
+    private final FrameLayout surface;
+    private final LongPredicate seekBy;
     private final BooleanSupplier enabled;
     private final Runnable onTap;
     private final Runnable onSeek;
@@ -53,8 +54,17 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
 
     FullscreenVideoGestures(PlayerView surface, Supplier<Player> player,
             Runnable onTap, BooleanSupplier enabled, boolean immediateSingleTap, Runnable onSeek) {
+        this(surface, delta -> seekPlayerBy(player.get(), delta), onTap, enabled, immediateSingleTap, onSeek);
+    }
+
+    FullscreenVideoGestures(FrameLayout surface, LongPredicate seekBy, BooleanSupplier enabled) {
+        this(surface, seekBy, null, enabled, false, () -> {});
+    }
+
+    private FullscreenVideoGestures(FrameLayout surface, LongPredicate seekBy,
+            Runnable onTap, BooleanSupplier enabled, boolean immediateSingleTap, Runnable onSeek) {
         this.surface = surface;
-        this.player = player;
+        this.seekBy = seekBy;
         this.onTap = onTap;
         this.enabled = enabled;
         this.onSeek = onSeek;
@@ -68,13 +78,15 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
             @Override public void onViewAttachedToWindow(View view) {}
             @Override public void onViewDetachedFromWindow(View view) { cancel(); }
         });
-        ViewCompat.addAccessibilityAction(surface, surface.getContext().getString(R.string.video_toggle_controls),
-                (view, args) -> {
-                    if (!enabled.getAsBoolean()) return false;
-                    cancel();
-                    onTap.run();
-                    return true;
-                });
+        if (onTap != null) {
+            ViewCompat.addAccessibilityAction(surface, surface.getContext().getString(R.string.video_toggle_controls),
+                    (view, args) -> {
+                        if (!enabled.getAsBoolean()) return false;
+                        cancel();
+                        onTap.run();
+                        return true;
+                    });
+        }
         ViewCompat.addAccessibilityAction(surface, surface.getContext().getString(R.string.video_rewind_action),
                 (view, args) -> seekFromAccessibility(false));
         ViewCompat.addAccessibilityAction(surface, surface.getContext().getString(R.string.video_forward_action),
@@ -144,7 +156,7 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
         tapX = downX;
         tapY = downY;
         tapUpTime = event.getEventTime();
-        if (immediateSingleTap) onTap.run();
+        if (immediateSingleTap && onTap != null) onTap.run();
         handler.postAtTime(confirmSingleTap, tapUpTime + ViewConfiguration.getDoubleTapTimeout());
     }
 
@@ -158,7 +170,7 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
 
     private void confirmTap() {
         pendingTap = false;
-        if (!immediateSingleTap && enabled.getAsBoolean()) onTap.run();
+        if (!immediateSingleTap && onTap != null && enabled.getAsBoolean()) onTap.run();
     }
 
     private void performLongPress() {
@@ -180,22 +192,30 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
     }
 
     private boolean seek(boolean forward, float x, float y, long eventTime) {
-        Player current = player.get();
-        if (current == null || !current.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) {
-            return false;
-        }
-        long duration = current.getDuration();
-        if (duration <= 0L) return false;
-
-        long position = current.getCurrentPosition();
         int step = forward ? SEEK_SECONDS : -SEEK_SECONDS;
-        long target = Math.max(0L, Math.min(duration, position + step * 1000L));
-        if (target != position) current.seekTo(target);
+        if (!seekBy.test(step * 1000L)) return false;
         seekSeconds += step;
         seekTime = eventTime;
         feedback.show(forward, Math.abs(seekSeconds), x, y);
         onSeek.run();
         return true;
+    }
+
+    private static boolean seekPlayerBy(Player player, long delta) {
+        if (player == null || !player.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) {
+            return false;
+        }
+        long duration = player.getDuration();
+        if (duration <= 0L) return false;
+
+        long position = player.getCurrentPosition();
+        long target = clampedPosition(position, duration, delta);
+        if (target != position) player.seekTo(target);
+        return true;
+    }
+
+    static long clampedPosition(long position, long duration, long delta) {
+        return Math.max(0L, Math.min(duration, position + delta));
     }
 
     void cancel() {

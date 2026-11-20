@@ -42,6 +42,7 @@ public final class LegacyVideoPlayerActivity extends Activity {
     private LibVLC libVlc;
     private MediaPlayer vlcPlayer;
     private VLCVideoLayout videoLayout;
+    private FullscreenVideoGestures seekGestures;
     private TextView stateText;
     private ImageButton playButton;
     private TextView timeText;
@@ -89,6 +90,9 @@ public final class LegacyVideoPlayerActivity extends Activity {
         root.setBackgroundColor(Color.BLACK);
         videoLayout = new VLCVideoLayout(this);
         root.addView(videoLayout, new FrameLayout.LayoutParams(-1, -1));
+        seekGestures = new FullscreenVideoGestures(root, this::seekVideoBy,
+                () -> active && vlcPlayer != null && !seeking);
+        root.setOnTouchListener(seekGestures);
 
         int accent = AppearanceTheme.accent(this);
         ImageButton close = watchButton(R.drawable.ic_more_close, "Close viewer", Color.WHITE);
@@ -232,6 +236,20 @@ public final class LegacyVideoPlayerActivity extends Activity {
         playButton.setContentDescription(reachedEnd ? "Replay video" : playing ? "Pause video" : "Play video");
     }
 
+    private boolean seekVideoBy(long delta) {
+        MediaPlayer current = vlcPlayer;
+        if (current == null || !current.isSeekable()) return false;
+        long duration = current.getLength();
+        if (duration <= 0L) return false;
+        long position = Math.max(0L, current.getTime());
+        long target = FullscreenVideoGestures.clampedPosition(position, duration, delta);
+        if (target != position) {
+            current.setTime(target);
+            reachedEnd = target == duration;
+        }
+        return true;
+    }
+
     private void updateSeek() {
         if (vlcPlayer == null) return;
         long length = Math.max(0L, vlcPlayer.getLength());
@@ -290,6 +308,7 @@ public final class LegacyVideoPlayerActivity extends Activity {
     }
 
     private void releasePlayer() {
+        if (seekGestures != null) seekGestures.cancel();
         if (vlcPlayer != null) {
             MediaPlayer old = vlcPlayer;
             vlcPlayer = null;

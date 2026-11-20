@@ -153,6 +153,30 @@ public class CreatorPlayerQolTest {
         ((FullscreenVideoGestures) ReflectionHelpers.getField(activity, "fullscreenGestures")).cancel();
     }
 
+    @Test public void nonMedia3SurfaceUsesTheSameDirectionalTapSequence() {
+        Activity host = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout surface = new FrameLayout(host);
+        host.setContentView(surface);
+        layout(surface, 360, 500);
+        AtomicLong position = new AtomicLong(15_000L);
+        FullscreenVideoGestures gestures = new FullscreenVideoGestures(surface, delta -> {
+            position.set(FullscreenVideoGestures.clampedPosition(position.get(), 60_000L, delta));
+            return true;
+        }, () -> true);
+        surface.setOnTouchListener(gestures);
+
+        dispatchTap(surface, 70, 0);
+        assertEquals(15_000L, position.get());
+        dispatchTap(surface, 70, 100);
+        assertEquals(5000L, position.get());
+        dispatchTap(surface, 70, 220);
+        assertEquals(0L, position.get());
+        VideoSeekFeedback feedback = ReflectionHelpers.getField(gestures, "feedback");
+        assertEquals("‹‹ -20s", ReflectionHelpers.getField(feedback, "label"));
+        gestures.cancel();
+        host.finish();
+    }
+
     @Test public void transportButtonPausesAndPlaysAndPausedChromeDoesNotExpire() {
         Activity host = Robolectric.buildActivity(Activity.class).setup().get();
         host.setTheme(R.style.Theme_CrazyShit);
@@ -451,7 +475,7 @@ public class CreatorPlayerQolTest {
         event(gestures, view, MotionEvent.ACTION_DOWN, x, 300, time);
         event(gestures, view, MotionEvent.ACTION_UP, x, 300, time + 30);
     }
-    private void dispatchTap(PlayerView surface, float x, long time) {
+    private void dispatchTap(View surface, float x, long time) {
         long down = advanceTo(time);
         MotionEvent event = MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, x, 200, 0);
         surface.dispatchTouchEvent(event);
