@@ -1,0 +1,125 @@
+name: Publish verified ZEROCHILL 7.3.0
+
+on:
+  push:
+    branches:
+      - publish/zerochill-7.3.0
+    paths:
+      - .github/workflows/publish-verified-zerochill-7.3.0.yml
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: zerochill-stable-7.3.0-publication
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/publish/zerochill-7.3.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RELEASE_TAG: v7.3.0
+      RELEASE_COMMIT: 77a975e5cc6fc8418983de12b9dad43ace2d2ae7
+      CANDIDATE_COMMIT: d8d41d2ceb7e468e9181d19ac85d3cc3ef85ebf4
+      CANDIDATE_RUN: '44802051524'
+      ARTIFACT_ID: '14660134296'
+      ARTIFACT_DIGEST: sha256:abc9e332904117de15762f2da3c5f5e11d7e0dcae879cc5cef03306eabe568cb
+      PRODUCTION_CERTIFICATE: 04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify approved source and available release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main "$CANDIDATE_COMMIT"
+          git merge-base --is-ancestor "$RELEASE_COMMIT" refs/remotes/origin/main
+          git diff --exit-code "$RELEASE_COMMIT" "$CANDIDATE_COMMIT" -- app RELEASE_VERSION RELEASE_NOTES.md
+          git diff --exit-code "$RELEASE_COMMIT" HEAD -- app RELEASE_VERSION RELEASE_NOTES.md
+          test "$(cat RELEASE_VERSION)" = "7.3.0"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)" = v7.2.0
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$RELEASE_TAG already exists. Refusing to overwrite it." >&2
+            exit 1
+          fi
+          existing_tag="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")"
+          test -z "$existing_tag"
+
+      - name: Download and check the phone-approved artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run="repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN"
+          artifact="repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID"
+          test "$(gh api "$run" --jq .conclusion)" = success
+          test "$(gh api "$run" --jq .head_sha)" = "$CANDIDATE_COMMIT"
+          gh api "$artifact" > approved-artifact.json
+          jq -e --arg id "$ARTIFACT_ID" --arg run "$CANDIDATE_RUN" --arg sha "$CANDIDATE_COMMIT" --arg digest "$ARTIFACT_DIGEST" '
+            .id == ($id | tonumber) and .workflow_run.id == ($run | tonumber)
+            and .workflow_run.head_sha == $sha
+            and .digest == $digest and .expired == false
+          ' approved-artifact.json
+          gh api "$artifact/zip" > approved.zip
+          printf '%s  approved.zip\n' "${ARTIFACT_DIGEST#sha256:}" | sha256sum --check
+          unzip -q approved.zip -d approved
+          mapfile -t apks < <(find approved -maxdepth 1 -type f -name '*.apk')
+          test "${#apks[@]}" -eq 1
+          (cd approved && sha256sum --check SHA256SUMS.txt)
+          grep -Fx "BUILD_SHA=$CANDIDATE_COMMIT" approved/APK-LINEAGE.txt
+          grep -F "Stable 7.2.0: in-place install kept" approved/UPGRADE-VERIFICATION.txt
+          grep -F "Approved production-package test 7002011: in-place install kept" approved/UPGRADE-VERIFICATION.txt
+          mkdir release
+          cp "${apks[0]}" release/ZeroChill.apk
+          (cd release && sha256sum ZeroChill.apk > SHA256SUMS.txt)
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - name: Install APK verification tools
+        run: sdkmanager 'build-tools;35.0.0'
+
+      - name: Verify production certificate and install identity
+        run: |
+          set -euo pipefail
+          bt="$ANDROID_HOME/build-tools/35.0.0"
+          "$bt/apksigner" verify --verbose --print-certs release/ZeroChill.apk > apk-signature.txt
+          grep -Fx "Signer #1 certificate SHA-256 digest: $PRODUCTION_CERTIFICATE" apk-signature.txt
+          "$bt/aapt2" dump badging release/ZeroChill.apk > apk-badging.txt
+          grep -F "package: name='com.addy37.crazyshitunofficial' versionCode='7003000' versionName='7.3.0'" apk-badging.txt
+
+      - name: Upload assets to a draft and publish the verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" release/ZeroChill.apk release/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$RELEASE_COMMIT" --title 'ZeroChill v7.3.0' \
+            --notes-file RELEASE_NOTES.md --draft
+          gh api "repos/$GITHUB_REPOSITORY/releases" > releases.json
+          release_id="$(jq -er --arg tag "$RELEASE_TAG" '.[] | select(.tag_name == $tag and .draft) | .id' releases.json)"
+          test -n "$release_id"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > release-draft.json
+          apk_digest="sha256:$(sha256sum release/ZeroChill.apk | cut -d ' ' -f 1)"
+          sums_digest="sha256:$(sha256sum release/SHA256SUMS.txt | cut -d ' ' -f 1)"
+          jq -e --arg tag "$RELEASE_TAG" --arg target "$RELEASE_COMMIT" --arg apk "$apk_digest" --arg sums "$sums_digest" '
+            .draft == true and .prerelease == false and .tag_name == $tag and .target_commitish == $target
+            and (.assets | length == 2)
+            and any(.assets[]; .name == "ZeroChill.apk" and .state == "uploaded" and .digest == $apk)
+            and any(.assets[]; .name == "SHA256SUMS.txt" and .state == "uploaded" and .digest == $sums)
+          ' release-draft.json
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" --jq '.html_url'
+          cat release/SHA256SUMS.txt
