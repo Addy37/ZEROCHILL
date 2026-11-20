@@ -2840,6 +2840,8 @@ public class VideoDetailActivity extends Activity {
                     videoLiked = state.liked;
                     if (state.countKnown) videoLikeCount = state.count;
                     updateVideoLikeButton();
+                    if (state.liked != wasLiked) ZeroChillMotion.confirm(visibleAction(
+                            videoLikeButton, showsLandscapeLike, R.id.shows_like));
                 })
         );
     }
@@ -2854,7 +2856,14 @@ public class VideoDetailActivity extends Activity {
             ZeroChillToast.makeText(this, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
         updateWatchLaterButton();
+        ZeroChillMotion.confirm(visibleAction(watchLaterButton, showsLandscapeSave, R.id.shows_save));
         if (fullscreenControls != null) fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
+    }
+
+    private View visibleAction(View inline, View landscape, int overlayId) {
+        if (!fullscreenChromeActive) return inline;
+        if (landscape != null && landscape.isShown()) return landscape;
+        return fullscreenOverlay == null ? null : fullscreenOverlay.findViewById(overlayId);
     }
 
     private void sharePage() {
@@ -2965,14 +2974,14 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void downloadCurrentVideo() {
-        VideoDownloadStore.downloadKnown(
+        if (VideoDownloadStore.downloadKnown(
                 this,
                 currentContent(),
                 mediaUrl,
                 userAgent,
                 cookies,
                 mediaReferer
-        );
+        )) ZeroChillMotion.confirm(visibleAction(null, null, R.id.shows_download));
     }
 
     private boolean isEfukt() {

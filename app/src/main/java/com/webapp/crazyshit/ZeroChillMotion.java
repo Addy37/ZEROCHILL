@@ -107,6 +107,43 @@ final class ZeroChillMotion {
         @Override public void onViewDetachedFromWindow(View view) { reset(); }
     }
 
+    static void confirm(View view) {
+        if (view != null) accentRim(view, view.getHeight() / 2f, 110);
+    }
+
+    static void accentRim(View view, float radius, int opacity) {
+        if (opacity <= 0 || view == null || !view.isAttachedToWindow() || !view.isShown()
+                || view.getWindowVisibility() != View.VISIBLE || view.getWidth() <= 0
+                || view.getTag(R.id.zerochill_motion_confirmation) != null
+                || !animationsEnabled(view.getContext())) return;
+
+        int inset = BrowseUi.dp(view.getContext(), 2);
+        android.graphics.drawable.GradientDrawable ring = new android.graphics.drawable.GradientDrawable();
+        ring.setCornerRadius(radius);
+        ring.setStroke(inset, AppearanceTheme.accent(view.getContext()));
+        ring.setBounds(inset, inset, view.getWidth() - inset, view.getHeight() - inset);
+        ring.setAlpha(opacity);
+        view.getOverlay().add(ring);
+        ValueAnimator pulse = ValueAnimator.ofInt(opacity, 0);
+        view.setTag(R.id.zerochill_motion_confirmation, pulse);
+        View.OnAttachStateChangeListener attachment = new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View v) {}
+            @Override public void onViewDetachedFromWindow(View v) { pulse.cancel(); }
+        };
+        view.addOnAttachStateChangeListener(attachment);
+        pulse.addUpdateListener(animation -> ring.setAlpha((int) animation.getAnimatedValue()));
+        pulse.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                view.getOverlay().remove(ring);
+                view.setTag(R.id.zerochill_motion_confirmation, null);
+                view.removeOnAttachStateChangeListener(attachment);
+            }
+        });
+        pulse.setDuration(QUICK_MS);
+        pulse.setInterpolator(EASE_OUT);
+        pulse.start();
+    }
+
     static void enterFromEnd(View view, float distance) {
         if (view == null) return;
         view.animate().cancel();

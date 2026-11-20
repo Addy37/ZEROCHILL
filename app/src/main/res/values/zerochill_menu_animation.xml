@@ -4,4 +4,8 @@
         <item name="android:windowEnterAnimation">@anim/zerochill_menu_enter</item>
         <item name="android:windowExitAnimation">@anim/zerochill_menu_exit</item>
     </style>
+    <style name="Animation.ZeroChill.Menu.Above" parent="@android:style/Animation">
+        <item name="android:windowEnterAnimation">@anim/zerochill_menu_above_enter</item>
+        <item name="android:windowExitAnimation">@anim/zerochill_menu_above_exit</item>
+    </style>
 </resources>

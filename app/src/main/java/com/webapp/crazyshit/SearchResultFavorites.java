@@ -10,6 +10,7 @@ final class SearchResultFavorites {
         TextView star = BrowseUi.action(context, "☆", "Favorite creator", v -> { });
         star.setTextSize(25f);
         star.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        ZeroChillMotion.installPressFeedback(star);
         return star;
     }
     static void bind(TextView star, View row, NativeContentItem creator) {
@@ -20,6 +21,7 @@ final class SearchResultFavorites {
         View.OnClickListener toggle = v -> {
             CreatorFavoriteStore.toggle(star.getContext(), creator);
             update(star, creator);
+            ZeroChillMotion.confirm(star);
         };
         star.setOnClickListener(toggle);
         row.setOnLongClickListener(v -> { toggle.onClick(v); return true; });

@@ -70,15 +70,22 @@ final class ThumbnailFades {
     }
 
     static boolean shouldStart(DataSource source, View view) {
-        return source != DataSource.MEMORY_CACHE && active < MAX_ACTIVE && eligible(view);
+        return source == DataSource.REMOTE && active < MAX_ACTIVE && eligible(view);
     }
 
     static boolean eligible(View view) {
         if (view == null || !view.isAttachedToWindow() || !view.isShown()
                 || view.getWindowVisibility() != View.VISIBLE
                 || !ZeroChillMotion.animationsEnabled(view.getContext())) return false;
+        watchScroll(view.getRootView());
+        return view.getGlobalVisibleRect(new Rect()) && stillEligible(view);
+    }
+
+    // During a draw the canvas is already clipped to the visible target.
+    private static boolean stillEligible(View view) {
+        if (!view.isAttachedToWindow() || !view.isShown()
+                || view.getWindowVisibility() != View.VISIBLE) return false;
         View root = view.getRootView();
-        watchScroll(root);
         Long lastScroll = LAST_SCROLL.get(root);
         if (lastScroll != null && SystemClock.uptimeMillis() - lastScroll < 100L) return false;
         for (ViewParent parent = view.getParent(); parent != null; parent = parent.getParent()) {
@@ -86,7 +93,7 @@ final class ThumbnailFades {
                     && ((RecyclerView) parent).getScrollState() != RecyclerView.SCROLL_STATE_IDLE)
                 return false;
         }
-        return view.getGlobalVisibleRect(new Rect());
+        return true;
     }
 
     private static void watchScroll(View root) {
@@ -118,7 +125,6 @@ final class ThumbnailFades {
         private final long startMs;
         private boolean finished;
         private int alpha = 255;
-        private final Runnable tick = this::invalidateSelf;
 
         FadeDrawable(Drawable content, View view, int durationMs) {
             this.content = content;
@@ -134,7 +140,7 @@ final class ThumbnailFades {
                 finish();
                 return;
             }
-            if (!finished && !eligible(target)) finish();
+            if (!finished && !stillEligible(target)) finish();
             if (((ImageView) target).getDrawable() != this) {
                 if (((ImageView) target).getDrawable() == content) content.draw(canvas);
                 return;
@@ -155,13 +161,12 @@ final class ThumbnailFades {
                     opacity);
             content.draw(canvas);
             canvas.restoreToCount(layer);
-            if (!finished) scheduleSelf(tick, SystemClock.uptimeMillis() + 16L);
+            if (!finished) target.postInvalidateOnAnimation();
         }
 
         void finish() {
             if (finished) return;
             finished = true;
-            unscheduleSelf(tick);
             active--;
             View target = view.get();
             if (target instanceof ImageView && ((ImageView) target).getDrawable() == this) {

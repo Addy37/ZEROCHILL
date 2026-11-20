@@ -58,8 +58,12 @@ public class BottomNavigationInsetsTest {
             assertEquals(index, pager.getCurrentItem());
             assertNotNull(nav.getMenu().findItem(ids[index]).getIcon());
         }
+        nav.setPagerMoving(true, 1);
         nav.setPagerPosition(1.35f);
+        nav.setPagerSelection(2);
         assertEquals(1.35f, nav.pagerPositionForTest(), .001f);
+        nav.setPagerMoving(false, 2);
+        assertEquals(2f, nav.pagerPositionForTest(), .001f);
         assertTrue(nav.getChildAt(nav.getChildCount()-1) instanceof ComposeView);
         controller.pause().stop().destroy();
     }

@@ -71,6 +71,8 @@ final class AnchoredMenuPopup {
 
     static boolean show(PopupWindow popup, View anchor, boolean above) {
         if (!canShow(anchor.getContext(), anchor)) return false;
+        popup.setAnimationStyle(!ZeroChillMotion.animationsEnabled(anchor.getContext()) ? 0
+                : above ? R.style.Animation_ZeroChill_Menu_Above : R.style.Animation_ZeroChill_Menu);
         try {
             if (!above) {
                 popup.showAsDropDown(anchor, 0, dp(anchor, 4), Gravity.END);

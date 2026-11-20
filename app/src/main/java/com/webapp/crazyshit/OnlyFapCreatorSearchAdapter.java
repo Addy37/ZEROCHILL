@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -39,12 +40,16 @@ final class OnlyFapCreatorSearchAdapter
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
 
-    private final Consumer<NativeContentItem> open;
+    private final java.util.function.BiConsumer<View, NativeContentItem> open;
     private final SearchResultFades fades = new SearchResultFades();
     void resetEntrance() { fades.reset(); }
     private List<NativeContentItem> items = new ArrayList<>();
 
     OnlyFapCreatorSearchAdapter(Consumer<NativeContentItem> open) {
+        this((origin, item) -> open.accept(item));
+    }
+
+    OnlyFapCreatorSearchAdapter(java.util.function.BiConsumer<View, NativeContentItem> open) {
         this.open = open;
         setHasStableIds(true);
     }
@@ -208,7 +213,7 @@ final class OnlyFapCreatorSearchAdapter
         holder.handle.setText(creatorHandle(item));
         holder.meta.setText(metaText(item));
         holder.card.setContentDescription(item.title + ", OnlyFap creator");
-        holder.card.setOnClickListener(v -> open.accept(item));
+        holder.card.setOnClickListener(v -> open.accept(v, item));
         SearchResultFavorites.bind(holder.favorite, holder.card, item);
         CreatorGalleryPreloader.warm(
                 holder.card.getContext(),

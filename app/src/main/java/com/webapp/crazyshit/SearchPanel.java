@@ -121,6 +121,8 @@ final class SearchPanel {
     private Scope scope = Scope.SHOWS;
     private String activeQuery = "";
     private int generation;
+    private int openRequest;
+    private String openingResultUrl = "";
     private ContentPreference searchPreference;
     private final android.os.Handler searchHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable liveSearch;
@@ -429,6 +431,7 @@ final class SearchPanel {
 
     private void cancelSearchWork() {
         if (liveSearch != null) searchHandler.removeCallbacks(liveSearch);
+        openingResultUrl = "";
         generation++;
         for (Future<?> request : requests) request.cancel(true);
         requests.clear();
@@ -705,13 +708,13 @@ final class SearchPanel {
         }
     }
 
-    private void openCreator(NativeContentItem item) {
+    private void openCreator(View origin, NativeContentItem item) {
         RecentSearchStore.remember(activity, input.getText().toString());
         BrowseUi.hideKeyboard(activity, input);
-        activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(activity, item.title,
+        DestinationMotion.start(activity, NativeFeedBrowserActivity.createCreatorGallery(activity, item.title,
                 item.searchQuery.isEmpty() ? item.title : item.searchQuery,
                 NativeFeedBrowserActivity.creatorProfileHint(item),
-                CreatorGalleryPreloader.sessionId(activity, item)));
+                CreatorGalleryPreloader.sessionId(activity, item)), origin);
     }
 
     private void publishCreators(List<NativeContentItem> next) {
@@ -1172,25 +1175,36 @@ final class SearchPanel {
         }
     }
 
-    private void openResult(NativeContentItem item) {
-        if (item == null || item.url == null || item.url.isEmpty()) return;
+    private void openResult(View origin, NativeContentItem item) {
+        if (item == null || item.url == null || item.url.isEmpty() || item.url.equals(openingResultUrl)) return;
         RecentSearchStore.remember(activity, input.getText().toString());
         haptic(recycler);
+        int launch = ++openRequest;
+        if (!openingResultUrl.isEmpty()) {
+            openingResultUrl = "";
+            progress.setVisibility(View.GONE);
+        }
         if (item.isCreator()) {
-            openCreator(item);
+            openCreator(origin, item);
             return;
         }
         if (item.isSeries() || item.isCategory()) {
-            activity.startActivity(scope == Scope.SHOWS || BunkrRepository.isAlbumUrl(item.url)
-                    ? NativeFeedBrowserActivity.createShowDetails(activity, item, feedSource(item))
-                    : NativeFeedBrowserActivity.create(activity, item.title, item.url, false, feedSource(item)));
+            if (scope == Scope.SHOWS || BunkrRepository.isAlbumUrl(item.url)) {
+                activity.startActivity(NativeFeedBrowserActivity.createShowDetails(activity, item, feedSource(item)));
+            } else {
+                DestinationMotion.start(activity,
+                        NativeFeedBrowserActivity.create(activity, item.title, item.url, false, feedSource(item)),
+                        origin);
+            }
             return;
         }
 
         if (item.isImage()) { SavedGalleryMedia.open(activity, item); return; }
+        openingResultUrl = item.url;
         progress.setVisibility(View.VISIBLE);
         final int requestGeneration = generation;
         final Scope requestedScope = scope;
+        final java.lang.ref.WeakReference<View> launchOrigin = new java.lang.ref.WeakReference<>(origin);
         final List<NativeContentItem> watchItems = new ArrayList<>();
         if (requestedScope == Scope.SHOWS) {
             watchItems.addAll(crazyVideos);
@@ -1208,7 +1222,8 @@ final class SearchPanel {
             CrazyShitRepository.StreamInfo resolved = stream;
             activity.runOnUiThread(() -> {
                 if (destroyed || activity.isFinishing() || requestGeneration != generation
-                        || requestedScope != scope) return;
+                        || requestedScope != scope || launch != openRequest) return;
+                openingResultUrl = "";
                 progress.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
                     ZeroChillToast.makeText(activity, "Couldn't resolve this video natively right now.",
@@ -1247,7 +1262,8 @@ final class SearchPanel {
                     }
                     if (cookies != null) playback.putExtra(PlayerActivity.EXTRA_COOKIES, cookies);
                 } catch (Exception ignored) { }
-                activity.startActivity(playback);
+                DestinationMotion.start(activity, playback,
+                        DestinationMotion.boundOrigin(launchOrigin.get(), item));
             });
         });
     }

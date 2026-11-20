@@ -257,6 +257,7 @@ final class OnlyFapHubView extends FrameLayout {
     private final TextView heroHint;
     private final TextView heroAction;
     private final OnlyFapHeroIndicators heroDots;
+    private final HeroInteraction heroInteraction;
     private OnlyFapHeroRippleView heroRipple;
     private android.animation.Animator heroCircularReveal;
     private ImageView heroRevealOutgoing;
@@ -369,6 +370,7 @@ final class OnlyFapHubView extends FrameLayout {
         preferenceImage.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         preferenceImage.setAlpha(0f);
         heroImages.addView(preferenceImage, new FrameLayout.LayoutParams(-1, -1));
+        heroInteraction = new HeroInteraction(heroFrame, heroImages, -1);
 
         heroRipple = new OnlyFapHeroRippleView(context);
         heroFrame.addView(heroRipple, new FrameLayout.LayoutParams(-1, -1));
@@ -451,7 +453,10 @@ final class OnlyFapHubView extends FrameLayout {
 
         heroDots = new OnlyFapHeroIndicators(context);
         heroDots.setListener(position -> {
-            if (active && !closed && !preferenceHeroPending) showHero(position, true);
+            if (active && !closed && !preferenceHeroPending) {
+                heroInteraction.play(Integer.compare(position, heroIndex));
+                showHero(position, true);
+            }
         });
         heroDots.setVisibility(View.GONE);
 
@@ -546,11 +551,17 @@ final class OnlyFapHubView extends FrameLayout {
         HorizontalSwipeFrameLayout heroSwipe = new HorizontalSwipeFrameLayout(context);
         heroSwipe.setListener(new HorizontalSwipeFrameLayout.Listener() {
             @Override public void onSwipeLeft() {
-                if (heroItems.size() > 1) showHero(heroIndex + 1, true);
+                if (heroItems.size() > 1) {
+                    heroInteraction.play(1);
+                    showHero(heroIndex + 1, true);
+                }
             }
 
             @Override public void onSwipeRight() {
-                if (heroItems.size() > 1) showHero(heroIndex - 1, true);
+                if (heroItems.size() > 1) {
+                    heroInteraction.play(-1);
+                    showHero(heroIndex - 1, true);
+                }
             }
         });
         heroSwipe.addView(heroCard, new FrameLayout.LayoutParams(-1, -1));
@@ -916,6 +927,8 @@ final class OnlyFapHubView extends FrameLayout {
         if (this.active == active) return;
         this.active = active;
         if (!active) {
+            heroInteraction.stop();
+            heroDots.stopMotion();
             clearQualificationTargets();
             pendingHero = null;
             artworkRequestId++;

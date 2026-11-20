@@ -72,7 +72,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     private final List<Entry> entries = new ArrayList<>();
-    private final Listener listener;
+    private final java.util.function.BiConsumer<View, NativeContentItem> listener;
     private final SearchResultFades fades = new SearchResultFades();
     private final List<String> sectionOrder = new ArrayList<>();
     private final Map<String, List<String>> itemOrder = new java.util.LinkedHashMap<>();
@@ -138,6 +138,10 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     private int resolverCursor;
 
     GlobalSearchAdapter(Listener listener) {
+        this((origin, item) -> listener.onOpen(item));
+    }
+
+    GlobalSearchAdapter(java.util.function.BiConsumer<View, NativeContentItem> listener) {
         this.listener = listener;
         setHasStableIds(true);
     }
@@ -321,7 +325,8 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         result.title.setText(item.title);
         result.meta.setText(metaText(item, entry.source));
         result.card.setContentDescription(item.title);
-        result.card.setOnClickListener(v -> listener.onOpen(item));
+        result.card.setTag(R.id.zerochill_destination_item, item);
+        result.card.setOnClickListener(v -> listener.accept(v, item));
         SearchResultFavorites.bind(result.favorite, result.card, item);
         if (item.isCreator()) {
             CreatorGalleryPreloader.warm(

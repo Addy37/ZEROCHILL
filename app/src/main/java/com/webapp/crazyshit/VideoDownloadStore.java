@@ -143,16 +143,16 @@ final class VideoDownloadStore {
         enqueue(context, title, pageUrl, imageUrl, mediaUrl, userAgent, cookies, requestReferer, null);
     }
 
-    static void downloadKnown(Context context, NativeContentItem content, String mediaUrl,
+    static boolean downloadKnown(Context context, NativeContentItem content, String mediaUrl,
                               String userAgent, String cookies, String requestReferer) {
-        if (context == null || content == null) return;
-        enqueue(context.getApplicationContext(), content.title, content.url, content.imageUrl,
+        if (context == null || content == null) return false;
+        return enqueue(context.getApplicationContext(), content.title, content.url, content.imageUrl,
                 safe(mediaUrl), safe(userAgent).isEmpty() ? defaultUserAgent(context) : userAgent,
                 safe(cookies).isEmpty() ? cookiesFor(mediaUrl, content.url) : cookies,
                 safe(requestReferer).isEmpty() ? content.url : requestReferer, content);
     }
 
-    private static synchronized void enqueue(
+    private static synchronized boolean enqueue(
             Context context,
             String title,
             String pageUrl,
@@ -165,11 +165,11 @@ final class VideoDownloadStore {
         String lower = mediaUrl.toLowerCase(Locale.US);
         if (!lower.startsWith("https://") && !lower.startsWith("http://")) {
             toast(context, "This video source can't be downloaded.");
-            return;
+            return false;
         }
         if (lower.contains(".m3u8") || lower.contains(".mpd")) {
             toast(context, "This clip uses a streaming playlist and can't be saved as one video file.");
-            return;
+            return false;
         }
 
         Entry existing = findExisting(context, pageUrl, mediaUrl);
@@ -178,7 +178,7 @@ final class VideoDownloadStore {
                 toast(context, existing.status == DownloadManager.STATUS_SUCCESSFUL
                         ? "This video is already downloaded."
                         : "This video is already downloading.");
-                return;
+                return false;
             }
             remove(context, existing);
         }
@@ -216,17 +216,18 @@ final class VideoDownloadStore {
                         requestHeaders
                 );
                 toast(context, "Fast download started in Downloads.");
+                return true;
             } catch (Exception ignored) {
                 removeMetadata(context, id);
                 toast(context, "Couldn't start the download.");
             }
-            return;
+            return false;
         }
 
         DownloadManager manager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
         if (manager == null) {
             toast(context, "Android's download service isn't available.");
-            return;
+            return false;
         }
 
         try {
@@ -263,9 +264,11 @@ final class VideoDownloadStore {
                     0, OnlyFapVideoMetadata.applies(content) ? content : null
             ));
             toast(context, "Download started in Downloads.");
+            return true;
         } catch (Exception ignored) {
             toast(context, "Couldn't start the download.");
         }
+        return false;
     }
 
     static synchronized List<Entry> entries(Context context) {
@@ -340,6 +343,10 @@ final class VideoDownloadStore {
     }
 
     static void open(android.app.Activity activity, Entry entry) {
+        open(activity, entry, null);
+    }
+
+    static void open(android.app.Activity activity, Entry entry, android.view.View origin) {
         if (activity == null || entry == null) return;
         if (entry.status != DownloadManager.STATUS_SUCCESSFUL) {
             toast(activity, statusText(entry));
@@ -361,7 +368,8 @@ final class VideoDownloadStore {
                 entry.content == null ? OnlyFapVideoMetadata.basic(entry.title, entry.pageUrl, entry.imageUrl) : entry.content));
         OnlyFapVideoMetadata.put(player, entry.content);
         player.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        activity.startActivity(player);
+        if (origin == null) activity.startActivity(player);
+        else DestinationMotion.start(activity, player, origin);
     }
 
     static synchronized void remove(Context context, Entry entry) {

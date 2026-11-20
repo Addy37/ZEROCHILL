@@ -172,12 +172,20 @@ final class OnlyFapViewerChrome extends FrameLayout {
         photoName.setClickable(action != null); photoName.setFocusable(action != null);
     }
     void updateFavorite(boolean value) {
+        updateFavorite(value, false);
+    }
+
+    void updateFavorite(boolean value, boolean confirmed) {
+        boolean changed = favorite != value;
         favorite = value;
         for (ImageButton button : new ImageButton[]{photoFavorite, videoFavorite}) {
             button.setImageResource(value ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline);
             button.setColorFilter(value ? AppearanceTheme.accent(getContext()) : Color.WHITE);
             button.setContentDescription(value ? "Unfavorite media" : "Favorite media");
             button.setEnabled(position > 0); button.setAlpha(position > 0 ? 1f : .35f);
+        }
+        if (confirmed && changed && position > 0) {
+            ZeroChillMotion.confirm(video ? videoFavorite : photoFavorite);
         }
     }
     void updatePlayer(Player incoming) {

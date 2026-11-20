@@ -36,6 +36,7 @@ final class LibraryDestinationChrome {
      * same status-bar space twice on modern Android versions.
      */
     static void prepareWindow(Activity activity) {
+        DestinationMotion.prepareLibraryDestination(activity);
         WindowCompat.setDecorFitsSystemWindows(activity.getWindow(), false);
     }
 
@@ -60,6 +61,7 @@ final class LibraryDestinationChrome {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.setMargins(dp(context, 12), dp(context, 6), dp(context, 12), dp(context, 10));
         root.addView(header, params);
+        if (context instanceof Activity) DestinationMotion.attachLibraryHeader((Activity) context, header);
     }
 
     static void styleSearch(Context context, EditText input) {

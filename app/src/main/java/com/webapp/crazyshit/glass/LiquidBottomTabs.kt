@@ -26,10 +26,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -44,9 +42,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.layout.layout
-import androidx.compose.ui.unit.Constraints
-import kotlin.math.roundToInt
 import com.webapp.crazyshit.glass.backdrop.BackdropEffectScope
 import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.platform.LocalDensity
@@ -55,8 +50,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastCoerceIn
-import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.util.lerp
 import com.webapp.crazyshit.glass.backdrop.Backdrop
 import com.webapp.crazyshit.glass.backdrop.backdrops.layerBackdrop
@@ -70,7 +63,7 @@ import com.webapp.crazyshit.glass.backdrop.shadow.InnerShadow
 import com.webapp.crazyshit.glass.backdrop.shadow.Shadow
 import com.webapp.crazyshit.glass.shapes.ContinuousCapsule
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.sign
@@ -123,7 +116,8 @@ fun LiquidBottomTabs(
     drawContainer: Boolean = true,
     // ZEROCHILL adaptation: retained ViewPager synchronization and live fake-drag.
     pagerPosition: (() -> Float)? = null,
-    isNavigationDragging: () -> Boolean = { false },
+    isPagerMoving: () -> Boolean = { false },
+    animationsEnabled: Boolean = true,
     onNavigationDragStart: () -> Boolean = { false },
     onNavigationDragBy: (Float) -> Unit = {},
     onNavigationDragEnd: (Boolean) -> Unit = {},
@@ -155,29 +149,31 @@ fun LiquidBottomTabs(
             { with(density) { (widthPx.floatValue - 8f.dp.toPx()) / tabsCount } }
         }
 
-        val offsetAnimation = remember { Animatable(0f) }
-        val panelOffset by remember(density) {
-            derivedStateOf {
-                val width = widthPx.floatValue
-                val fraction = if (width > 0f) {
-                    (offsetAnimation.value / width).fastCoerceIn(-1f, 1f)
-                } else {
-                    0f
-                }
-                with(density) {
-                    4f.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
-                }
-            }
-        }
 
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val animationScope = rememberCoroutineScope()
-        var currentIndex by remember(selectedTabIndex) {
-            mutableIntStateOf(selectedTabIndex())
-        }
         var navigationDragStarted by remember { mutableStateOf(false) }
         var accumulatedDrag by remember { mutableFloatStateOf(0f) }
         val touchSlop = androidx.compose.ui.platform.LocalViewConfiguration.current.touchSlop
+        val currentMotion by androidx.compose.runtime.rememberUpdatedState(animationsEnabled)
+        val dragOffset = remember { mutableFloatStateOf(0f) }
+        var offsetSettle by remember { mutableStateOf<Job?>(null) }
+        val settlePanel = {
+            if (currentMotion && dragOffset.floatValue != 0f) {
+                offsetSettle = animationScope.launch {
+                    Animatable(dragOffset.floatValue).animateTo(0f, spring(1f, 300f, .5f)) {
+                        dragOffset.floatValue = value
+                    }
+                    dragOffset.floatValue = 0f
+                }
+            } else dragOffset.floatValue = 0f
+        }
+        val panelOffset = {
+            val width = widthPx.floatValue
+            val fraction = if (currentMotion && width > 0f)
+                (dragOffset.floatValue / width).coerceIn(-1f, 1f) else 0f
+            with(density) { 4.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction)) }
+        }
         val dampedDragAnimation = remember(animationScope) {
             DampedDragAnimation(
                 animationScope = animationScope,
@@ -185,98 +181,84 @@ fun LiquidBottomTabs(
                 valueRange = 0f..(tabsCount - 1).toFloat(),
                 visibilityThreshold = 0.001f,
                 initialScale = 1f,
-                pressedScale = 78f / 56f,
-                onDragStarted = { accumulatedDrag = 0f; navigationDragStarted = false },
-                onDragCanceled = {
-                    onNavigationDragEnd(true)
+                pressedScale = 1.10f,
+                motionEnabled = { currentMotion },
+                onDragStarted = {
+                    offsetSettle?.cancel()
+                    accumulatedDrag = 0f
                     navigationDragStarted = false
-                    currentIndex = selectedTabIndex()
-                    animateToValue(currentIndex.toFloat())
-                    animationScope.launch { offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f)) }
+                },
+                onDragCanceled = {
+                    if (navigationDragStarted) onNavigationDragEnd(true)
+                    navigationDragStarted = false
+                    settlePanel()
                 },
                 onDragStopped = {
                     if (navigationDragStarted) onNavigationDragEnd(false)
+                    else onTabSelected(selectedTabIndex())
                     navigationDragStarted = false
-                    val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
-                    // LOCAL CHANGE: report a press that lands on the tab that is
-                    // already selected.
-                    //
-                    // Selection is reported by watching `currentIndex` change,
-                    // so releasing on the current tab reported nothing at all.
-                    // On a screen that is not a tab — a playlist, the settings,
-                    // search — the bar still shows one of them as selected, and
-                    // that is exactly the tab you press to get back to it. The
-                    // press animated and then did nothing.
-                    if (targetIndex == currentIndex) onTabSelected(targetIndex)
-                    currentIndex = targetIndex
-                    animateToValue(targetIndex.toFloat())
-                    animationScope.launch {
-                        offsetAnimation.animateTo(
-                            0f,
-                            spring(1f, 300f, 0.5f)
-                        )
-                    }
+                    settlePanel()
                 },
                 onDrag = { _, dragAmount ->
-                    accumulatedDrag += dragAmount.x
-                    if (!navigationDragStarted && abs(accumulatedDrag) > touchSlop) {
-                        navigationDragStarted = onNavigationDragStart()
-                        if (navigationDragStarted) onNavigationDragBy(accumulatedDrag / tabWidth())
-                    } else if (navigationDragStarted) {
-                        onNavigationDragBy(dragAmount.x / tabWidth())
-                    }
-                    updateValue(
-                        (targetValue + dragAmount.x / tabWidth() * if (isLtr) 1f else -1f)
-                            .fastCoerceIn(0f, (tabsCount - 1).toFloat())
-                    )
-                    animationScope.launch {
-                        offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x)
+                    val width = tabWidth()
+                    if (width > 0f) {
+                        val delta = dragAmount.x * if (isLtr) 1f else -1f
+                        accumulatedDrag += delta
+                        if (!navigationDragStarted && abs(accumulatedDrag) > touchSlop) {
+                            navigationDragStarted = onNavigationDragStart()
+                            if (navigationDragStarted) onNavigationDragBy(accumulatedDrag / width)
+                        } else if (navigationDragStarted) {
+                            onNavigationDragBy(delta / width)
+                        }
+                        if (currentMotion && navigationDragStarted) {
+                            dragOffset.floatValue = accumulatedDrag * if (isLtr) 1f else -1f
+                        }
                     }
                 }
             )
         }
-        LaunchedEffect(pagerPosition) {
-            if (pagerPosition != null) snapshotFlow { pagerPosition() }.collectLatest { position ->
-                if (!isNavigationDragging() && abs(position - position.fastRoundToInt()) > .001f) {
-                    dampedDragAnimation.snapToValue(position)
+        val pressProgress = { if (currentMotion) dampedDragAnimation.pressProgress else 0f }
+        val selectionFlash = remember { Animatable(0f) }
+        LaunchedEffect(pagerPosition, isPagerMoving, animationsEnabled) {
+            var wasMoving = false
+            snapshotFlow { selectedTabIndex() to isPagerMoving() }.collectLatest { (index, moving) ->
+                val followPager = wasMoving || moving
+                wasMoving = moving
+                val value = pagerPosition?.invoke() ?: index.toFloat()
+                if (followPager || !currentMotion) dampedDragAnimation.snapToValue(value)
+                else dampedDragAnimation.settleToValue(index.toFloat())
+            }
+        }
+        LaunchedEffect(selectedTabIndex, animationsEnabled) {
+            var previous = selectedTabIndex()
+            selectionFlash.snapTo(0f)
+            snapshotFlow { selectedTabIndex() }.collectLatest { index ->
+                if (animationsEnabled && index != previous) {
+                    previous = index
+                    selectionFlash.snapTo(1f)
+                    selectionFlash.animateTo(0f, tween(190))
                 }
             }
         }
-        LaunchedEffect(selectedTabIndex) {
-            snapshotFlow { selectedTabIndex() }
-                .collectLatest { index ->
-                    currentIndex = index
-                }
-        }
-        LaunchedEffect(dampedDragAnimation) {
-            snapshotFlow { currentIndex }
-                .drop(1)
-                .collectLatest { index ->
-                    dampedDragAnimation.animateToValue(index.toFloat())
-                    // External pager selection already dispatched navigation. Do not
-                    // feed its visual synchronization back into the activation queue.
-                    if (index != selectedTabIndex()) onTabSelected(index)
-                }
+        val slotPosition = {
+            if (isPagerMoving()) pagerPosition?.invoke() ?: dampedDragAnimation.value
+            else dampedDragAnimation.value
         }
 
         val interactiveHighlight = remember(animationScope) {
             InteractiveHighlight(
                 animationScope = animationScope,
                 position = { size, offset ->
-                    Offset(
-                        if (isLtr) (dampedDragAnimation.value + 0.5f) * tabWidth() + panelOffset
-                        else size.width - (dampedDragAnimation.value + 0.5f) * tabWidth() + panelOffset,
-                        size.height / 2f
-                    )
+                    val center = (slotPosition() + .5f) * tabWidth()
+                    Offset((if (isLtr) center else size.width - center) + panelOffset(),
+                        size.height / 2f)
                 }
             )
         }
 
         Row(
             Modifier
-                .graphicsLayer {
-                    translationX = panelOffset
-                }
+                .graphicsLayer { translationX = panelOffset() }
                 // LOCAL CHANGE: the shell is made of the app's glass, like every
                 // other pane. The puck below keeps its own recipe on purpose —
                 // what it does is press-driven, a bend and a rim that only exist
@@ -289,7 +271,7 @@ fun LiquidBottomTabs(
                     blurRadiusDp = LocalGlassEffectConfig.current.blurRadius,
                     ownBackdrop = backdrop,
                     layerBlock = {
-                        val progress = dampedDragAnimation.pressProgress
+                        val progress = pressProgress()
                         val scale = lerp(1f, 1f + 16f.dp.toPx() / size.width, progress)
                         scaleX = scale
                         scaleY = scale
@@ -297,7 +279,7 @@ fun LiquidBottomTabs(
                 ) else Modifier)
                 // Clip the row's rectangular touch glow, not its selector siblings.
                 .clip(ContinuousCapsule())
-                .then(interactiveHighlight.modifier)
+                .then(if (animationsEnabled) interactiveHighlight.modifier else Modifier)
                 .height(height)
                 .fillMaxWidth()
                 .padding(4f.dp),
@@ -308,7 +290,7 @@ fun LiquidBottomTabs(
         CompositionLocalProvider(
             LocalLiquidBottomTabsReplica provides true,
             LocalLiquidBottomTabScale provides {
-                lerp(1f, 1.2f, dampedDragAnimation.pressProgress)
+                lerp(1f, 1.2f, pressProgress())
             }
         ) {
             // LOCAL CHANGE: only the tabs, tinted, on nothing.
@@ -325,9 +307,7 @@ fun LiquidBottomTabs(
                     .clearAndSetSemantics {}
                     .alpha(0f)
                     .layerBackdrop(tabsBackdrop)
-                    .graphicsLayer {
-                        translationX = panelOffset
-                    }
+                    .graphicsLayer { translationX = panelOffset() }
                     .height(height - 8f.dp)
                     .fillMaxWidth()
                     .padding(horizontal = 4f.dp)
@@ -349,26 +329,17 @@ fun LiquidBottomTabs(
             .padding(horizontal = 4f.dp)
             .graphicsLayer {
                 alpha = indicatorAlpha
-                translationX =
-                    if (isLtr) dampedDragAnimation.value * tabWidth() + panelOffset
-                    else size.width - (dampedDragAnimation.value + 1f) * tabWidth() + panelOffset
+                val center = slotPosition() * tabWidth()
+                translationX = (if (isLtr) center else -center) + panelOffset()
             }
-        // Grow the sampling surface itself, rather than scaling a capture of
-        // the resting slot. Both selector layers keep the same centre and read
-        // the page at their actual expanded bounds.
-        val slotGrowth = Modifier.layout { measurable, constraints ->
-            val velocity = dampedDragAnimation.velocity / 10f
-            val scaleX = dampedDragAnimation.scaleX /
-                (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
-            val scaleY = dampedDragAnimation.scaleY *
-                (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
-            val width = constraints.maxWidth
-            val height = constraints.maxHeight
-            val expandedWidth = (width * scaleX).roundToInt().coerceAtLeast(1)
-            val expandedHeight = (height * scaleY).roundToInt().coerceAtLeast(1)
-            val child = measurable.measure(Constraints.fixed(expandedWidth, expandedHeight))
-            layout(width, height) {
-                child.placeRelative((width - expandedWidth) / 2, (height - expandedHeight) / 2)
+        // Stretch the two layers together at draw time without remeasuring the dock.
+        val slotGrowth = Modifier.graphicsLayer {
+            if (animationsEnabled) {
+                scaleX = dampedDragAnimation.scaleX + .07f * selectionFlash.value
+                scaleY = 1f + .45f * (dampedDragAnimation.scaleY - 1f)
+            } else {
+                scaleX = 1f
+                scaleY = 1f
             }
         }
         val lensConfig = LocalGlassEffectConfig.current
@@ -376,7 +347,7 @@ fun LiquidBottomTabs(
         // Keep the original selected-ink optics and all placement/drag springs.
         val slotLens: BackdropEffectScope.() -> Unit = {
             if (lensEnabled) {
-                val progress = dampedDragAnimation.pressProgress
+                val progress = pressProgress()
                 lens(
                     10f.dp.toPx() * progress,
                     14f.dp.toPx() * progress,
@@ -388,7 +359,7 @@ fun LiquidBottomTabs(
         // affects only that input, so ZEROCHILL's glyph sizes remain unchanged.
         val dropletLens: BackdropEffectScope.() -> Unit = {
             if (lensEnabled) {
-                val progress = dampedDragAnimation.pressProgress.coerceIn(0f, 1f)
+                val progress = pressProgress().coerceIn(0f, 1f)
                 lens(
                     (8f + 3f * progress).dp.toPx(),
                     (12f + 4f * progress).dp.toPx(),
@@ -410,7 +381,7 @@ fun LiquidBottomTabs(
                     // it until progress reaches exactly zero stacked two films
                     // on release, then removed one abruptly: a white flash.
                     with(backdrop) { drawBackdrop(density, coordinates, layerBlock) }
-                    val progress = dampedDragAnimation.pressProgress.coerceIn(0f, 1f)
+                    val progress = pressProgress().coerceIn(0f, 1f)
                     if (surfaceBackdrop != null && progress > 0f) {
                         surfacePaint.alpha = progress
                         val canvas = drawContext.canvas
@@ -428,7 +399,7 @@ fun LiquidBottomTabs(
         // Clear live page, restrained wash, then the original rim and shadows.
         Box(
             slotPlacement
-                .then(interactiveHighlight.gestureModifier)
+                .then(if (animationsEnabled) interactiveHighlight.gestureModifier else Modifier)
                 .then(dampedDragAnimation.modifier)
                 .height(height - 8f.dp)
                 .fillMaxWidth(1f / tabsCount)
@@ -438,27 +409,27 @@ fun LiquidBottomTabs(
                     shape = { ContinuousCapsule() },
                     effects = {
                         vibrancy()
-                        val progress = dampedDragAnimation.pressProgress.coerceIn(0f, 1f)
+                        val progress = pressProgress().coerceIn(0f, 1f)
                         blur((1f - .75f * progress).dp.toPx())
                         dropletLens()
                     },
                     highlight = {
-                        val progress = dampedDragAnimation.pressProgress
+                        val progress = pressProgress()
                         Highlight.Default.copy(alpha = progress)
                     },
                     shadow = {
-                        val progress = dampedDragAnimation.pressProgress
+                        val progress = pressProgress()
                         Shadow(alpha = progress)
                     },
                     innerShadow = {
-                        val progress = dampedDragAnimation.pressProgress
+                        val progress = pressProgress()
                         InnerShadow(
                             radius = 8f.dp * progress,
                             alpha = progress
                         )
                     },
                     onDrawSurface = {
-                        val progress = dampedDragAnimation.pressProgress
+                        val progress = pressProgress()
                         drawRect(containerColor, alpha = 1f - progress)
                         drawRect(
                             indicatorColor ?: if (isLightTheme) Color.Black.copy(0.1f)
@@ -466,6 +437,7 @@ fun LiquidBottomTabs(
                             alpha = 1f - progress
                         )
                         drawRect(Color.Black.copy(alpha = 0.03f * progress))
+                        drawRect(accentColor, alpha = .13f * selectionFlash.value)
                     }
                 )
         )

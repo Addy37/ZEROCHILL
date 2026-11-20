@@ -19,6 +19,8 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     }
     static final int[] PAGE_NAV_IDS = {2, 4, 3, 6};
     private float pagerPosition;
+    private int pagerSelection;
+    private boolean pagerMoving;
     private float collapseProgress;
     private boolean collapsedTarget;
     private ValueAnimator collapseAnimator;
@@ -81,6 +83,16 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         pagerPosition = Math.max(0f, Math.min(3f, position));
         updateBridge();
     }
+    void setPagerSelection(int index) {
+        pagerSelection = index;
+        if (!pagerMoving) pagerPosition = index;
+        updateBridge();
+    }
+    void setPagerMoving(boolean moving, int index) {
+        pagerMoving = moving;
+        if (!moving) setPagerSelection(index);
+        else updateBridge();
+    }
     void refreshItemColors() { updateBridge(); }
     void setOnNavigationDragListener(OnNavigationDragListener listener) { navigationDragListener = listener; }
     boolean startSquareDrag() {
@@ -138,7 +150,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         updateBridge();
     }
     private void updateBridge() {
-        if (bridge != null) bridge.update(pageBackdrop, pagerPosition, collapseProgress, libraryUnread);
+        if (bridge != null) bridge.update(pageBackdrop, pagerPosition, pagerSelection, pagerMoving, collapseProgress, libraryUnread);
     }
     boolean isCollapsedForTest() { return collapsedTarget; }
     float collapseProgressForTest() { return collapseProgress; }

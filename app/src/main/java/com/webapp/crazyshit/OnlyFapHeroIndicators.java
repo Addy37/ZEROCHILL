@@ -56,7 +56,7 @@ final class OnlyFapHeroIndicators extends View {
         this.hasPosition = true;
         setContentDescription("Featured creator " + (next + 1) + " of " + newCount
                 + ". Tap an indicator to switch.");
-        requestLayout();
+        if (Math.min(previousCount, MAX_VISIBLE) != Math.min(newCount, MAX_VISIBLE)) requestLayout();
         if (animate && ZeroChillMotion.animationsEnabled(getContext()) && newCount > 1 && (previousSelected != next || previousCount != newCount)) {
             animator = ValueAnimator.ofFloat(0f, 1f);
             animator.setDuration(280L);
@@ -130,8 +130,15 @@ final class OnlyFapHeroIndicators extends View {
         return true;
     }
 
-    @Override protected void onDetachedFromWindow() {
+    void stopMotion() {
         if (animator != null) { animator.cancel(); animator = null; }
+        emphasis = 1f;
+        highlightedSlot = selected - first;
+        invalidate();
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        stopMotion();
         super.onDetachedFromWindow();
     }
 

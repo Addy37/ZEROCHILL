@@ -142,7 +142,7 @@ public class FavoritesActivity extends Activity {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(12), dp(8), dp(12), dp(8));
 
-        TextView back = BrowseUi.action(this, "‹", "Back", v -> finish());
+        TextView back = BrowseUi.action(this, "‹", "Back", v -> DestinationMotion.finishLibrary(this));
         header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         TextView title = BrowseUi.text(this, sectionTitle(), 20, Color.WHITE);

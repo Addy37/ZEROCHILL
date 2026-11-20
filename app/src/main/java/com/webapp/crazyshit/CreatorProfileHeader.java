@@ -160,7 +160,9 @@ final class CreatorProfileHeader extends LinearLayout {
 
         favorite = BrowseUi.action(context, "", "Favorite creator", v -> {
             toggleFavorite();
+            ZeroChillMotion.confirm(v);
         });
+        ZeroChillMotion.installPressFeedback(favorite);
         favorite.setTextSize(13);
         favorite.setTag("creator_favorite");
         identity.addView(favorite, new LayoutParams(-2, dp(46)));
@@ -286,7 +288,10 @@ final class CreatorProfileHeader extends LinearLayout {
         cluster.addView(compactFavoriteBadge,
                 new FrameLayout.LayoutParams(dp(16), dp(16), Gravity.BOTTOM | Gravity.END));
         ZeroChillMotion.installPressFeedback(action);
-        action.setOnClickListener(v -> toggleFavorite());
+        action.setOnClickListener(v -> {
+            toggleFavorite();
+            ZeroChillMotion.confirm(v);
+        });
         refresh();
     }
 

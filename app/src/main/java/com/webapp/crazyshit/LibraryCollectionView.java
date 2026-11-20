@@ -9,6 +9,7 @@ import android.widget.TextView;
 import androidx.core.graphics.ColorUtils;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /** Lightweight collection shortcuts. Opening a destination owns all data loading. */
 final class LibraryCollectionView extends LinearLayout {
@@ -19,6 +20,12 @@ final class LibraryCollectionView extends LinearLayout {
 
     LibraryCollectionView(Context context, Runnable watchLater, Runnable downloads,
             Runnable history, Runnable favorites) {
+        this(context, view -> watchLater.run(), view -> downloads.run(),
+                view -> history.run(), view -> favorites.run());
+    }
+
+    LibraryCollectionView(Context context, Consumer<View> watchLater, Consumer<View> downloads,
+            Consumer<View> history, Consumer<View> favorites) {
         super(context);
         setOrientation(VERTICAL);
         setTag("library-collection");
@@ -48,7 +55,7 @@ final class LibraryCollectionView extends LinearLayout {
         return row;
     }
 
-    private void tile(LinearLayout row, String title, String tag, int drawable, Runnable open) {
+    private void tile(LinearLayout row, String title, String tag, int drawable, Consumer<View> open) {
         LinearLayout tile = new LinearLayout(getContext());
         tile.setOrientation(VERTICAL);
         tile.setPadding(dp(16), dp(16), dp(16), dp(16));
@@ -57,7 +64,7 @@ final class LibraryCollectionView extends LinearLayout {
         tile.setContentDescription("Open " + title);
         tile.setClickable(true);
         tile.setFocusable(true);
-        tile.setOnClickListener(v -> open.run());
+        tile.setOnClickListener(open::accept);
         ZeroChillMotion.installPressFeedback(tile);
 
         ImageView icon = new ImageView(getContext());

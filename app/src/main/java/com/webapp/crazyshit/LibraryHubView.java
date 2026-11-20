@@ -89,6 +89,7 @@ final class LibraryHubView extends ScrollView {
     private boolean active;
     private boolean loading;
     private boolean contentPrepared;
+    private final SearchResultFades sectionFades = new SearchResultFades();
     private int revision;
     private Snapshot displayed;
     private Map<String, NativeContentItem> videoMetadata = java.util.Collections.emptyMap();
@@ -130,9 +131,9 @@ final class LibraryHubView extends ScrollView {
         content.addView(mediaContent, new LinearLayout.LayoutParams(-1, -2));
         addLoadingState();
         collection = new LibraryCollectionView(activity,
-                () -> openSavedVideos(FavoritesActivity.START_WATCH_LATER),
-                () -> activity.startActivity(new Intent(activity, DownloadedActivity.class)),
-                () -> openSavedVideos(FavoritesActivity.START_HISTORY), this::openMediaFavorites);
+                origin -> openSavedVideos(origin, FavoritesActivity.START_WATCH_LATER),
+                origin -> DestinationMotion.startLibrary(activity, new Intent(activity, DownloadedActivity.class), -1, origin),
+                origin -> openSavedVideos(origin, FavoritesActivity.START_HISTORY), this::openMediaFavorites);
         content.addView(collection, new LinearLayout.LayoutParams(-1, -2));
     }
 
@@ -267,6 +268,18 @@ final class LibraryHubView extends ScrollView {
         build.run();
         View view = mediaContent.getChildCount() > before ? mediaContent.getChildAt(before) : null;
         sectionStates.put(key, new SectionState(state, view));
+        if (view != null && previous == null && active && !"empty".equals(key)) {
+            androidx.core.view.OneShotPreDrawListener.add(view, () -> {
+                if (active && !closed && ThumbnailFades.eligible(view)) sectionFades.show(view, key);
+            });
+            view.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                @Override public void onViewAttachedToWindow(View v) {}
+                @Override public void onViewDetachedFromWindow(View v) {
+                    SearchResultFades.recycle(v);
+                    v.removeOnAttachStateChangeListener(this);
+                }
+            });
+        }
     }
 
     private boolean belongsToMediaContent(View view) {
@@ -416,7 +429,7 @@ final class LibraryHubView extends ScrollView {
             open.setClickable(true);
             open.setFocusable(true);
             open.setContentDescription("Open Liked Videos");
-            open.setOnClickListener(v -> openLikedVideos());
+            open.setOnClickListener(this::openLikedVideos);
             mediaContent.addView(open, new LinearLayout.LayoutParams(-1, -2));
             return;
         }
@@ -429,8 +442,9 @@ final class LibraryHubView extends ScrollView {
     }
 
     @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
-    private void openLikedVideos() {
-        activity.startActivityForResult(new Intent(activity, LikedVideosActivity.class), NativeMainActivity.FAVORITES_REQUEST);
+    private void openLikedVideos(View origin) {
+        DestinationMotion.startLibrary(activity, new Intent(activity, LikedVideosActivity.class),
+                NativeMainActivity.FAVORITES_REQUEST, origin);
     }
 
     private View continueCard(PlaybackHistoryStore.Item item) {
@@ -496,7 +510,7 @@ final class LibraryHubView extends ScrollView {
         LinearLayout rail = addSectionShell(
                 "Favorite Creators",
                 "View all",
-                () -> activity.startActivity(new Intent(activity, CreatorsActivity.class))
+                origin -> DestinationMotion.startLibrary(activity, new Intent(activity, CreatorsActivity.class), -1, origin)
         );
         int count = Math.min(14, creators.size());
         for (int i = 0; i < count; i += 2) {
@@ -590,7 +604,7 @@ final class LibraryHubView extends ScrollView {
         LibraryMediaRows rail = addMediaSectionShell(
                 "Watch Later",
                 "View all",
-                () -> openSavedVideos(FavoritesActivity.START_WATCH_LATER)
+                origin -> openSavedVideos(origin, FavoritesActivity.START_WATCH_LATER)
         );
 
         int count = Math.min(10, items.size());
@@ -607,7 +621,7 @@ final class LibraryHubView extends ScrollView {
         LibraryMediaRows rail = addMediaSectionShell(
                 "Downloads",
                 "View all",
-                () -> activity.startActivity(new Intent(activity, DownloadedActivity.class))
+                origin -> DestinationMotion.startLibrary(activity, new Intent(activity, DownloadedActivity.class), -1, origin)
         );
 
         int count = Math.min(10, entries.size());
@@ -673,7 +687,7 @@ final class LibraryHubView extends ScrollView {
         frame.addView(title, titleParams);
 
         card.setContentDescription(entry.title + ". " + VideoDownloadStore.statusText(entry));
-        card.setOnClickListener(v -> VideoDownloadStore.open(activity, entry));
+        card.setOnClickListener(v -> VideoDownloadStore.open(activity, entry, v));
         return card;
     }
 
@@ -681,7 +695,7 @@ final class LibraryHubView extends ScrollView {
         LibraryMediaRows rail = addMediaSectionShell(
                 "History",
                 "View all",
-                () -> openSavedVideos(FavoritesActivity.START_HISTORY)
+                origin -> openSavedVideos(origin, FavoritesActivity.START_HISTORY)
         );
 
         int count = Math.min(12, items.size());
@@ -736,7 +750,7 @@ final class LibraryHubView extends ScrollView {
         return card;
     }
 
-    private LibraryMediaRows addMediaSectionShell(String title, String actionLabel, Runnable action) {
+    private LibraryMediaRows addMediaSectionShell(String title, String actionLabel, java.util.function.Consumer<View> action) {
         LinearLayout oldRail = addSectionShell(title, actionLabel, action);
         View scroll = (View) oldRail.getParent();
         LinearLayout section = (LinearLayout) scroll.getParent();
@@ -750,7 +764,7 @@ final class LibraryHubView extends ScrollView {
     private LinearLayout addSectionShell(
             String title,
             String actionLabel,
-            Runnable action
+            java.util.function.Consumer<View> action
     ) {
         LinearLayout section = new LinearLayout(activity);
         section.setOrientation(LinearLayout.VERTICAL);
@@ -781,7 +795,7 @@ final class LibraryHubView extends ScrollView {
         viewAll.setFocusable(true);
         viewAll.setContentDescription(actionLabel + " " + title);
         ZeroChillMotion.installPressFeedback(viewAll);
-        viewAll.setOnClickListener(v -> action.run());
+        viewAll.setOnClickListener(action::accept);
         headingRow.addView(viewAll, new LinearLayout.LayoutParams(-2, dp(48)));
 
         section.addView(headingRow, new LinearLayout.LayoutParams(-1, -2));
@@ -1065,17 +1079,17 @@ final class LibraryHubView extends ScrollView {
         ));
     }
 
-    private void openSavedVideos(int startTab) {
+    private void openSavedVideos(View origin, int startTab) {
         Intent intent = new Intent(activity, FavoritesActivity.class)
                 .putExtra(FavoritesActivity.EXTRA_START_TAB, startTab);
-        activity.startActivityForResult(intent, NativeMainActivity.FAVORITES_REQUEST);
+        DestinationMotion.startLibrary(activity, intent, NativeMainActivity.FAVORITES_REQUEST, origin);
     }
 
-    private void openMediaFavorites() {
+    private void openMediaFavorites(View origin) {
         Intent intent = new Intent(activity, FavoritesActivity.class)
                 .putExtra(FavoritesActivity.EXTRA_START_TAB, FavoritesActivity.START_WATCH_LATER)
                 .putExtra(FavoritesActivity.EXTRA_MEDIA_FAVORITES, true);
-        activity.startActivityForResult(intent, NativeMainActivity.FAVORITES_REQUEST);
+        DestinationMotion.startLibrary(activity, intent, NativeMainActivity.FAVORITES_REQUEST, origin);
     }
 
     /** Display-only: original titles, metadata and playback payloads stay intact. */

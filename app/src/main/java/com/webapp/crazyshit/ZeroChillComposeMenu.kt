@@ -10,6 +10,8 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.PopupWindow
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,10 +33,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -91,6 +99,7 @@ internal object ZeroChillComposeMenu {
                     maxHeightDp = maxHeight / resources.displayMetrics.density,
                     colorSplitting = AppearanceTheme.glassColorSplitting(activity),
                     edgeStrength = PreferenceGlassPanel.edgeStrength(activity),
+                    animateRim = ZeroChillMotion.animationsEnabled(context),
                     onChoose = { item ->
                         popup.dismiss()
                         onSelected.accept(item)
@@ -118,9 +127,6 @@ internal object ZeroChillComposeMenu {
             isOutsideTouchable = true
             isClippingEnabled = true
             elevation = dp(context, 13).toFloat()
-            if (ZeroChillMotion.animationsEnabled(context)) {
-                animationStyle = R.style.Animation_ZeroChill_Menu
-            }
         }
         val attachment = object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(view: View) = Unit
@@ -162,6 +168,7 @@ internal object ZeroChillComposeMenu {
         maxHeightDp: Float,
         colorSplitting: Boolean,
         edgeStrength: Float,
+        animateRim: Boolean,
         onChoose: (MenuItem) -> Unit,
     ) {
         val rim: Brush = if (colorSplitting && android.os.Build.VERSION.SDK_INT >= 33) {
@@ -175,6 +182,10 @@ internal object ZeroChillComposeMenu {
                     Color.White.copy(alpha = (.16f * edgeStrength).coerceAtMost(1f))),
             )
         }
+        val rimPulse = remember { Animatable(if (animateRim) .24f * edgeStrength else 0f) }
+        LaunchedEffect(animateRim, edgeStrength) {
+            rimPulse.animateTo(0f, tween(if (animateRim) 180 else 0))
+        }
         val shape = remember { RoundedCornerShape(22.dp) }
         val surfaceOpacity = (.68f + menuTint * .16f).coerceIn(0f, 1f)
 
@@ -185,6 +196,22 @@ internal object ZeroChillComposeMenu {
                     .heightIn(max = maxHeightDp.dp)
                     .background(Color(0xFF0C121B).copy(alpha = surfaceOpacity), shape)
                     .border(BorderStroke(1.dp, rim), shape)
+                    .drawWithCache {
+                        val width = 1.dp.toPx()
+                        val stroke = Stroke(width)
+                        val start = Offset(width / 2, width / 2)
+                        val sizeInsideRim = Size((size.width - width).coerceAtLeast(0f),
+                            (size.height - width).coerceAtLeast(0f))
+                        val corner = CornerRadius(22.dp.toPx())
+                        onDrawWithContent {
+                            drawContent()
+                            val opacity = rimPulse.value
+                            if (opacity > 0f) {
+                                drawRoundRect(accent, start, sizeInsideRim, corner,
+                                    alpha = opacity, style = stroke)
+                            }
+                        }
+                    }
                     .verticalScroll(rememberScrollState())
                     .padding(7.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),

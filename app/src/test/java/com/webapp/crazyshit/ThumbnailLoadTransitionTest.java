@@ -86,6 +86,8 @@ public class ThumbnailLoadTransitionTest {
     @Test public void cacheMotionAndScrollGate() {
         assertTrue(ThumbnailFades.shouldStart(DataSource.REMOTE, image));
         assertFalse(ThumbnailFades.shouldStart(DataSource.MEMORY_CACHE, image));
+        assertFalse(ThumbnailFades.shouldStart(DataSource.DATA_DISK_CACHE, image));
+        assertFalse(ThumbnailFades.shouldStart(DataSource.RESOURCE_DISK_CACHE, image));
         assertFalse(ThumbnailFades.factoryForTest(140).build(DataSource.MEMORY_CACHE, true)
                 .transition(source(), target(image)));
         activity.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).edit()

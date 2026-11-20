@@ -46,7 +46,7 @@ public final class LikedVideosActivity extends Activity {
         LinearLayout root = BrowseUi.screen(this);
         LinearLayout heading = new LinearLayout(this);
         heading.setGravity(Gravity.CENTER_VERTICAL);
-        heading.addView(BrowseUi.action(this, "‹", "Back", v -> finish()), new LinearLayout.LayoutParams(dp(48), dp(48)));
+        heading.addView(BrowseUi.action(this, "‹", "Back", v -> DestinationMotion.finishLibrary(this)), new LinearLayout.LayoutParams(dp(48), dp(48)));
         TextView title = BrowseUi.text(this, "Liked Videos", 22, UiPalette.TEXT_PRIMARY);
         heading.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         refresh = BrowseUi.action(this, "Refresh", "Refresh liked videos", v -> loadPage(0));

@@ -54,6 +54,8 @@ public final class DownloadedActivity extends Activity {
     private List<VideoDownloadStore.Entry> currentEntries = new ArrayList<>();
     private boolean polling;
     private String renderedState = "";
+    private final java.util.Set<Long> completedWhileVisible = new java.util.HashSet<>();
+    private boolean hasLiveDownloadSample;
 
     private final Runnable refresh = new Runnable() {
         @Override
@@ -91,6 +93,7 @@ public final class DownloadedActivity extends Activity {
     @Override
     protected void onPause() {
         polling = false;
+        hasLiveDownloadSample = false;
         main.removeCallbacks(refresh);
         super.onPause();
     }
@@ -105,7 +108,7 @@ public final class DownloadedActivity extends Activity {
 
         TextView back = BrowseUi.action(this, "‹", "Back", v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-            finish();
+            DestinationMotion.finishLibrary(this);
         });
         header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
@@ -178,14 +181,29 @@ public final class DownloadedActivity extends Activity {
     }
 
     private void showDownloads(List<VideoDownloadStore.Entry> entries) {
-        currentEntries = entries == null
-                ? new ArrayList<>()
-                : new ArrayList<>(entries);
+        List<VideoDownloadStore.Entry> previousEntries = currentEntries;
+        currentEntries = entries == null ? new ArrayList<>() : new ArrayList<>(entries);
 
         String query = input == null ? "" : input.getText().toString();
         String state = stateOf(currentEntries) + "|query=" + LibrarySearch.normalize(query);
+        boolean compareWithPrevious = hasLiveDownloadSample;
+        hasLiveDownloadSample = true;
         if (state.equals(renderedState)) return;
         renderedState = state;
+
+        completedWhileVisible.clear();
+        if (compareWithPrevious && !previousEntries.isEmpty()) {
+            java.util.Set<Long> active = new java.util.HashSet<>();
+            for (VideoDownloadStore.Entry old : previousEntries) {
+                if (old.status == DownloadManager.STATUS_PENDING || old.status == DownloadManager.STATUS_RUNNING
+                        || old.status == DownloadManager.STATUS_PAUSED) active.add(old.id);
+            }
+            for (VideoDownloadStore.Entry entry : currentEntries) {
+                if (entry.status == DownloadManager.STATUS_SUCCESSFUL && active.contains(entry.id)) {
+                    completedWhileVisible.add(entry.id);
+                }
+            }
+        }
 
         List<VideoDownloadStore.Entry> filtered = new ArrayList<>();
         for (VideoDownloadStore.Entry entry : currentEntries) {
@@ -306,7 +324,7 @@ public final class DownloadedActivity extends Activity {
         wrapper.setClickable(true);
         wrapper.setFocusable(true);
         wrapper.setContentDescription(entry.title + ". " + VideoDownloadStore.statusText(entry));
-        wrapper.setOnClickListener(v -> VideoDownloadStore.open(this, entry));
+        wrapper.setOnClickListener(v -> VideoDownloadStore.open(this, entry, v));
         ZeroChillMotion.installPressFeedback(wrapper);
 
         LibraryAspectMediaCard card = new LibraryAspectMediaCard(this);
@@ -341,6 +359,9 @@ public final class DownloadedActivity extends Activity {
                 new FrameLayout.LayoutParams(-2, dp(24), Gravity.TOP | Gravity.START);
         statusParams.setMargins(dp(8), dp(8), 0, 0);
         media.addView(status, statusParams);
+        if (completedWhileVisible.remove(entry.id)) {
+            androidx.core.view.OneShotPreDrawListener.add(status, () -> ZeroChillMotion.confirm(status));
+        }
 
         TextView more = overflowButton("Download options for " + entry.title);
         more.setOnClickListener(v -> showDownloadMenu(v, entry));
@@ -490,6 +511,7 @@ public final class DownloadedActivity extends Activity {
         view.setPadding(dp(9), 0, dp(9), 0);
         view.setClickable(true);
         view.setFocusable(true);
+        ZeroChillMotion.installPressFeedback(view);
         view.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
             run.run();

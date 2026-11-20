@@ -1187,6 +1187,10 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void refreshCurrentFavorite() {
+        refreshCurrentFavorite(null);
+    }
+
+    private void refreshCurrentFavorite(NativeContentItem confirmed) {
         if (isFinishing() || isDestroyed() || viewerChrome == null || adapter == null || pager == null) return;
         NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
         final int request = ++favoriteReadGeneration;
@@ -1198,7 +1202,9 @@ public final class BunkrGalleryActivity extends Activity {
             final boolean value = saved;
             runOnUiThread(() -> {
                 if (request == favoriteReadGeneration && !isFinishing() && !isDestroyed()
-                        && adapter.itemAt(pager.getCurrentItem()) == current) viewerChrome.updateFavorite(value);
+                        && adapter.itemAt(pager.getCurrentItem()) == current) {
+                    viewerChrome.updateFavorite(value, current == confirmed);
+                }
             });
         });
     }
@@ -1216,7 +1222,7 @@ public final class BunkrGalleryActivity extends Activity {
                 FavoriteStore.setMediaFavorite(this, current, !saved,
                         snapshot == null ? value(creatorQuery) : snapshot.creatorQuery);
             }
-            runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) refreshCurrentFavorite(); });
+            runOnUiThread(() -> refreshCurrentFavorite(current));
         });
     }
 

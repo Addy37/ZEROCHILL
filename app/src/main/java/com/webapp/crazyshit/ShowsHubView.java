@@ -102,6 +102,7 @@ final class ShowsHubView extends FrameLayout {
     private final TextView heroHint;
     private final TextView heroAction;
     private final LinearLayout heroDots;
+    private final HeroInteraction heroInteraction;
     private final TextView loadingLabel;
     private final ContinueShelf continueShelf;
     private final Shelf thisWeekShelf;
@@ -249,6 +250,7 @@ final class ShowsHubView extends FrameLayout {
         });
         heroShade.setBackground(heroScrim);
         heroShade.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        heroInteraction = new HeroInteraction(heroFrame, heroArtworkCard, heroArtworkHeight);
         heroFrame.addView(heroShade, new FrameLayout.LayoutParams(-1, heroArtworkHeight));
 
         LinearLayout heroBar = new LinearLayout(context);
@@ -356,6 +358,7 @@ final class ShowsHubView extends FrameLayout {
         heroSwipe.setListener(new HorizontalSwipeFrameLayout.Listener() {
             @Override public void onSwipeLeft() {
                 if (heroItems.size() > 1) {
+                    heroInteraction.play(1);
                     showHero(heroIndex + 1, true);
                     scheduleHeroRotation();
                 }
@@ -363,6 +366,7 @@ final class ShowsHubView extends FrameLayout {
 
             @Override public void onSwipeRight() {
                 if (heroItems.size() > 1) {
+                    heroInteraction.play(-1);
                     showHero(heroIndex - 1, true);
                     scheduleHeroRotation();
                 }
@@ -628,6 +632,13 @@ final class ShowsHubView extends FrameLayout {
                 "showsCategories active=" + active + " attached=" + isAttachedToWindow());
         if (categoryLoader != null) categoryLoader.setActive(active && isAttachedToWindow());
         if (!active) {
+            heroInteraction.stop();
+            for (int i = 0; i < heroDots.getChildCount(); i++) {
+                FrameLayout target = (FrameLayout) heroDots.getChildAt(i);
+                View mark = target.getChildAt(0);
+                mark.animate().cancel();
+                mark.setScaleX(target.isSelected() ? 1f : .375f);
+            }
             heroHandler.removeCallbacksAndMessages(null);
             heroCard.animate().cancel();
             heroCard.setAlpha(1f);
@@ -881,8 +892,8 @@ final class ShowsHubView extends FrameLayout {
             heroDots.setVisibility(View.GONE);
             return;
         }
-        heroDots.removeAllViews();
-        for (int index = 0; index < heroItems.size(); index++) {
+        if (heroDots.getChildCount() != heroItems.size()) heroDots.removeAllViews();
+        for (int index = heroDots.getChildCount(); index < heroItems.size(); index++) {
             final int selectedIndex = index;
             FrameLayout target = new FrameLayout(getContext());
             LinearLayout.LayoutParams targetParams =
@@ -890,17 +901,31 @@ final class ShowsHubView extends FrameLayout {
             heroDots.addView(target, targetParams);
             target.setContentDescription("Show featured item " + (index + 1));
             target.setOnClickListener(v -> {
+                if (selectedIndex != heroIndex) heroInteraction.play(Integer.compare(selectedIndex, heroIndex));
                 showHero(selectedIndex, true);
                 scheduleHeroRotation();
             });
             View mark = new View(getContext());
-            boolean selected = index == heroIndex;
             GradientDrawable pill = new GradientDrawable();
-            pill.setColor(selected ? themeAccent() : Color.argb(180, 255, 255, 255));
             pill.setCornerRadius(dp(3));
             mark.setBackground(pill);
-            target.addView(mark, new FrameLayout.LayoutParams(
-                    dp(selected ? 16 : 6), dp(6), Gravity.CENTER));
+            mark.setScaleX(.375f);
+            target.addView(mark, new FrameLayout.LayoutParams(dp(16), dp(6), Gravity.CENTER));
+        }
+        for (int index = 0; index < heroDots.getChildCount(); index++) {
+            FrameLayout target = (FrameLayout) heroDots.getChildAt(index);
+            View mark = target.getChildAt(0);
+            boolean selected = index == heroIndex;
+            ((GradientDrawable) mark.getBackground()).setColor(
+                    selected ? themeAccent() : Color.argb(180, 255, 255, 255));
+            float width = selected ? 1f : .375f;
+            if (selected == target.isSelected() && mark.getScaleX() == width) continue;
+            target.setSelected(selected);
+            mark.animate().cancel();
+            if (active && mark.isShown() && ZeroChillMotion.animationsEnabled(getContext())) {
+                mark.animate().scaleX(width).setDuration(ZeroChillMotion.STANDARD_MS)
+                        .setInterpolator(ZeroChillMotion.EASE_OUT).start();
+            } else mark.setScaleX(width);
         }
         heroDots.setContentDescription(
                 "Featured show " + (heroIndex + 1) + " of " + heroItems.size()

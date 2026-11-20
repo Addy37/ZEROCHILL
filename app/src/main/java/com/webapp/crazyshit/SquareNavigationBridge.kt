@@ -37,7 +37,8 @@ import com.webapp.crazyshit.glass.backdrop.Backdrop
 import com.webapp.crazyshit.glass.backdrop.backdrops.emptyBackdrop
 import com.webapp.crazyshit.glass.backdrop.backdrops.layerBackdrop
 import com.webapp.crazyshit.glass.backdrop.backdrops.rememberLayerBackdrop
-import kotlin.math.roundToInt
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 
 /** Only the navbar is Compose. Existing Activity, pager, menus and data remain Views. */
 internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigationView) {
@@ -47,12 +48,13 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
     private var page by mutableStateOf<Backdrop>(emptyBackdrop())
     private val position = mutableFloatStateOf(0f)
     private val committedIndex = mutableIntStateOf(0)
+    private val pagerMoving = mutableStateOf(false)
     private val collapse = mutableFloatStateOf(0f)
     private val unread = mutableStateOf(false)
     private val appearanceRevision = mutableIntStateOf(0)
     private val appearancePrefs = AppearanceTheme.prefs(activity)
     private val appearanceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == AppearanceTheme.KEY_MODE || key == AppearanceTheme.KEY_ACCENT ||
+        if (key == "immersive_motion_enabled" || key == AppearanceTheme.KEY_MODE || key == AppearanceTheme.KEY_ACCENT ||
             key == AppearanceTheme.KEY_MENU_TINT || key?.startsWith("appearance_glass_") == true) {
             appearanceRevision.intValue++
         }
@@ -90,12 +92,12 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
         }
     }
 
-    fun update(backdrop: ViewPageBackdrop?, pagerPosition: Float, folded: Float, hasUnread: Boolean) {
+    fun update(backdrop: ViewPageBackdrop?, pagerPosition: Float, selection: Int,
+        moving: Boolean, folded: Float, hasUnread: Boolean) {
         page = backdrop ?: emptyBackdrop()
         position.floatValue = pagerPosition
-        if (!nav.isSquareDragging() && kotlin.math.abs(pagerPosition - pagerPosition.roundToInt()) < .001f) {
-            committedIndex.intValue = pagerPosition.roundToInt().coerceIn(0, 3)
-        }
+        pagerMoving.value = moving
+        committedIndex.intValue = selection.coerceIn(0, 3)
         collapse.floatValue = folded
         unread.value = hasUnread
     }
@@ -111,6 +113,10 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
     @Composable private fun Navigation() {
         val selectedIndex = remember { { committedIndex.intValue } }
         val externalPosition = remember { { position.floatValue } }
+        val isPagerMoving = remember { { pagerMoving.value } }
+        val motion = ZeroChillMotion.animationsEnabled(activity)
+        val unreadScale = animateFloatAsState(if (unread.value) 1f else .65f,
+            tween(if (motion) 130 else 0), label = "Unread indicator")
         val shell = rememberLayerBackdrop()
         val config = remember(appearanceRevision.intValue) { navigationGlassConfig(activity) }
         val selectedInk = Color(AppearanceTheme.accent(activity))
@@ -141,7 +147,8 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
                     lensDepth = 24.dp,
                     drawContainer = false,
                     pagerPosition = externalPosition,
-                    isNavigationDragging = nav::isSquareDragging,
+                    isPagerMoving = isPagerMoving,
+                    animationsEnabled = motion,
                     onNavigationDragStart = nav::startSquareDrag,
                     onNavigationDragBy = nav::dragSquareBy,
                     onNavigationDragEnd = nav::endSquareDrag,
@@ -157,8 +164,12 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
                             Box {
                                 Icon(painterResource(Icons[index]), Labels[index], tint = ink,
                                     modifier = Modifier.size(26.dp))
-                                if (index == 3 && unread.value) Box(Modifier.align(Alignment.TopEnd)
-                                    .size(5.dp).background(selectedInk, RoundedCornerShape(50)))
+                                if (index == 3) Box(Modifier.align(Alignment.TopEnd).size(5.dp)
+                                    .graphicsLayer {
+                                        alpha = if (unread.value) 1f else 0f
+                                        scaleX = unreadScale.value
+                                        scaleY = scaleX
+                                    }.background(selectedInk, RoundedCornerShape(50)))
                             }
                             // Preserve ZEROCHILL's four-icon collapse instead of Square's
                             // player/search fold. Expanded typography follows Square.

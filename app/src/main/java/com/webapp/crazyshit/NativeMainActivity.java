@@ -128,6 +128,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        GalleryMediaTransition.requestWindowFeature(this);
         whatsNewPending = WhatsNewPolicy.pending(this);
         continuePromptsAfterAppearance = state != null && state.getBoolean("continue_prompts_after_appearance", false);
         appliedAppearanceColors = AppearanceTheme.colorSignature(this);
@@ -392,13 +393,17 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
             @Override
             public void onPageScrollStateChanged(int state) {
+                if (bottomNavigation != null) {
+                    bottomNavigation.setPagerMoving(state != ViewPager2.SCROLL_STATE_IDLE,
+                            primaryPager.getCurrentItem());
+                }
                 primaryPagerAdapter.onPrimaryMotionChanged(state == ViewPager2.SCROLL_STATE_IDLE);
             }
 
             @Override
             public void onPageSelected(int position) {
                 if (bottomNavigation != null) {
-                    bottomNavigation.setPagerPosition(position);
+                    bottomNavigation.setPagerSelection(position);
                 }
                 showPagerChrome(MainPagerAdapter.pageForPagerPosition(position));
                 primaryPagerAdapter.onPrimaryMotionChanged(
@@ -470,6 +475,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         });
 
         bottomNavigation = new ZeroChillBottomNavigationView(this);
+        bottomNavigation.setPagerSelection(primaryPager.getCurrentItem());
         navigationMotion = new NavigationMotionController(
                 compact -> bottomNavigation.setCollapsed(compact, true),
                 dp(10), MainPagerAdapter.PAGE_CHAOS);
@@ -509,7 +515,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                         float releasePosition = bottomNavigation == null
                                 ? primaryPager.getCurrentItem()
                                 : bottomNavigation.pagerPositionForTest();
-                        int target = Math.max(
+                        int target = canceled ? primaryPager.getCurrentItem() : Math.max(
                                 0,
                                 Math.min(MainPagerAdapter.PAGE_COUNT - 1, Math.round(releasePosition))
                         );

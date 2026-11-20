@@ -51,7 +51,7 @@ final class VideoActionSheet {
         Dialog dialog = sidePanel ? new Dialog(activity) : new BottomSheetDialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         if (dialog instanceof BottomSheetDialog) {
-            ((BottomSheetDialog) dialog).setDismissWithAnimation(true);
+            ((BottomSheetDialog) dialog).setDismissWithAnimation(ZeroChillMotion.animationsEnabled(activity));
         }
 
         int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
@@ -84,7 +84,12 @@ final class VideoActionSheet {
 
         dialog.setContentView(panel, new ViewGroup.LayoutParams(-1, panelHeight));
         dialog.setCanceledOnTouchOutside(true);
+        if (dialog.getWindow() != null && !ZeroChillMotion.animationsEnabled(activity)) {
+            dialog.getWindow().setWindowAnimations(0);
+        }
         dialog.show();
+        androidx.core.view.OneShotPreDrawListener.add(panel, () -> ZeroChillMotion.accentRim(
+                panel, dp(activity, 22), Math.round(65f * PreferenceGlassPanel.edgeStrength(activity))));
 
         Window window = dialog.getWindow();
         if (window == null) return;
@@ -122,7 +127,7 @@ final class VideoActionSheet {
         Dialog dialog = sidePanel ? new Dialog(activity) : new BottomSheetDialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         if (dialog instanceof BottomSheetDialog) {
-            ((BottomSheetDialog) dialog).setDismissWithAnimation(true);
+            ((BottomSheetDialog) dialog).setDismissWithAnimation(ZeroChillMotion.animationsEnabled(activity));
         }
 
         int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
@@ -157,7 +162,12 @@ final class VideoActionSheet {
 
         dialog.setContentView(panel, new ViewGroup.LayoutParams(-1, panelHeight));
         dialog.setCanceledOnTouchOutside(true);
+        if (dialog.getWindow() != null && !ZeroChillMotion.animationsEnabled(activity)) {
+            dialog.getWindow().setWindowAnimations(0);
+        }
         dialog.show();
+        androidx.core.view.OneShotPreDrawListener.add(panel, () -> ZeroChillMotion.accentRim(
+                panel, dp(activity, 22), Math.round(65f * PreferenceGlassPanel.edgeStrength(activity))));
 
         Window window = dialog.getWindow();
         if (window == null) return;

@@ -126,7 +126,6 @@ final class StableBottomNavigationController {
         ViewPager2 pager;
         MainPagerAdapter pagerAdapter;
         ViewPager2.OnPageChangeCallback pageCallback;
-        boolean pagerScrolling;
         View.OnLayoutChangeListener layoutListener;
 
         State(NativeMainActivity activity) {
@@ -152,27 +151,12 @@ final class StableBottomNavigationController {
             if (pager != null) {
                 pageCallback = new ViewPager2.OnPageChangeCallback() {
                     @Override
-                    public void onPageScrolled(
-                            int position,
-                            float positionOffset,
-                            int positionOffsetPixels
-                    ) {
-                        pagerScrolling = true;
-                        updateSlidingIndicator(position + positionOffset);
-                    }
-
-                    @Override
                     public void onPageSelected(int position) {
                         pager.post(State.this::apply);
                         pager.postDelayed(State.this::apply, 80L);
                         pager.postDelayed(State.this::apply, 500L);
                     }
 
-                    @Override
-                    public void onPageScrollStateChanged(int scrollState) {
-                        pagerScrolling = scrollState != ViewPager2.SCROLL_STATE_IDLE;
-                        if (!pagerScrolling) updateSlidingIndicator(pager.getCurrentItem());
-                    }
                 };
                 pager.registerOnPageChangeCallback(pageCallback);
             }
@@ -228,7 +212,6 @@ final class StableBottomNavigationController {
             styleBar(nav);
             applyGeometry();
             resetLegacyItemTransforms();
-            if (pager != null && !pagerScrolling) updateSlidingIndicator(pager.getCurrentItem());
             stylePageChrome();
         }
 
@@ -310,12 +293,6 @@ final class StableBottomNavigationController {
                 }
                 item.setAlpha(1f);
                 ZeroChillMotion.installPressFeedback(item);
-            }
-        }
-
-        private void updateSlidingIndicator(float pagerPosition) {
-            if (nav instanceof ZeroChillBottomNavigationView) {
-                ((ZeroChillBottomNavigationView) nav).setPagerPosition(pagerPosition);
             }
         }
 

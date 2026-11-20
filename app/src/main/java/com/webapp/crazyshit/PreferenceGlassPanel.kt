@@ -218,7 +218,7 @@ internal class PreferenceGlassPanel @JvmOverloads constructor(context: Context, 
             }
         }
 
-        @JvmStatic internal fun edgeStrength(context: Context): Float =
+        @JvmStatic fun edgeStrength(context: Context): Float =
             if (AppearanceTheme.hasAdvancedGlass(context))
                 (AppearanceTheme.glassEdge(context) / .7f).coerceIn(0f, 1.5f) else 1f
     }

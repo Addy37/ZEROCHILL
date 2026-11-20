@@ -92,7 +92,7 @@ public final class CreatorsActivity extends Activity {
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(12), dp(8), dp(12), dp(8));
-        header.addView(BrowseUi.action(this, "‹", "Back", v -> finish()), new LinearLayout.LayoutParams(dp(48), dp(48)));
+        header.addView(BrowseUi.action(this, "‹", "Back", v -> DestinationMotion.finishLibrary(this)), new LinearLayout.LayoutParams(dp(48), dp(48)));
         TextView title = BrowseUi.text(this, "Favorite creators", 20, Color.WHITE);
         title.setPadding(dp(12), 0, 0, 0);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
@@ -270,7 +270,7 @@ public final class CreatorsActivity extends Activity {
         }
     }
 
-    private void openCreator(CreatorCatalog.FavoriteGroup group) {
+    private void openCreator(View origin, CreatorCatalog.FavoriteGroup group) {
         if (group == null || group.item == null) return;
         BrowseUi.hideKeyboard(this, input);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
@@ -278,7 +278,7 @@ public final class CreatorsActivity extends Activity {
         if (sessionId.isEmpty() && spec.grouped) {
             sessionId = CreatorGalleryPreloader.composeInMemoryMergedSession(this, spec);
         }
-        startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+        DestinationMotion.start(this, NativeFeedBrowserActivity.createCreatorGallery(
                 this,
                 spec.item.title,
                 spec.query,
@@ -288,7 +288,7 @@ public final class CreatorsActivity extends Activity {
                 spec.seedNames,
                 spec.seedUrls,
                 spec.seedImages
-        ));
+        ), origin);
     }
 
     private void confirmMerge(CreatorCatalog.FavoriteGroup source, CreatorCatalog.FavoriteGroup target) {
@@ -585,7 +585,7 @@ public final class CreatorsActivity extends Activity {
             );
             bindBadges(holder, card);
 
-            holder.itemView.setOnClickListener(v -> openCreator(group));
+            holder.itemView.setOnClickListener(v -> openCreator(v, group));
             holder.more.setContentDescription("Creator options for " + item.title);
             holder.more.setOnClickListener(v -> showMenu(v, group));
 
