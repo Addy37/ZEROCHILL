@@ -7,6 +7,10 @@ on:
     paths: [.github/workflows/motion-polish-candidate.yml]
   workflow_dispatch:
 
+concurrency:
+  group: motion-polish-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

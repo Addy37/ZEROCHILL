@@ -260,9 +260,10 @@ public class SearchShitTokPauseTest {
                 assertEquals(1f, f.selectedPlayer.volume, 0f);
                 assertTrue(ReflectionHelpers.getField(adapter, "hostResumed"));
                 SearchPanel panel = ReflectionHelpers.getField(host.get(), "searchPanel");
-                ReflectionHelpers.callInstanceMethod(panel, "openResult", from(NativeContentItem.class,
-                        new NativeContentItem(NativeContentItem.KIND_CATEGORY, "Fixture category",
-                                "https://example.invalid/category", "", "", "", "")));
+                ReflectionHelpers.callInstanceMethod(panel, "openResult", from(android.view.View.class, null),
+                        from(NativeContentItem.class,
+                                new NativeContentItem(NativeContentItem.KIND_CATEGORY, "Fixture category",
+                                        "https://example.invalid/category", "", "", "", "")));
                 assertNotNull(org.robolectric.Shadows.shadowOf(host.get()).getNextStartedActivity());
                 // Robolectric does not automatically pause the source Activity after startActivity.
                 host.pause();

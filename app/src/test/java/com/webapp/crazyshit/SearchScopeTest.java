@@ -266,6 +266,7 @@ public class SearchScopeTest {
             assertTrue(boundText(panel, adapter).contains("Matching collection"));
             List<NativeContentItem> results = ReflectionHelpers.getField(panel, "bunkrResults");
             ReflectionHelpers.callInstanceMethod(panel, "openResult",
+                    ReflectionHelpers.ClassParameter.from(android.view.View.class, null),
                     ReflectionHelpers.ClassParameter.from(NativeContentItem.class, results.get(0)));
             Activity host = ((Session) panel.view.getTag()).host.get();
             Intent opened = shadowOf(host).getNextStartedActivity();
@@ -433,6 +434,7 @@ public class SearchScopeTest {
                     NativeContentItem.KIND_CATEGORY, "Sample",
                     "https://baddiehub.com/category/sample/", "", "", "BaddieHub", "");
             ReflectionHelpers.callInstanceMethod(panel, "openResult",
+                    ReflectionHelpers.ClassParameter.from(android.view.View.class, null),
                     ReflectionHelpers.ClassParameter.from(NativeContentItem.class, category));
             Intent next = shadowOf(host.get()).getNextStartedActivity();
             assertEquals(NativeFeedBrowserActivity.SOURCE_BADDIEHUB,
@@ -442,6 +444,7 @@ public class SearchScopeTest {
                     NativeContentItem.KIND_CATEGORY, "Femdom",
                     "https://www.xmegadrive.com/categories/femdom/", "", "", "XMegaDrive", "");
             ReflectionHelpers.callInstanceMethod(panel, "openResult",
+                    ReflectionHelpers.ClassParameter.from(android.view.View.class, null),
                     ReflectionHelpers.ClassParameter.from(NativeContentItem.class, xmega));
             Intent xNext = shadowOf(host.get()).getNextStartedActivity();
             assertEquals(NativeFeedBrowserActivity.SOURCE_XMEGADRIVE,
