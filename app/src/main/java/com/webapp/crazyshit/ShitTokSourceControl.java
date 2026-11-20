@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.graphics.drawable.GradientDrawable;
+import androidx.core.graphics.ColorUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -24,10 +25,11 @@ final class ShitTokSourceControl extends FrameLayout {
         controls = new FrameLayout(activity);
         controls.setPadding(dp(4), dp(4), dp(4), dp(4));
         GradientDrawable film = new GradientDrawable();
-        film.setColor(0x88202A32); film.setCornerRadius(dp(24));
-        film.setStroke(dp(1), 0x40CCDDE8); setBackground(film);
+        film.setColor(0xCC17171B);
+        film.setCornerRadius(dp(22));
+        film.setStroke(dp(1), 0x30FFFFFF);
+        setBackground(film);
         selection = new View(activity);
-        selection.setBackgroundResource(R.drawable.zc_nav_selected_glass);
         controls.addView(selection, new LayoutParams(dp(56), -1));
         LinearLayout row = new LinearLayout(activity);
         for (ShitTokSourceMode mode : ShitTokSourceMode.values()) {
@@ -51,7 +53,15 @@ final class ShitTokSourceControl extends FrameLayout {
         int accent = AppearanceTheme.accent(activity);
         if (displayed == mode && displayedAccent == accent) return;
         displayed = mode;
-        displayedAccent = accent;
+        if (displayedAccent != accent) {
+            GradientDrawable fill = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{ColorUtils.setAlphaComponent(accent, 54),
+                            ColorUtils.setAlphaComponent(accent, 26)});
+            fill.setCornerRadius(dp(18));
+            fill.setStroke(dp(1), ColorUtils.setAlphaComponent(accent, 120));
+            selection.setBackground(fill);
+            displayedAccent = accent;
+        }
         for (int i = 0; i < labels.length; i++) {
             labels[i].setTextColor(i == mode.ordinal() ? accent : 0xFFE0E7ED);
             labels[i].setSelected(i == mode.ordinal());

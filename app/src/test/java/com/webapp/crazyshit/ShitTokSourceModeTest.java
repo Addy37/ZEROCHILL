@@ -35,6 +35,22 @@ public class ShitTokSourceModeTest {
             } finally { feed.close(); }
         }
     }
+    @Test public void selectorFillAndLabelFollowAccentWithoutChangingSelection() {
+        try (org.robolectric.android.controller.ActivityController<Activity> host =
+                     Robolectric.buildActivity(Activity.class).setup()) {
+            Activity activity = host.get();
+            ShitTokSourceMode.set(activity, ShitTokSourceMode.ONLY_FAP);
+            AppearanceTheme.setAccent(activity, AppearanceTheme.Accent.PURPLE);
+            ShitTokSourceControl control = new ShitTokSourceControl(activity);
+            android.view.View selection = ReflectionHelpers.getField(control, "selection");
+            android.widget.TextView label = control.findViewWithTag("shittok_source_onlyfap");
+            assertTrue(label.isSelected());
+            assertEquals(AppearanceTheme.Accent.PURPLE.color, label.getCurrentTextColor());
+            int fill = ((android.graphics.drawable.GradientDrawable) selection.getBackground()).getColors()[0];
+            assertEquals(AppearanceTheme.Accent.PURPLE.color & 0xFFFFFF, fill & 0xFFFFFF);
+        }
+    }
+
     @Test public void historicalViewingAndLikesDoNotExcludeValidCandidates() {
         try (org.robolectric.android.controller.ActivityController<Activity> activity = Robolectric.buildActivity(Activity.class).setup()) {
             ChaosFeedView feed = new ChaosFeedView(activity.get(), item -> {}, false);

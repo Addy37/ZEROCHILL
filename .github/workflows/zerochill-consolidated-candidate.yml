@@ -1,9 +1,9 @@
-name: ZEROCHILL Consolidated Signed Test APK
+name: ZEROCHILL Watch Polish Signed Test APK
 
 on:
   push:
     branches:
-      - fix/zerochill-consolidated-candidate
+      - fix/zerochill-watch-polish
     paths:
       - .github/workflows/zerochill-consolidated-candidate.yml
       - app/**
@@ -25,8 +25,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7002008'
-      APP_VERSION_NAME: '7.2.1-consolidated-test.1'
+      APP_VERSION_CODE: '7002010'
+      APP_VERSION_NAME: '7.2.1-watch-polish-test.1'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
@@ -35,9 +35,9 @@ jobs:
       - name: Check complete 7.2.0 product lineage
         run: |
           set -euo pipefail
-          git merge-base --is-ancestor 20e4fd47dc7f23873ece2c3f1ff735b3f85b4bf0 HEAD
+          git merge-base --is-ancestor e6c915e5dde33e2a04a1c8f98b36296ab266dd7c HEAD
           test -f app/src/main/java/com/webapp/crazyshit/LegacyVideoPlayerActivity.java
-          grep -q 'openLegacyBunkrPlayer()' app/src/main/java/com/webapp/crazyshit/VideoDetailActivity.java
+          grep -q 'new LegacyWatchPlayer(' app/src/main/java/com/webapp/crazyshit/VideoDetailActivity.java
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -97,6 +97,8 @@ jobs:
                           '**/ShitTokFocusModeViewportTest.class',
                           '**/LegacyVideoFormatSupportTest.class',
                           '**/AppUpdaterInstallerTest.class',
+                          '**/ShowsWatchPageTest.class',
+                          '**/ShowsWatchSessionTest.class',
                           '**/WhatsNewTest.class'
                   systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
                   testLogging { events 'passed', 'failed', 'skipped' }
@@ -133,7 +135,7 @@ jobs:
           pkg, version = ident(new)
           old_pkg, old_version = ident(old)
           assert pkg == old_pkg == "com.addy37.crazyshitunofficial", "Application ID changed"
-          assert version == 7002008 and version > max(old_version, 7002007), "Candidate cannot upgrade installed version"
+          assert version == 7002010 and version > max(old_version, 7002009), "Candidate cannot upgrade installed version"
           assert cert(new) == cert(old), "Signing certificate changed"
           with zipfile.ZipFile(new) as apk:
               libraries = [s for s in apk.namelist() if s.startswith("lib/") and s.endswith(".so")]
@@ -143,7 +145,7 @@ jobs:
           print("Signed candidate bytes:", size)
           assert size < 500_000_000, "Candidate APK too large for direct testing"
           branch = os.environ["GITHUB_REF_NAME"].replace("/", "-")
-          out = pathlib.Path("candidate") / f"ZeroChill-7.2.1-consolidated-{branch}-{os.environ['GITHUB_SHA'][:8]}.apk"
+          out = pathlib.Path("candidate") / f"ZeroChill-7.2.1-watch-polish-{branch}-{os.environ['GITHUB_SHA'][:8]}.apk"
           out.write_bytes(new.read_bytes())
           PY
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
@@ -151,7 +153,7 @@ jobs:
       - name: Upload signed installable test APK
         uses: actions/upload-artifact@v4
         with:
-          name: ZEROCHILL-7.2.1-Consolidated-Test-1
+          name: ZEROCHILL-7.2.1-Watch-Polish-Test-1
           path: candidate/
           retention-days: 14
           if-no-files-found: error
