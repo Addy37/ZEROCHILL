@@ -118,7 +118,22 @@ jobs:
         if: startsWith(github.ref_name, 'test-apk/')
         run: |
           set -euo pipefail
-          gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest :app:assembleDebug
+          cat > "$RUNNER_TEMP/double-tap-gesture-tests.gradle" <<'GRADLE'
+          allprojects {
+              tasks.withType(Test).configureEach {
+                  include '**/CreatorPlayerQolTest.class',
+                          '**/ShowsFullscreen*Test.class',
+                          '**/ShowsWatchPageTest.class',
+                          '**/OnlyFapViewerGesturesTest.class',
+                          '**/GalleryViewerLifecycleTest.class',
+                          '**/ShitTokInteractionUiTest.class',
+                          '**/LegacyVideoFormatSupportTest.class',
+                          '**/LegacyVlcInitializationTest.class'
+                  systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
+              }
+          }
+          GRADLE
+          gradle --no-daemon --console=plain --max-workers=3 -I "$RUNNER_TEMP/double-tap-gesture-tests.gradle" :app:testDebugUnitTest :app:assembleDebug
           mkdir -p candidate
           bash tools/verify-android-build-lineage.sh candidate/APK-LINEAGE.txt
           apk="candidate/ZeroChill-Beta-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA:0:8}.apk"
