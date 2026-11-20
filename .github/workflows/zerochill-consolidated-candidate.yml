@@ -1,10 +1,9 @@
-name: ZEROCHILL Signed Test APK
+name: ZEROCHILL 7.3.0 Signed Release Candidate
 
 on:
   push:
     branches:
-      - test-apk/**
-  workflow_dispatch:
+      - rc-apk/zerochill-7.3.0
 
 permissions:
   contents: read
@@ -12,7 +11,7 @@ permissions:
 jobs:
   signed-candidate:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     env:
       ZEROCHILL_V7_TRAFFIC: 'true'
       SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
@@ -22,8 +21,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7002011'
-      APP_VERSION_NAME: '7.2.1-watch-polish-test.2'
+      APP_VERSION_CODE: '7003000'
+      APP_VERSION_NAME: '7.3.0'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
@@ -31,17 +30,21 @@ jobs:
           fetch-depth: 0
       - name: Verify current ZEROCHILL build lineage
         run: bash tools/verify-android-build-lineage.sh
-      - name: Set side-by-side test version
-        if: startsWith(github.ref_name, 'test-apk/')
+      - name: Verify release metadata and matching What’s New
         run: |
-          python3 - <<'PY'
+          python3 - <<'PYTHON'
           import os, pathlib
-          major, minor, patch = map(int, pathlib.Path("RELEASE_VERSION").read_text().strip().split("."))
-          version = f"{major}.{minor}.{patch + 1}-test"
-          code = major * 1_000_000 + minor * 1000 + patch + 1
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as out:
-              out.write(f"APP_VERSION_NAME={version}\nAPP_VERSION_CODE={code}\n")
-          PY
+          version = pathlib.Path("RELEASE_VERSION").read_text().strip()
+          assert version == os.environ["APP_VERSION_NAME"]
+          major, minor, patch = map(int, version.split("."))
+          assert major * 1_000_000 + minor * 1000 + patch == int(os.environ["APP_VERSION_CODE"])
+          bundled = pathlib.Path("app/src/main/res/raw/whats_new_7_0.md").read_text().splitlines()
+          markdown = pathlib.Path("RELEASE_NOTES.md").read_text()
+          release = markdown.split("## What's new", 1)[1].split("## Updating", 1)[0].splitlines()
+          assert bundled[0] == markdown.splitlines()[0] == f"# ZEROCHILL {version}"
+          assert [line for line in bundled if line.startswith("- ")] == [
+              line for line in release if line.startswith("- ")]
+          PYTHON
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -87,14 +90,18 @@ jobs:
                   out.write(key + "=" + value + "\n")
           PY
       - name: Run focused regressions
-        if: "!startsWith(github.ref_name, 'test-apk/')"
         timeout-minutes: 12
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/consolidated-tests.gradle" <<'EOF'
           allprojects {
               tasks.withType(Test).configureEach {
-                  include '**/OnlyFapGalleryGlideTest.class',
+                  include '**/VideoSeekFeedbackTest.class',
+                          '**/CreatorPlayerQolTest.class',
+                          '**/OnlyFapViewerGesturesTest.class',
+                          '**/HeaderProfileAvatarTest.class',
+                          '**/ShowsFullscreenControlsTest.class',
+                          '**/OnlyFapGalleryGlideTest.class',
                           '**/OnlyFapGalleryLayoutTest.class',
                           '**/BunkrGalleryResolutionLifecycleTest.class',
                           '**/BunkrAlbumShowsTest.class',
@@ -113,41 +120,19 @@ jobs:
               }
           }
           EOF
-          gradle --no-daemon --console=plain --max-workers=3 -I "$RUNNER_TEMP/consolidated-tests.gradle" :app:testDebugUnitTest
-      - name: Test and assemble signed side-by-side beta
-        if: startsWith(github.ref_name, 'test-apk/')
-        run: |
-          set -euo pipefail
-          gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest :app:assembleDebug
-          mkdir -p candidate
-          bash tools/verify-android-build-lineage.sh candidate/APK-LINEAGE.txt
-          apk="candidate/ZeroChill-Beta-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA:0:8}.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "$apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$apk"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$apk" > "$RUNNER_TEMP/beta-badging.txt"
-          grep "package: name='com.addy37.crazyshitunofficial.dev'" "$RUNNER_TEMP/beta-badging.txt"
-          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
-      - name: Upload signed side-by-side test APK
-        if: startsWith(github.ref_name, 'test-apk/')
-        uses: actions/upload-artifact@v4
-        with:
-          name: ZeroChill-signed-beta
-          path: candidate/
-          retention-days: 14
-          if-no-files-found: error
+          gradle --no-daemon --console=plain --max-workers=3 -I "$RUNNER_TEMP/consolidated-tests.gradle" :app:testReleaseUnitTest
       - name: Assemble signed release APK
-        if: "!startsWith(github.ref_name, 'test-apk/')"
         timeout-minutes: 10
         run: gradle --no-daemon --console=plain --max-workers=3 :app:assembleRelease
       - name: Validate signed upgrade and package media libraries
-        if: "!startsWith(github.ref_name, 'test-apk/')"
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p candidate stable
+          mkdir -p candidate stable previous-test
           bash tools/verify-android-build-lineage.sh candidate/APK-LINEAGE.txt
           gh release download v7.2.0 --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir stable
+          gh run download 44658875102 --repo "$GITHUB_REPOSITORY" --name ZEROCHILL-7.2.1-Watch-Polish-Test-2 --dir previous-test
           python3 - <<'PY'
           import pathlib, re, subprocess, zipfile, os
           bt = pathlib.Path(os.environ["ANDROID_HOME"]) / "build-tools" / "35.0.0"
@@ -167,8 +152,18 @@ jobs:
           pkg, version = ident(new)
           old_pkg, old_version = ident(old)
           assert pkg == old_pkg == "com.addy37.crazyshitunofficial", "Application ID changed"
-          assert version == 7002011 and version > max(old_version, 7002010), "Candidate cannot upgrade installed version"
-          assert cert(new) == cert(old), "Signing certificate changed"
+          approved = list(pathlib.Path("previous-test").rglob("*.apk"))
+          assert len(approved) == 1, "Expected one approved phone-test APK"
+          approved_pkg, approved_code = ident(approved[0])
+          assert approved_pkg == pkg and approved_code == 7002011, "Wrong approved phone-test APK"
+          assert version == int(os.environ["APP_VERSION_CODE"]) > max(old_version, approved_code)
+          assert cert(new) == cert(old) == cert(approved[0]), "Signing certificate changed"
+          generated = pathlib.Path(
+              "app/build/generated/source/buildConfig/release/com/webapp/crazyshit/BuildConfig.java"
+          ).read_text()
+          assert f'SOURCE_REVISION = "{os.environ["GITHUB_SHA"]}"' in generated
+          assert "ZEROCHILL_V7_TRAFFIC = true;" in generated
+          print(f"Verified package {pkg}, production certificate, and version {version} > {old_version}, {approved_code}")
           with zipfile.ZipFile(new) as apk:
               libraries = [s for s in apk.namelist() if s.startswith("lib/") and s.endswith(".so")]
               assert any("libvlc" in s for s in libraries), "LibVLC binaries absent"
@@ -177,16 +172,29 @@ jobs:
           print("Signed candidate bytes:", size)
           assert size < 500_000_000, "Candidate APK too large for direct testing"
           branch = os.environ["GITHUB_REF_NAME"].replace("/", "-")
-          out = pathlib.Path("candidate") / f"ZeroChill-7.2.1-watch-polish-{branch}-{os.environ['GITHUB_SHA'][:8]}.apk"
+          out = pathlib.Path("candidate") / f"ZeroChill-7.3.0-RC-{branch}-{os.environ['GITHUB_SHA'][:8]}.apk"
           out.write_bytes(new.read_bytes())
           PY
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
           printf '%s\n' "$GITHUB_SHA" > candidate/SOURCE_SHA.txt
+      - name: Enable KVM for update test
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test in-place updates and preserved app data on Android 15
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash tools/verify-730-candidate-upgrade.sh
       - name: Upload signed installable test APK
-        if: "!startsWith(github.ref_name, 'test-apk/')"
         uses: actions/upload-artifact@v4
         with:
-          name: ZEROCHILL-7.2.1-Watch-Polish-Test-2
+          name: ZEROCHILL-7.3.0-Signed-RC
           path: candidate/
           retention-days: 14
           if-no-files-found: error
