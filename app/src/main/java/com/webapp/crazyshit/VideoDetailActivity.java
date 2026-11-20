@@ -145,7 +145,8 @@ public class VideoDetailActivity extends Activity {
     private FrameLayout showsLaunchCurtain;
     private ShowsPlaybackSplashView showsLaunchLoader;
     private SeekBar portraitSeekBar;
-    private ExoPlayer player;
+    private Player player;
+    private org.videolan.libvlc.util.VLCVideoLayout legacyVideoLayout;
     private RenderedThumbnailResolver[] thumbnailResolvers;
     private OnBackInvokedCallback backCallback;
     private FrameLayout relatedBackPreviewLayer;
@@ -193,6 +194,7 @@ public class VideoDetailActivity extends Activity {
     private String commentCountPageUrl = "";
     private int commentCountRequestGeneration;
     private final PlaybackRecovery playbackRecovery = new PlaybackRecovery();
+    private String legacyBunkrOpenedUrl = "";
     private boolean recoveryResumed;
     private long requestedStartPosition;
     private int resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
@@ -373,6 +375,7 @@ public class VideoDetailActivity extends Activity {
         if (mediaUrl != null && !mediaUrl.trim().isEmpty()) {
             deferredShowsResolve = false;
         }
+        if (state != null) legacyBunkrOpenedUrl = clean(state.getString("legacy_bunkr_opened_url"));
 
         if ((mediaUrl == null || mediaUrl.trim().isEmpty()) && !deferredShowsResolve) {
             finish();
@@ -1190,11 +1193,18 @@ public class VideoDetailActivity extends Activity {
         portraitVideo = false;
         if (portraitFullscreen) setPortraitFullscreen(false);
         else updatePortraitFullscreenButton();
-        if (showsOrigin && player != null) {
+        // Bunkr album episodes use this watch player rather than BunkrGalleryActivity.
+        // Never send an ASF/WMV container through Media3, which cannot extract it.
+        boolean play = !showsOrigin || (!showsRestorePaused && !showsCompleted);
+        if (BunkrRepository.isBunkrUrl(pageUrl)
+                && (LegacyVideoFormatSupport.requiresVlc(mediaUrl) || mediaUrl.equals(legacyBunkrOpenedUrl))
+                && openLegacyBunkrPlayer(position, play, showsRestoreVolume, showsRestoreSpeed)) return;
+        if (showsOrigin && player instanceof ExoPlayer) {
+            ExoPlayer existing = (ExoPlayer) player;
             failureShown = false;
             showStartupPoster();
-            player.setMediaSource(showsMediaSource());
-            playbackRecovery.bind(player, pageUrl);
+            existing.setMediaSource(showsMediaSource());
+            playbackRecovery.bind(existing, pageUrl);
             if (position > 0L) player.seekTo(position);
             player.setPlayWhenReady(recoveryResumed);
             player.prepare();
@@ -1226,27 +1236,33 @@ public class VideoDetailActivity extends Activity {
                 .setDataSourceFactory("content".equalsIgnoreCase(scheme)
                         || "file".equalsIgnoreCase(scheme)
                         ? new DefaultDataSource.Factory(this, httpFactory) : httpFactory);
-        player = new ExoPlayer.Builder(this)
+        ExoPlayer nativePlayer = new ExoPlayer.Builder(this)
                 .setMediaSourceFactory(sourceFactory)
                 .setSeekBackIncrementMs(10_000L)
                 .setSeekForwardIncrementMs(10_000L)
                 .build();
-        playerView.setPlayer(player);
+        if (showsOrigin) nativePlayer.setMediaSource(showsMediaSource());
+        else nativePlayer.setMediaItem(mediaItem());
+        playbackRecovery.bind(nativePlayer, pageUrl);
+        bindWatchPlayer(nativePlayer, position, play, showsRestoreVolume, showsRestoreSpeed);
+    }
+
+    private void bindWatchPlayer(Player next, long position, boolean play, float volume, float speed) {
+        player = next;
+        playerView.setPlayer(next);
         if (fullscreenControls != null) {
-            fullscreenOverlay.setPlayer(player);
-            fullscreenControls.bind(player);
+            fullscreenOverlay.setPlayer(next);
+            fullscreenControls.bind(next);
         }
-
-        if (showsOrigin) player.setMediaSource(showsMediaSource());
-        else player.setMediaItem(mediaItem());
-        playbackRecovery.bind(player, pageUrl);
-
-        if (position > 0L) player.seekTo(position);
-        if (showsOrigin) {
-            player.setVolume(showsRestoreVolume);
-            player.setPlaybackSpeed(showsRestoreSpeed);
+        if (position > 0L) {
+            if (next instanceof LegacyWatchPlayer) ((LegacyWatchPlayer) next).restorePosition(position);
+            else next.seekTo(position);
         }
-        player.setPlayWhenReady(!showsOrigin || (!showsRestorePaused && !showsCompleted));
+        if (showsOrigin || next instanceof LegacyWatchPlayer) {
+            next.setVolume(volume);
+            next.setPlaybackSpeed(speed);
+        }
+        next.setPlayWhenReady(play);
         player.addListener(new Player.Listener() {
             private long analyticsBufferStart;
             @Override
@@ -1297,9 +1313,14 @@ public class VideoDetailActivity extends Activity {
 
             @Override
             public void onPlayerError(PlaybackException error) {
+                if (player != next) return;
                 AnalyticsTracker.failure(VideoDetailActivity.this,"playback_failure",AnalyticsV2Policy.playbackCategory(error.errorCode));
                 if (showsOrigin && showsSavedOnExit) return;
                 dismissStartupPoster();
+                if (next instanceof ExoPlayer && BunkrRepository.isBunkrUrl(pageUrl)
+                        && LegacyVideoFormatSupport.retryWithVlc(mediaUrl, error.errorCode)
+                        && openLegacyBunkrPlayer(next.getCurrentPosition(), next.getPlayWhenReady(),
+                                next.getVolume(), next.getPlaybackParameters().speed)) return;
                 if (!recoverPlayback(error)) showPlaybackFailure();
             }
 
@@ -1344,6 +1365,35 @@ public class VideoDetailActivity extends Activity {
             }
         });
         player.prepare();
+    }
+
+    private org.videolan.libvlc.util.VLCVideoLayout attachLegacyVideoLayout() {
+        ViewGroup content = playerView.findViewById(androidx.media3.ui.R.id.exo_content_frame);
+        legacyVideoLayout = new org.videolan.libvlc.util.VLCVideoLayout(this);
+        content.addView(legacyVideoLayout, 0, new FrameLayout.LayoutParams(-1, -1));
+        View nativeSurface = playerView.getVideoSurfaceView();
+        if (nativeSurface != null) nativeSurface.setVisibility(View.GONE);
+        return legacyVideoLayout;
+    }
+
+    private boolean openLegacyBunkrPlayer(long position, boolean play, float volume, float speed) {
+        if (!LegacyVideoFormatSupport.validHttpsMedia(mediaUrl)) return false;
+        releasePlayer();
+        failureShown = false;
+        showStartupPoster();
+        legacyBunkrOpenedUrl = mediaUrl;
+        try {
+            org.videolan.libvlc.util.VLCVideoLayout legacySurface = attachLegacyVideoLayout();
+            String referer = mediaReferer == null || mediaReferer.isEmpty() ? pageUrl : mediaReferer;
+            LegacyWatchPlayer fallback = new LegacyWatchPlayer(this, legacySurface, mediaItem(),
+                    referer, userAgent.isEmpty() ? defaultUserAgent() : userAgent);
+            bindWatchPlayer(fallback, position, play, volume, speed);
+        } catch (RuntimeException | LinkageError failure) {
+            releasePlayer();
+            dismissStartupPoster();
+            showPlaybackFailure();
+        }
+        return true;
     }
 
     private MediaItem mediaItem() {
@@ -2332,7 +2382,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private Bitmap capturePlayerFrame() {
-        TextureView texture = findTextureView(playerView);
+        TextureView texture = findTextureView(legacyVideoLayout == null ? playerView : legacyVideoLayout);
         if (texture == null || !texture.isAvailable() || texture.getWidth() <= 0 || texture.getHeight() <= 0) {
             return null;
         }
@@ -3450,6 +3500,7 @@ public class VideoDetailActivity extends Activity {
     protected void onSaveInstanceState(Bundle outState) {
         outState.putBoolean("social_comments_opened", socialCommentsOpened);
         outState.putBoolean("social_comments_visible", activeComments != null && activeComments.isShowing());
+        outState.putString("legacy_bunkr_opened_url", legacyBunkrOpenedUrl);
         if (showsOrigin) {
             outState.putString("shows_media", mediaUrl);
             outState.putString("shows_page", pageUrl);
@@ -3585,13 +3636,23 @@ public class VideoDetailActivity extends Activity {
     private boolean recoverPlayback(PlaybackException error) {
         if (showsSavedOnExit) return false;
         if (error == null) failureShown = false;
+        if (player instanceof LegacyWatchPlayer) {
+            if (error != null) return false;
+            showStartupPoster();
+            player.prepare();
+            return true;
+        }
+        if (error == null && player == null && mediaUrl.equals(legacyBunkrOpenedUrl)) {
+            buildPlayer(requestedStartPosition);
+            return true;
+        }
         return playbackRecovery.recover(this, error, recovered -> {
             if (showsSavedOnExit) return;
             mediaUrl = recovered.stream.mediaUrl;
             mediaReferer = recovered.stream.requestReferer;
             try { cookies = clean(CookieManager.getInstance().getCookie(mediaUrl)); } catch (Exception ignored) { }
             buildPlayer(recovered.position);
-            player.setPlayWhenReady(recovered.playWhenReady && recoveryResumed);
+            if (player != null) player.setPlayWhenReady(recovered.playWhenReady && recoveryResumed);
         }, this::showPlaybackFailure);
     }
 
@@ -3608,6 +3669,13 @@ public class VideoDetailActivity extends Activity {
             } catch (Exception ignored) {
             }
             player = null;
+        }
+        if (legacyVideoLayout != null) {
+            ViewGroup parent = (ViewGroup) legacyVideoLayout.getParent();
+            if (parent != null) parent.removeView(legacyVideoLayout);
+            legacyVideoLayout = null;
+            View nativeSurface = playerView.getVideoSurfaceView();
+            if (nativeSurface != null) nativeSurface.setVisibility(View.VISIBLE);
         }
     }
 

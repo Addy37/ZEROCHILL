@@ -69,6 +69,28 @@ public class ShowsWatchPageTest {
         ShowsWatchSession session = ReflectionHelpers.getField(activity, "showsSession");
         assertEquals(next.title, session.next(first.url).title);
     }
+    @Test public void legacySurfaceStaysInWatchLayoutThroughRotationAndDetachesOnRelease() {
+        VideoDetailActivity activity = watch(item("first"), item("next"));
+        PlayerView watchPlayer = ReflectionHelpers.getField(activity, "playerView");
+        View details = ReflectionHelpers.getField(activity, "detailsScroll");
+        View surface = ReflectionHelpers.callInstanceMethod(activity, "attachLegacyVideoLayout");
+        View content = watchPlayer.findViewById(androidx.media3.ui.R.id.exo_content_frame);
+        assertSame(content, surface.getParent());
+        assertEquals(View.GONE, watchPlayer.getVideoSurfaceView().getVisibility());
+
+        orient(activity, Configuration.ORIENTATION_PORTRAIT);
+        assertEquals(View.VISIBLE, details.getVisibility());
+        orient(activity, Configuration.ORIENTATION_LANDSCAPE);
+        assertSame(content, surface.getParent());
+        assertEquals(View.GONE, details.getVisibility());
+        orient(activity, Configuration.ORIENTATION_PORTRAIT);
+        assertEquals(View.VISIBLE, details.getVisibility());
+
+        ReflectionHelpers.callInstanceMethod(activity, "releasePlayer");
+        assertNull(surface.getParent());
+        assertEquals(View.VISIBLE, watchPlayer.getVideoSurfaceView().getVisibility());
+    }
+
     public static class WatchProbe extends VideoDetailActivity {
         NativeContentItem dispatched;
         @Override void dispatchShowsSelection(NativeContentItem item) { dispatched = item; }

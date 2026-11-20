@@ -6,6 +6,8 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.os.Looper;
 import android.view.View;
+import android.widget.ImageView;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.StaggeredGridLayoutManager;
 import com.bumptech.glide.Glide;
@@ -43,7 +45,7 @@ public class OnlyFapGalleryGlideTest {
         controller = Robolectric.buildActivity(Activity.class).setup(); activity = controller.get();
         Glide.init(activity, new com.bumptech.glide.GlideBuilder());
         CompletableFuture.runAsync(() -> Glide.get(activity).clearDiskCache()).get(10, TimeUnit.SECONDS);
-        Glide.get(activity).getRegistry().prepend(GlideUrl.class, InputStream.class,
+        Glide.get(activity).getRegistry().replace(GlideUrl.class, InputStream.class,
                 new ModelLoaderFactory<GlideUrl, InputStream>() {
                     public ModelLoader<GlideUrl, InputStream> build(MultiModelLoaderFactory factory) {
                         return new ModelLoader<GlideUrl, InputStream>() {
@@ -131,5 +133,114 @@ public class OnlyFapGalleryGlideTest {
         layout();
         assertEquals(replacement.url, first().boundItem.url);
         assertEquals(Math.round(first().itemView.getWidth() / 2f), first().itemView.getHeight());
+    }
+
+    @Test public void bunkrArtworkFillsTileAndUsesDecodedRatioOverMismatchedHint() throws Exception {
+        NativeContentItem photo = bunkrPhoto();
+        adapter.replace(Collections.singletonList(photo), false);
+        layout();
+        assertEquals(ImageView.ScaleType.CENTER_CROP, first().image.getScaleType());
+        complete(photo, 192, 144);
+        await(() -> first().image.getDrawable() != null
+                && first().image.getDrawable().getIntrinsicWidth() > 0);
+        assertEquals(Math.round(first().itemView.getWidth() * .75f), first().itemView.getHeight());
+    }
+
+    @Test public void bunkrThumbnailTrimsMatchingEmbeddedSidebarsBeforeSizingTile() throws Exception {
+        NativeContentItem photo = bunkrPhoto();
+        adapter.replace(Collections.singletonList(photo), false);
+        layout();
+        completeMattedPhoto(photo, 42, Color.rgb(20, 20, 23));
+
+        assertVisibleThumbnailRatio(108f / 192f);
+    }
+
+    @Test public void bunkrThumbnailPreservesAnUnpairedDarkEdge() throws Exception {
+        NativeContentItem photo = bunkrPhoto();
+        adapter.replace(Collections.singletonList(photo), false);
+        layout();
+        completeMattedPhoto(photo, 0, Color.rgb(20, 20, 23));
+
+        assertVisibleThumbnailRatio(1f);
+    }
+
+    @Test public void bunkrThumbnailTrimsMatchingTransparentSidebars() throws Exception {
+        NativeContentItem photo = bunkrPhoto();
+        adapter.replace(Collections.singletonList(photo), false);
+        layout();
+        completeMattedPhoto(photo, 42, Color.TRANSPARENT);
+
+        assertVisibleThumbnailRatio(108f / 192f);
+    }
+
+    private void assertVisibleThumbnailRatio(float expected) throws Exception {
+        await(() -> first().image.getDrawable() != null
+                && first().image.getDrawable().getIntrinsicWidth() > 0);
+        android.graphics.drawable.Drawable artwork = first().image.getDrawable();
+        float ratio = (float) artwork.getIntrinsicWidth() / artwork.getIntrinsicHeight();
+        assertEquals(expected, ratio, .015f);
+        assertEquals(Math.round(first().itemView.getWidth() / ratio), first().itemView.getHeight());
+    }
+
+    private void completeMattedPhoto(NativeContentItem photo, int rightPad, int matte) throws Exception {
+        Bitmap artwork = Bitmap.createBitmap(192, 192, Bitmap.Config.ARGB_8888);
+        artwork.eraseColor(matte);
+        android.graphics.Paint paint = new android.graphics.Paint();
+        paint.setColor(Color.CYAN);
+        new android.graphics.Canvas(artwork).drawRect(42, 0, 192 - rightPad, 192, paint);
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        artwork.compress(Bitmap.CompressFormat.PNG, 100, bytes);
+        artwork.recycle();
+        await(() -> pending.containsKey(photo.imageUrl));
+        pending.remove(photo.imageUrl).onDataReady(new ByteArrayInputStream(bytes.toByteArray()));
+    }
+
+    @Test public void failedBunkrThumbnailDuringEntryDoesNotDiscardResolvedOriginal() throws Exception {
+        NativeContentItem photo = bunkrPhoto();
+        String original = "https://gallery.fixture/original.jpg";
+        List<String> invalidated = new ArrayList<>();
+        BunkrGalleryPagerAdapter viewer = new BunkrGalleryPagerAdapter(activity,
+                new BunkrGalleryPagerAdapter.Listener() {
+                    public void onMediaTap(int position, NativeContentItem item) { }
+                    public void onMediaLongPress(int position, NativeContentItem item) { }
+                    public void onResolvedImageFailed(int position, NativeContentItem item) {
+                        invalidated.add(item.url);
+                    }
+                });
+        list.setLayoutManager(new LinearLayoutManager(activity));
+        list.setAdapter(viewer);
+        viewer.setInitialSharedElement(photo.url, "entry");
+        viewer.replace(Collections.singletonList(photo), Collections.singletonMap(photo.url, original));
+
+        await(() -> pending.containsKey(photo.imageUrl));
+        pending.remove(photo.imageUrl).onLoadFailed(new IOException("Thumbnail unavailable"));
+        await(() -> {
+            BunkrGalleryPagerAdapter.Holder holder =
+                    (BunkrGalleryPagerAdapter.Holder) list.findViewHolderForAdapterPosition(0);
+            return holder != null && !holder.imageLoading;
+        });
+        assertEquals(original, viewer.resolvedUrl(0));
+        assertFalse(viewer.isFailed(0));
+        assertTrue(invalidated.isEmpty());
+
+        viewer.finishOpeningTransition();
+        await(() -> pending.containsKey(original));
+        pending.remove(original).onLoadFailed(new IOException("Original unavailable"));
+        await(() -> invalidated.size() == 1);
+        assertTrue(viewer.isFailed(0));
+        assertEquals("", viewer.resolvedUrl(0));
+
+        // A fresh resolution can return the same URL on a transient failure.
+        viewer.setResolvedUrl(0, original);
+        await(() -> pending.containsKey(original));
+        pending.remove(original).onDataReady(new ByteArrayInputStream(png(192, 144)));
+        await(() -> viewer.hasUsableArtwork(0));
+        assertFalse(viewer.isFailed(0));
+    }
+
+    private NativeContentItem bunkrPhoto() {
+        return new NativeContentItem(NativeContentItem.KIND_IMAGE, "Bunkr fixture",
+                "https://bunkr.cr/f/fixture", "https://gallery.fixture/thumb.jpg",
+                "", "Bunkr", "", "", "", 0L, 1f);
     }
 }

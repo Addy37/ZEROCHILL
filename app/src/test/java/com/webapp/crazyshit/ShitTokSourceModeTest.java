@@ -16,28 +16,52 @@ import static org.robolectric.util.ReflectionHelpers.ClassParameter.from;
 public class ShitTokSourceModeTest {
     @Test public void selectorOnlyAppearsForAllAndRestoresWithoutChangingCategory() {
         try (org.robolectric.android.controller.ActivityController<Activity> activity = Robolectric.buildActivity(Activity.class).setup()) {
-            ChaosFeedView feed = new ChaosFeedView(activity.get(), item -> {}, false);
+            java.util.concurrent.atomic.AtomicBoolean visible = new java.util.concurrent.atomic.AtomicBoolean();
+            ChaosFeedView feed = new ChaosFeedView(activity.get(), new ChaosFeedView.Host() {
+                public void openDetails(NativeContentItem item) { }
+                public void onSourceSelectorVisibilityChanged(boolean show) { visible.set(show); }
+            }, false);
             try {
                 for (ContentPreference mode : ContentPreference.values()) {
                     ContentPreference.set(activity.get(), mode);
                     ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
-                    assertEquals(mode == ContentPreference.ALL ? android.view.View.VISIBLE : android.view.View.GONE,
-                            feed.findViewWithTag("shittok_source_control").getVisibility());
+                    assertEquals(mode == ContentPreference.ALL, visible.get());
                     assertEquals(mode, ContentPreference.get(activity.get()));
+                    assertNull(feed.findViewWithTag("shittok_source_control"));
                 }
                 ContentPreference.set(activity.get(), ContentPreference.ALL);
                 ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
-                assertEquals(android.view.View.VISIBLE, feed.findViewWithTag("shittok_source_control").getVisibility());
+                assertTrue(visible.get());
             } finally { feed.close(); }
         }
     }
+    @Test public void selectorFillAndLabelFollowAccentWithoutChangingSelection() {
+        try (org.robolectric.android.controller.ActivityController<Activity> host =
+                     Robolectric.buildActivity(Activity.class).setup()) {
+            Activity activity = host.get();
+            ShitTokSourceMode.set(activity, ShitTokSourceMode.ONLY_FAP);
+            AppearanceTheme.setAccent(activity, AppearanceTheme.Accent.PURPLE);
+            ShitTokSourceControl control = new ShitTokSourceControl(activity);
+            android.view.View selection = ReflectionHelpers.getField(control, "selection");
+            android.widget.TextView label = control.findViewWithTag("shittok_source_onlyfap");
+            assertTrue(label.isSelected());
+            assertEquals(AppearanceTheme.Accent.PURPLE.color, label.getCurrentTextColor());
+            int fill = ((android.graphics.drawable.GradientDrawable) selection.getBackground()).getColors()[0];
+            assertEquals(AppearanceTheme.Accent.PURPLE.color & 0xFFFFFF, fill & 0xFFFFFF);
+        }
+    }
+
     @Test public void historicalViewingAndLikesDoNotExcludeValidCandidates() {
         try (org.robolectric.android.controller.ActivityController<Activity> activity = Robolectric.buildActivity(Activity.class).setup()) {
             ChaosFeedView feed = new ChaosFeedView(activity.get(), item -> {}, false);
             try {
                 NativeContentItem item = new NativeContentItem("media", "fixture", "https://kaotic.com/video/fixture", "", "", "Kaotic", "");
                 ShitTokSeenStore store = ShitTokSeenStore.get(activity.get());
-                store.watch(item.url, null); store.heart(item.url, null);
+                assertFalse(feed.shouldDeferHistory(item, Collections.emptySet()));
+                assertTrue(feed.shouldDeferHistory(item, Collections.singleton(item.url)));
+                store.heart(item.url, null);
+                assertTrue(feed.shouldDeferHistory(item, Collections.emptySet()));
+                store.watch(item.url, null);
                 assertFalse(ReflectionHelpers.callInstanceMethod(feed, "discoveryExcluded",
                         from(NativeContentItem.class, item), from(CrazyShitRepository.StreamInfo.class, null)));
             } finally { feed.close(); }
@@ -159,7 +183,8 @@ public class ShitTokSourceModeTest {
             ReflectionHelpers.callInstanceMethod(feed, "appendUnique", from(List.class, Arrays.asList(broad)));
             assertEquals(Arrays.asList(current), queue);
             assertEquals(learned, ShitTokSmartRanker.localScoreAt(broad, rankingInstant), 0f);
-            assertTrue(feed.findViewWithTag("shittok_source_onlyfap").isSelected());
+            ShitTokSourceControl selector = new ShitTokSourceControl(activity.get());
+            assertTrue(selector.findViewWithTag("shittok_source_onlyfap").isSelected());
             feed.close();
         }
     }

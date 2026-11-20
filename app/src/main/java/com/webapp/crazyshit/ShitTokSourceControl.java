@@ -1,46 +1,41 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
-import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import androidx.core.graphics.ColorUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/** Stationary glass capsule. Samples only the pager, never itself or Focus controls. */
+/** Source selector inside the shared glass header. */
 final class ShitTokSourceControl extends FrameLayout {
     private final Activity activity;
-    private final View source;
-    private final ViewPageBackdrop page;
     private final FrameLayout controls;
     private final View selection;
-    private ShitTokSelectedGlass selectedGlass;
     private final TextView[] labels = new TextView[2];
-    private boolean dirty = true, installed;
     private ShitTokSourceMode displayed;
     private int displayedAccent = Integer.MIN_VALUE;
 
-    ShitTokSourceControl(Activity activity, View source) {
+    ShitTokSourceControl(Activity activity) {
         super(activity);
-        this.activity = activity; this.source = source;
-        page = new ViewPageBackdrop(source);
+        this.activity = activity;
         setTag("shittok_source_control");
         controls = new FrameLayout(activity);
         controls.setPadding(dp(4), dp(4), dp(4), dp(4));
         GradientDrawable film = new GradientDrawable();
-        film.setColor(0x88202A32); film.setCornerRadius(dp(24));
-        film.setStroke(dp(1), 0x40CCDDE8); setBackground(film);
+        film.setColor(0xCC17171B);
+        film.setCornerRadius(dp(22));
+        film.setStroke(dp(1), 0x30FFFFFF);
+        setBackground(film);
         selection = new View(activity);
-        selection.setBackgroundResource(R.drawable.zc_nav_selected_glass);
-        controls.addView(selection, new LayoutParams(dp(82), -1));
+        controls.addView(selection, new LayoutParams(dp(56), -1));
         LinearLayout row = new LinearLayout(activity);
         for (ShitTokSourceMode mode : ShitTokSourceMode.values()) {
             TextView label = new TextView(activity);
             labels[mode.ordinal()] = label;
-            label.setText(mode.label); label.setTextSize(13); label.setGravity(Gravity.CENTER);
+            label.setText(mode.label); label.setTextSize(12); label.setGravity(Gravity.CENTER);
             label.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
             label.setContentDescription("ShitTok sources: " + mode.label);
             label.setTag("shittok_source_" + mode.value);
@@ -58,46 +53,25 @@ final class ShitTokSourceControl extends FrameLayout {
         int accent = AppearanceTheme.accent(activity);
         if (displayed == mode && displayedAccent == accent) return;
         displayed = mode;
-        displayedAccent = accent;
-        if (selectedGlass != null) selectedGlass.select(mode.ordinal());
+        if (displayedAccent != accent) {
+            GradientDrawable fill = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{ColorUtils.setAlphaComponent(accent, 54),
+                            ColorUtils.setAlphaComponent(accent, 26)});
+            fill.setCornerRadius(dp(18));
+            fill.setStroke(dp(1), ColorUtils.setAlphaComponent(accent, 120));
+            selection.setBackground(fill);
+            displayedAccent = accent;
+        }
         for (int i = 0; i < labels.length; i++) {
             labels[i].setTextColor(i == mode.ordinal() ? accent : 0xFFE0E7ED);
             labels[i].setSelected(i == mode.ordinal());
         }
         selection.animate().cancel();
-        float x = dp(82) * mode.ordinal();
+        float x = dp(56) * mode.ordinal();
         if (animate) selection.animate().translationX(x)
                 .setDuration(ZeroChillMotion.duration(activity, ZeroChillMotion.STANDARD_MS))
                 .setInterpolator(ZeroChillMotion.EASE_OUT).start();
         else selection.setTranslationX(x);
-    }
-    @Override protected void onAttachedToWindow() {
-        super.onAttachedToWindow();
-        View ancestor = this;
-        while (ancestor != null && !(ancestor instanceof FrostedNavigationLayout))
-            ancestor = ancestor.getParent() instanceof View ? (View) ancestor.getParent() : null;
-        if (!installed && ancestor != null) {
-            installed = true;
-            controls.removeView(selection);
-            selectedGlass = new ShitTokSelectedGlass(activity, page);
-            selectedGlass.select(displayed.ordinal());
-            controls.addView(selectedGlass, 0, new LayoutParams(-1, -1));
-            removeView(controls); setBackgroundColor(Color.TRANSPARENT);
-            GlassHeaderView glass = new GlassHeaderView(activity, controls, 24f, false, false, true, 0f);
-            glass.setPageBackdrop(page); addView(glass, new LayoutParams(-1, -1));
-        }
-    }
-    void invalidateBackdrop() { dirty = true; if (getVisibility() == VISIBLE) invalidate(); }
-    @Override protected void dispatchDraw(Canvas canvas) {
-        if (dirty && canvas.isHardwareAccelerated() && source.getWidth() > 0 && source.getHeight() > 0) {
-            dirty = false;
-            page.record(source.getWidth(), source.getHeight(), recording -> { source.draw(recording); return kotlin.Unit.INSTANCE; });
-        }
-        super.dispatchDraw(canvas);
-    }
-    @Override protected void onDetachedFromWindow() {
-        selection.animate().cancel(); page.release(); dirty = true;
-        super.onDetachedFromWindow();
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 }

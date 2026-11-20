@@ -42,6 +42,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private static final String PREF_SERIES_SOURCE = "native_series_source";
 
     public interface Host {
+        default void onShitTokSourceSelectorVisibilityChanged(boolean visible) { }
+
         void onOpenItem(NativeContentItem item);
 
         default void onOpenItemWithPlaybackIdent(NativeContentItem item) {
@@ -135,6 +137,11 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             @Override
             public void onClearDisplayChanged(boolean clear) {
                 host.onChaosClearDisplayChanged(clear);
+            }
+
+            @Override
+            public void onSourceSelectorVisibilityChanged(boolean visible) {
+                host.onShitTokSourceSelectorVisibilityChanged(visible);
             }
 
             @Override

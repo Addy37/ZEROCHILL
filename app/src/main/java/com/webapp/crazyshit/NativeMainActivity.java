@@ -329,6 +329,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             }
 
             @Override
+            public void onShitTokSourceSelectorVisibilityChanged(boolean visible) {
+                setShitTokSourceSelectorVisible(visible);
+            }
+
+            @Override
             public void onChaosTemporaryPinchChanged(boolean pinching) {
                 // Alpha preserves the fitted viewport and shell insets during the gesture.
                 if (topBar != null) topBar.setAlpha(pinching ? 0f : 1f);
@@ -552,6 +557,17 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         setContentView(overlayRoot);
     }
 
+    private ShitTokSourceControl shitTokSourceSelector;
+    private boolean shitTokSourceSelectorVisible = true;
+
+    void setShitTokSourceSelectorVisible(boolean visible) {
+        shitTokSourceSelectorVisible = visible;
+        if (shitTokSourceSelector == null) return;
+        shitTokSourceSelector.refresh(false);
+        shitTokSourceSelector.setVisibility(screen == Screen.CHAOS && visible
+                && ContentPreference.get(this) == ContentPreference.ALL ? View.VISIBLE : View.GONE);
+    }
+
     private View buildTopBar() {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
@@ -580,6 +596,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         labels.addView(headerSubtitle);
         headerSubtitle.setVisibility(View.GONE);
         bar.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        shitTokSourceSelector = new ShitTokSourceControl(this);
+        LinearLayout.LayoutParams sourceParams = new LinearLayout.LayoutParams(dp(120), dp(40));
+        sourceParams.setMarginEnd(dp(4));
+        bar.addView(shitTokSourceSelector, sourceParams);
+        setShitTokSourceSelectorVisible(shitTokSourceSelectorVisible);
 
         ImageView search = new ImageView(this);
         headerSearchControl = search;
@@ -820,6 +842,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         }
         if (headerSubtitle != null) headerSubtitle.setVisibility(View.GONE);
         applyChaosFullscreenChrome();
+        setShitTokSourceSelectorVisible(shitTokSourceSelectorVisible);
         if (position == MainPagerAdapter.PAGE_CHAOS) scheduleRatingPromptCheck();
     }
 
@@ -1567,6 +1590,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     @Override
     protected void onResume() {
         super.onResume();
+        setShitTokSourceSelectorVisible(shitTokSourceSelectorVisible);
         // Rebuild native colors once after returning from Appearance, never per glass slider tick.
         // The existing adapter saves the selected page when the Activity is recreated.
         if (!AppearanceTheme.colorSignature(this).equals(appliedAppearanceColors)) {
