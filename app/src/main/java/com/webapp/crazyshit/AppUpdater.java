@@ -1,19 +1,30 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.app.PendingIntent;
 import android.app.DownloadManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageInstaller;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
 import android.os.Environment;
+import android.util.Log;
+
+import java.io.File;
+import java.io.FileOutputStream;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
@@ -39,6 +50,12 @@ final class AppUpdater {
 
     private volatile boolean checking;
     private volatile boolean cancelDownload;
+    private volatile boolean cancelInstall;
+    private volatile boolean stagingInstall;
+    private boolean waitingForInstallPermission;
+    private long readyDownloadId = -1L;
+    private ReleaseInfo readyRelease;
+    private static final long MAX_UPDATE_APK_BYTES = 512L * 1024L * 1024L;
 
     AppUpdater(Activity activity) {
         this.activity = activity;
@@ -114,6 +131,14 @@ final class AppUpdater {
     void onHostResume() {
         if (betaChannel && consumePreviewRequest()) {
             previewUpdateExperience();
+        }
+        if (!waitingForInstallPermission) return;
+        waitingForInstallPermission = false;
+        if (activity.getPackageManager().canRequestPackageInstalls()) {
+            stageUpdateForAndroid(readyDownloadId, readyRelease);
+        } else if (readyRelease != null) {
+            card.showInstallFallback(readyRelease.version, this::openDownloads,
+                    () -> requestInstall(readyDownloadId, readyRelease));
         }
     }
 
@@ -321,6 +346,8 @@ final class AppUpdater {
         }
 
         cancelDownload = false;
+        readyDownloadId = -1L;
+        readyRelease = null;
         card.showDownloading(release.version, 0, 0L, -1L, () -> cancelDownload = true);
 
         try {
@@ -385,13 +412,13 @@ final class AppUpdater {
                     );
 
                     if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                        activity.runOnUiThread(() ->
-                                card.showReady(
-                                        release.version,
-                                        this::openDownloads,
-                                        card::dismiss
-                                )
-                        );
+                        activity.runOnUiThread(() -> {
+                            readyDownloadId = downloadId;
+                            readyRelease = release;
+                            card.showReady(release.version,
+                                    () -> requestInstall(downloadId, release),
+                                    this::openDownloads);
+                        });
                         return;
                     }
                     if (status == DownloadManager.STATUS_FAILED) {
@@ -424,6 +451,178 @@ final class AppUpdater {
         } catch (Exception ignored) {
         }
         showUpdateCard(release, currentVersion());
+    }
+
+
+    /**
+     * Only an explicit tap starts the Android installer. DownloadManager remains
+     * responsible for the download and its notification; Files/Downloads remains
+     * an option if the permission or install session is unavailable.
+     */
+    private void requestInstall(long downloadId, ReleaseInfo release) {
+        if (release == null || downloadId < 0 || stagingInstall) return;
+        readyDownloadId = downloadId;
+        readyRelease = release;
+        if (!activity.getPackageManager().canRequestPackageInstalls()) {
+            waitingForInstallPermission = true;
+            try {
+                activity.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:" + activity.getPackageName())));
+            } catch (Exception error) {
+                waitingForInstallPermission = false;
+                card.showInstallFallback(release.version, this::openDownloads,
+                        () -> requestInstall(downloadId, release));
+            }
+            return;
+        }
+        stageUpdateForAndroid(downloadId, release);
+    }
+
+    private void stageUpdateForAndroid(long downloadId, ReleaseInfo release) {
+        if (release == null || downloadId < 0 || stagingInstall) return;
+        DownloadManager manager = (DownloadManager) activity.getSystemService(Context.DOWNLOAD_SERVICE);
+        if (manager == null) {
+            card.showInstallFallback(release.version, this::openDownloads,
+                    () -> requestInstall(downloadId, release));
+            return;
+        }
+        stagingInstall = true;
+        cancelInstall = false;
+        card.showPreparing(release.version, () -> cancelInstall = true);
+        io.execute(() -> {
+            try {
+                long expectedSize;
+                try (Cursor cursor = manager.query(
+                        new DownloadManager.Query().setFilterById(downloadId))) {
+                    if (cursor == null || !cursor.moveToFirst()
+                            || cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                                    != DownloadManager.STATUS_SUCCESSFUL) {
+                        throw new IOException("Update download is missing or incomplete");
+                    }
+                    expectedSize = cursor.getLong(
+                            cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
+                }
+                Uri uri = manager.getUriForDownloadedFile(downloadId);
+                if (uri == null) throw new IOException("Downloaded APK is unavailable");
+                commitApkUri(uri, expectedSize);
+                activity.runOnUiThread(card::dismiss);
+            } catch (Exception error) {
+                Log.w("ZeroChillInstaller", "Downloaded APK installation failed", error);
+                activity.runOnUiThread(() -> {
+                    if (error instanceof InterruptedException) {
+                        card.showReady(release.version,
+                                () -> requestInstall(downloadId, release), this::openDownloads);
+                    } else {
+                        card.showInstallFallback(release.version, this::openDownloads,
+                                () -> requestInstall(downloadId, release));
+                    }
+                });
+            } finally {
+                stagingInstall = false;
+            }
+        });
+    }
+
+    /**
+     * Stage the exact APK returned by DownloadManager through Android's
+     * user-confirmed PackageInstaller session. Android validates the signing
+     * certificate and upgrade compatibility before installing.
+     */
+    private void commitApkUri(Uri uri, long expectedSize) throws Exception {
+        File apk = File.createTempFile("zerochill-update-", ".apk", activity.getCacheDir());
+        try {
+            long copied = 0L;
+            try (InputStream input = activity.getContentResolver().openInputStream(uri)) {
+                if (input == null) throw new IOException("Cannot read update APK");
+                try (FileOutputStream output = new FileOutputStream(apk)) {
+                    byte[] buffer = new byte[64 * 1024];
+                    int n;
+                    while ((n = input.read(buffer)) != -1) {
+                        if (cancelInstall || Thread.currentThread().isInterrupted()) {
+                            throw new InterruptedException("Install staging cancelled");
+                        }
+                        copied += n;
+                        if (copied > MAX_UPDATE_APK_BYTES || (expectedSize > 0 && copied > expectedSize)) {
+                            throw new IOException("Downloaded APK exceeds expected size");
+                        }
+                        output.write(buffer, 0, n);
+                    }
+                    output.getFD().sync();
+                }
+            }
+            if (!validDownloadedSize(copied, expectedSize)) {
+                throw new IOException("APK size differs from completed download");
+            }
+
+            PackageManager pm = activity.getPackageManager();
+            PackageInfo archive = pm.getPackageArchiveInfo(apk.getAbsolutePath(), 0);
+            PackageInfo installed = pm.getPackageInfo(activity.getPackageName(), 0);
+            if (archive == null || !activity.getPackageName().equals(archive.packageName)) {
+                throw new IOException("APK belongs to another application");
+            }
+            long archiveVersion = Build.VERSION.SDK_INT >= 28
+                    ? archive.getLongVersionCode() : archive.versionCode;
+            long installedVersion = Build.VERSION.SDK_INT >= 28
+                    ? installed.getLongVersionCode() : installed.versionCode;
+            if (!isNewerPackageVersion(archiveVersion, installedVersion)) {
+                throw new IOException("APK is not newer than the installed version");
+            }
+
+            PackageInstaller installer = pm.getPackageInstaller();
+            int sessionId = -1;
+            boolean committed = false;
+            try {
+                PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
+                        PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+                params.setAppPackageName(activity.getPackageName());
+                params.setInstallReason(PackageManager.INSTALL_REASON_USER);
+                params.setSize(copied);
+                if (Build.VERSION.SDK_INT >= 31) {
+                    params.setRequireUserAction(
+                            PackageInstaller.SessionParams.USER_ACTION_REQUIRED);
+                }
+                sessionId = installer.createSession(params);
+                try (PackageInstaller.Session session = installer.openSession(sessionId)) {
+                    try (InputStream input = new java.io.FileInputStream(apk);
+                         OutputStream output = session.openWrite("base.apk", 0, copied)) {
+                        byte[] buffer = new byte[64 * 1024];
+                        int n;
+                        while ((n = input.read(buffer)) != -1) {
+                            if (cancelInstall || Thread.currentThread().isInterrupted()) {
+                                throw new InterruptedException("Install staging cancelled");
+                            }
+                            output.write(buffer, 0, n);
+                        }
+                        session.fsync(output);
+                    }
+                    if (cancelInstall) throw new InterruptedException("Install staging cancelled");
+                    Intent callback = new Intent(activity, UpdateInstallReceiver.class)
+                            .setAction("com.webapp.crazyshit.UPDATE_INSTALL_RESULT");
+                    PendingIntent status = PendingIntent.getBroadcast(activity, sessionId, callback,
+                            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
+                    session.commit(status.getIntentSender());
+                    committed = true;
+                }
+            } finally {
+                if (!committed && sessionId >= 0) {
+                    try {
+                        installer.abandonSession(sessionId);
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        } finally {
+            // PackageInstaller owns its staged copy after commit.
+            if (!apk.delete()) apk.deleteOnExit();
+        }
+    }
+
+    static boolean isNewerPackageVersion(long candidate, long installed) {
+        return candidate > installed;
+    }
+
+    static boolean validDownloadedSize(long written, long expected) {
+        return written > 0 && (expected <= 0 || written == expected);
     }
 
     private void openDownloads() {

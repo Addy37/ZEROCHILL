@@ -92,7 +92,11 @@ public class ShitTokAudioOwnershipTest {
 
     static final class Fixture implements AutoCloseable {
         final ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
-        final ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { }, false);
+        boolean sourceSelectorVisible = true;
+        final ChaosFeedView feed = new ChaosFeedView(host.get(), new ChaosFeedView.Host() {
+            public void openDetails(NativeContentItem item) { }
+            public void onSourceSelectorVisibilityChanged(boolean visible) { sourceSelectorVisible = visible; }
+        }, false);
         final Object selected, offscreen, duplicate;
         final FakePlayer selectedPlayer = new FakePlayer();
         final FakePlayer offscreenPlayer = new FakePlayer();

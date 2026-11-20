@@ -103,7 +103,7 @@ public class ShitTokFocusModeViewportTest {
                     .idleFor(Duration.ofMillis(120));
 
             assertTrue(pinch.isFocusMode());
-            assertEquals(View.GONE, f.feed.findViewWithTag("shittok_source_control").getVisibility());
+            assertFalse(f.sourceSelectorVisible);
             assertTrue(pager.isUserInputEnabled());
             assertEquals(originalBottomPadding, root.getPaddingBottom());
             assertEquals("floating controls must not refit the picture",
@@ -116,7 +116,7 @@ public class ShitTokFocusModeViewportTest {
                     .idleFor(Duration.ofMillis(120));
 
             assertFalse(pinch.isFocusMode());
-            assertEquals(View.VISIBLE, f.feed.findViewWithTag("shittok_source_control").getVisibility());
+            assertTrue(f.sourceSelectorVisible);
             assertTrue(pager.isUserInputEnabled());
             assertEquals(originalBottomPadding, root.getPaddingBottom());
             assertEquals(originalPlayerHeight, playerView.getLayoutParams().height);

@@ -24,19 +24,18 @@ import static org.robolectric.util.ReflectionHelpers.ClassParameter.from;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class ShitTokContinuityTest {
-    @Test public void seenAndHeartedCandidatesRemainAvailableToFillRunwayAfterDryBatches() {
+    @Test public void seenAndHeartedCandidatesFillAnEmptyRunwayOnItsFirstRefill() {
         try (Fixture f = new Fixture()) {
             ShitTokSeenStore store = ReflectionHelpers.getField(f.feed, "seenStore");
             store.watch(item("seen").url, null);
             store.heart(item("liked").url, null);
-            ReflectionHelpers.setField(f.feed, "consecutiveDryLoads", 3);
-            f.candidates("seen", "liked", "fresh");
+            f.candidates("seen", "liked");
             call(f.feed, "loadMorePool"); f.io.tasks.removeFirst().run();
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
-            assertEquals(4, f.items.size());
+            assertEquals(3, f.items.size());
             Set<String> titles = new HashSet<>();
             for (NativeContentItem candidate : f.items) titles.add(candidate.title);
-            assertTrue(titles.containsAll(Arrays.asList("seen", "liked", "fresh")));
+            assertTrue(titles.containsAll(Arrays.asList("seen", "liked")));
             assertEquals(0, ((java.util.concurrent.atomic.AtomicInteger) ReflectionHelpers.getField(f.feed, "seenRejected")).get());
             assertEquals(0, ((java.util.concurrent.atomic.AtomicInteger) ReflectionHelpers.getField(f.feed, "likedRejected")).get());
         }

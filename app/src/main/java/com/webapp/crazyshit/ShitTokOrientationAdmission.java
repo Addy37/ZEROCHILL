@@ -243,6 +243,15 @@ final class ShitTokOrientationAdmission {
             BooleanSupplier productionDone, Resolver resolver, BooleanSupplier allowedWork,
             BooleanSupplier demand, java.util.function.IntSupplier maxItems,
             Consumer<Result> onVerified, java.util.function.IntConsumer activeCount) {
+        return admitConcurrent(candidates, productionDone, item -> false, resolver, allowedWork,
+                demand, maxItems, onVerified, activeCount);
+    }
+
+    Result admitConcurrent(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
+            BooleanSupplier productionDone, java.util.function.Predicate<NativeContentItem> historical,
+            Resolver resolver, BooleanSupplier allowedWork, BooleanSupplier demand,
+            java.util.function.IntSupplier maxItems, Consumer<Result> onVerified,
+            java.util.function.IntConsumer activeCount) {
         ArrayList<NativeContentItem> admitted = new ArrayList<>(), remaining = new ArrayList<>();
         Map<String, CrazyShitRepository.StreamInfo> streams = new LinkedHashMap<>();
         long started = clock.getAsLong();
@@ -271,7 +280,7 @@ final class ShitTokOrientationAdmission {
                             && demand.getAsBoolean()) {
                         ArrayList<NativeContentItem> busy = new ArrayList<>();
                         for (Pending task : pending.values()) busy.add(task.item);
-                        NativeContentItem item = nextCandidate(candidates, busy, productionDone.getAsBoolean(), remaining, attempts);
+                        NativeContentItem item = nextCandidate(candidates, busy, productionDone.getAsBoolean(), remaining, attempts, historical);
                         if (item == null) { waitingForHealth = true; break; }
                         if (pending.containsKey(item.url)) continue;
                         attempts++;
@@ -358,7 +367,8 @@ final class ShitTokOrientationAdmission {
 
     private NativeContentItem nextCandidate(java.util.concurrent.BlockingQueue<NativeContentItem> candidates,
             java.util.Collection<NativeContentItem> active, boolean productionDone,
-            List<NativeContentItem> remaining, int attempt) {
+            List<NativeContentItem> remaining, int attempt,
+            java.util.function.Predicate<NativeContentItem> historical) {
         Map<String, Integer> counts = new java.util.HashMap<>();
         for (NativeContentItem item : active) counts.merge(ShitTokAspectPriority.sourceKey(item), 1, Integer::sum);
         synchronized (candidates) {
@@ -400,7 +410,7 @@ final class ShitTokOrientationAdmission {
                     for (int i = 0; i < eligible.size(); i++) {
                         NativeContentItem item = eligible.get(i);
                         if (trustedHint(item) && ShitTokOrientation.eligible(item.aspectRatioHint)
-                                && (index < 0 || opportunity(item) > opportunity(eligible.get(index)))) index = i;
+                                && (index < 0 || opportunity(item, historical) > opportunity(eligible.get(index), historical))) index = i;
                     }
                     selected = eligible.remove(index);
                 } else if (attempt % 4 == 3) {
@@ -410,7 +420,7 @@ final class ShitTokOrientationAdmission {
                     for (int i = 1; i < eligible.size(); i++) {
                         NativeContentItem current = eligible.get(i);
                         NativeContentItem best = eligible.get(bestIndex);
-                        if (opportunity(current) > opportunity(best)) bestIndex = i;
+                        if (opportunity(current, historical) > opportunity(best, historical)) bestIndex = i;
                     }
                     selected = eligible.remove(bestIndex);
                 }
@@ -427,10 +437,13 @@ final class ShitTokOrientationAdmission {
 
     private final Map<String, Long> admissionTurns = new LinkedHashMap<>();
     private long admissionTurn;
-    private double opportunity(NativeContentItem item) {
+    private double opportunity(NativeContentItem item,
+            java.util.function.Predicate<NativeContentItem> historical) {
         long age = admissionTurn - admissionTurns.getOrDefault(ShitTokAspectPriority.sourceKey(item), 0L);
         return Math.min(8, age) + Math.max(-2f, Math.min(2f, ShitTokSmartRanker.score(item)))
-                + (trustedHint(item) ? .5 : 0) - (creatorScheduling ? health.cost(ShitTokAspectPriority.sourceKey(item)) : 0);
+                + (trustedHint(item) ? .5 : 0)
+                - (creatorScheduling ? health.cost(ShitTokAspectPriority.sourceKey(item)) : 0)
+                - (historical.test(item) ? .75 : 0);
     }
     void close() { cancelPending(); inventoryIo.shutdownNow(); }
 

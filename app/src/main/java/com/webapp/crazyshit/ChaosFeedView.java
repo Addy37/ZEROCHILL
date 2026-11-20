@@ -101,7 +101,6 @@ public final class ChaosFeedView extends FrameLayout {
     @Override public void onDescendantInvalidated(View child, View target) {
         super.onDescendantInvalidated(child, target);
         if (child == pager) {
-            if (sourceControl != null) sourceControl.invalidateBackdrop();
             for (int i = 0; i < getChildCount(); i++) {
                 if (getChildAt(i) instanceof ShitTokFocusControls) {
                     ((ShitTokFocusControls) getChildAt(i)).invalidateBackdrop();
@@ -114,6 +113,9 @@ public final class ChaosFeedView extends FrameLayout {
         void openDetails(NativeContentItem item);
 
         default void onClearDisplayChanged(boolean clear) {
+        }
+
+        default void onSourceSelectorVisibilityChanged(boolean visible) {
         }
 
         default void onTemporaryPinchChanged(boolean pinching) {
@@ -215,7 +217,6 @@ public final class ChaosFeedView extends FrameLayout {
     private final ShitTokSessionResume sessionResume = new ShitTokSessionResume();
 
     private ViewPager2 pager;
-    private ShitTokSourceControl sourceControl;
     private ChaosAdapter adapter;
     private TextView empty;
     private ProgressBar initialProgress;
@@ -382,21 +383,6 @@ public final class ChaosFeedView extends FrameLayout {
         empty.setText("Loading ShitTok…");
         empty.setVisibility(View.GONE);
         addView(empty, new FrameLayout.LayoutParams(-1, -1));
-
-        sourceControl = new ShitTokSourceControl(activity, pager);
-        FrameLayout.LayoutParams sourceParams = new FrameLayout.LayoutParams(dp(172), dp(44), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        sourceParams.topMargin = dp(8);
-        addView(sourceControl, sourceParams);
-        updateSourceControlVisibility();
-        ViewCompat.setOnApplyWindowInsetsListener(sourceControl, (view, insets) -> {
-            int status = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
-            int[] location = new int[2]; getLocationInWindow(location);
-            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
-            int top = Math.max(dp(8), status - location[1] + dp(8));
-            if (params.topMargin != top) { params.topMargin = top; view.setLayoutParams(params); }
-            return insets;
-        });
-        sourceControl.post(() -> ViewCompat.requestApplyInsets(sourceControl));
 
         pager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override public void onPageScrolled(int position, float offset, int offsetPixels) {
@@ -1126,7 +1112,6 @@ public final class ChaosFeedView extends FrameLayout {
         if (closed) return;
         ContentPreference current = ContentPreference.get(activity);
         ShitTokSourceMode currentSources = ShitTokSourceMode.get(activity);
-        if (sourceControl != null) sourceControl.refresh(false);
         updateSourceControlVisibility();
         if (queuePreference == null) { queuePreference = current; queueSources = currentSources; return; }
         if (queuePreference == current && queueSources == currentSources) return;
@@ -1294,6 +1279,9 @@ public final class ChaosFeedView extends FrameLayout {
     final Set<String> blockedSnapshot = new HashSet<>(blockedCreatorKeys);
 
     final boolean startupBatch = items.isEmpty();
+    // Use history to rank choices once playback has a runway. During startup and
+    // recovery, there is no extra history gate between the provider and admission.
+    final boolean rankByHistory = !startupBatch && usableUpcomingCount() > 0;
     io.execute(() -> {
         if (work.cancelled || batchGeneration != feedGeneration || closed) return;
         if (startupBatch) AppPerformance.startup("feed_worker");
@@ -1301,6 +1289,7 @@ public final class ChaosFeedView extends FrameLayout {
         java.util.concurrent.BlockingQueue<NativeContentItem> candidates =
                 new java.util.concurrent.ArrayBlockingQueue<>(48);
         Set<String> offered = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        Set<String> historicalCandidates = java.util.concurrent.ConcurrentHashMap.newKeySet();
         Set<String> resolvedIdentities = java.util.concurrent.ConcurrentHashMap.newKeySet();
         resolvedIdentities.addAll(identitySnapshot);
         java.util.concurrent.atomic.AtomicBoolean productionDone = new java.util.concurrent.atomic.AtomicBoolean();
@@ -1328,6 +1317,7 @@ public final class ChaosFeedView extends FrameLayout {
                 // Partial provider results appear again in the final mix. Do not count this
                 // internal replay as a new fetched duplicate or spend another lookup.
                 if (!offered.add(identity)) continue;
+                if (rankByHistory && hasWatchHistory(item, recentSnapshot)) historicalCandidates.add(item.url);
                 fresh.add(item);
             }
             synchronized (candidates) { for (NativeContentItem item : fresh) {
@@ -1387,7 +1377,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (work.cancelled) harvest.cancel(true);
         final int[] publishedFresh = {0};
         ShitTokOrientationAdmission.Result verified = orientationAdmission.admitConcurrent(candidates, productionDone::get,
-                item -> {
+                item -> historicalCandidates.contains(item.url), item -> {
                     long at = android.os.SystemClock.elapsedRealtime();
                     inventoryResolutionSlots.acquire();
                     inventoryResolutions.incrementAndGet();
@@ -1475,7 +1465,6 @@ public final class ChaosFeedView extends FrameLayout {
             if (freshAdded == 0 && !verified.deferred) { consecutiveDryLoads++; dryRefillCount++; modeDryRefills++; }
             else if (freshAdded > 0) consecutiveDryLoads = 0;
 
-            // Freshness never relaxes after dry batches. Recovery keeps exploring existing sources.
             int added = items.size() - before;
             if (added > 0 && freshAdded == 0) consecutiveDryLoads = 0;
 
@@ -1854,9 +1843,13 @@ public final class ChaosFeedView extends FrameLayout {
                 && (!sources.creatorInventory(mode) || sourceMixer.matchesPreference(item, mode));
     }
 
+    boolean hasWatchHistory(NativeContentItem item, Set<String> recent) {
+        return recent.contains(item.url) || seenStore.seen(item.url, null) || seenStore.liked(item.url, null);
+    }
+
     private boolean discoveryExcluded(NativeContentItem item, CrazyShitRepository.StreamInfo stream) {
         if (!eligiblePreference(item, ContentPreference.get(activity))) return true;
-        // Historical viewing and saved content inform ranking, not eligibility.
+        // History influences scheduling only when there is playable inventory ahead.
         return false;
     }
 
@@ -2694,8 +2687,9 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void updateSourceControlVisibility() {
-        if (sourceControl != null) sourceControl.setVisibility(ContentPreference.get(activity) != ContentPreference.ALL || clearDisplay || manualFullscreen
-                || pinchingHolder != null && pinchingHolder.pinch.suppressesFeedChrome() ? View.GONE : View.VISIBLE);
+        host.onSourceSelectorVisibilityChanged(ContentPreference.get(activity) == ContentPreference.ALL
+                && !clearDisplay && !manualFullscreen
+                && (pinchingHolder == null || !pinchingHolder.pinch.suppressesFeedChrome()));
     }
 
     private void resetTemporaryPinch(boolean preserveFocusForPaging) {
