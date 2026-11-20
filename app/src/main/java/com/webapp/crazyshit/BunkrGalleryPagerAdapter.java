@@ -349,8 +349,10 @@ final class BunkrGalleryPagerAdapter
         root.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
         ShowsFullscreenControls controls = new ShowsFullscreenControls(playerView);
         FullscreenVideoGestures gestures = new FullscreenVideoGestures(
-                playerView, playerView::getPlayer, controls, () -> playerView.getPlayer() != null,
-                false, () -> { if (unifiedVideoChrome) listener.onVideoSurfaceTap(); else controls.onVideoTap(); });
+                playerView, playerView::getPlayer, () -> {
+                    if (unifiedVideoChrome) listener.onVideoSurfaceTap();
+                    else controls.onVideoTap();
+                }, () -> playerView.getPlayer() != null);
         playerView.setOnTouchListener(gestures);
         for (int id : new int[] { R.id.shows_save, R.id.shows_share, R.id.shows_like })
             playerView.findViewById(id).setVisibility(View.GONE);

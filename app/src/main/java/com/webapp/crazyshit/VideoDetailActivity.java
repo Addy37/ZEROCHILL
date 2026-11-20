@@ -652,7 +652,10 @@ public class VideoDetailActivity extends Activity {
             haptic(v); setRotatableFullscreen(!rotatableFullscreen);
         });
         fullscreenGestures = new FullscreenVideoGestures(
-                playerView, () -> player, fullscreenControls, () -> fullscreenChromeActive, showsOrigin);
+                playerView, () -> player, () -> {
+                    if (fullscreenChromeActive) fullscreenControls.onVideoTap();
+                    else playerView.performClick();
+                }, () -> !minimizing, showsOrigin, () -> {});
         playerView.setOnTouchListener(fullscreenGestures);
 
         View playerBack = playerView.findViewById(R.id.player_back);
@@ -773,8 +776,9 @@ public class VideoDetailActivity extends Activity {
                     showsRailScroll, showsLandscapeActions, fullscreenControls,
                     Math.round(199f * showsLandscapeScale()));
             fullscreenControls.setLandscapeVisibilityListener(showsLandscapeMotion::visible);
-            fullscreenOverlay.findViewById(R.id.shows_fullscreen_chrome)
-                    .setOnClickListener(v -> fullscreenControls.onVideoTap());
+            View chrome = fullscreenOverlay.findViewById(R.id.shows_fullscreen_chrome);
+            chrome.setOnClickListener(v -> fullscreenControls.onVideoTap());
+            chrome.setOnTouchListener(fullscreenGestures);
         }
 
         loading = new ZeroChillProgressBar(this);
@@ -3149,11 +3153,11 @@ public class VideoDetailActivity extends Activity {
         fullscreenChromeActive = fullscreen;
         playerView.setUseController(!fullscreen);
         if (fullscreen && changed) fullscreenOverlay.setVisibility(View.VISIBLE);
-        if (changed) fullscreenControls.suspend(!fullscreen);
-        if (!fullscreen) {
-            fullscreenOverlay.setVisibility(View.GONE);
+        if (changed) {
+            fullscreenControls.suspend(!fullscreen);
             if (fullscreenGestures != null) fullscreenGestures.cancel();
         }
+        if (!fullscreen) fullscreenOverlay.setVisibility(View.GONE);
         if (fullscreen) {
             ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(
                     isBunkrAlbumWatch() ? BunkrAlbumTitles.display(currentContent()) : title);
@@ -3781,6 +3785,7 @@ public class VideoDetailActivity extends Activity {
                 showsNextOverlay.setVisibility(View.GONE);
             }
         }
+        if (fullscreenGestures != null) fullscreenGestures.cancel();
         if (orientationListener != null) orientationListener.disable();
         stopPortraitProgressTicker();
         super.onPause();

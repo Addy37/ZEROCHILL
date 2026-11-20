@@ -1,158 +1,209 @@
 package com.webapp.crazyshit;
 
-import android.view.GestureDetector;
-import android.view.Gravity;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
-import android.widget.TextView;
+
 import androidx.core.view.ViewCompat;
 import androidx.media3.common.Player;
 import androidx.media3.ui.PlayerView;
+
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
-/** Surface taps only. Parents keep drag interception; transport controls keep their own touches. */
+/** Surface taps only. Parents keep drag interception and controls keep their own touches. */
 @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 final class FullscreenVideoGestures implements View.OnTouchListener {
+    private static final int SEEK_SECONDS = 10;
+    private static final long REPEAT_TIMEOUT_MS = 650L;
+
     private final PlayerView surface;
     private final Supplier<Player> player;
-    private final ShowsFullscreenControls controls;
     private final BooleanSupplier enabled;
-    private final GestureDetector detector;
-    private final TextView feedback;
+    private final Runnable onTap;
+    private final Runnable onSeek;
     private final boolean immediateSingleTap;
-    private final Runnable singleTap;
-    private boolean dragged;
-    private final Runnable clearFeedback = () -> feedbackGone();
+    private final VideoSeekFeedback feedback;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final int touchSlop;
+    private final int doubleTapSlop;
+    private final Runnable confirmSingleTap = this::confirmTap;
+    private final Runnable longPress = this::performLongPress;
+
+    private boolean tracking;
+    private boolean pendingTap;
+    private boolean seekOnUp;
+    private float downX;
+    private float downY;
+    private long downTime;
+    private float tapX;
+    private float tapY;
+    private long tapUpTime;
+    private int seekSeconds;
+    private long seekTime;
 
     FullscreenVideoGestures(PlayerView surface, Supplier<Player> player,
-            ShowsFullscreenControls controls, BooleanSupplier enabled) {
-        this(surface, player, controls, enabled, false);
+            Runnable onTap, BooleanSupplier enabled) {
+        this(surface, player, onTap, enabled, false, () -> {});
     }
 
     FullscreenVideoGestures(PlayerView surface, Supplier<Player> player,
-            ShowsFullscreenControls controls, BooleanSupplier enabled, boolean immediateSingleTap) {
-        this(surface, player, controls, enabled, immediateSingleTap, null);
-    }
-
-    FullscreenVideoGestures(PlayerView surface, Supplier<Player> player,
-            ShowsFullscreenControls controls, BooleanSupplier enabled, boolean immediateSingleTap,
-            Runnable singleTap) {
-        this.singleTap = singleTap;
+            Runnable onTap, BooleanSupplier enabled, boolean immediateSingleTap, Runnable onSeek) {
         this.surface = surface;
         this.player = player;
-        this.controls = controls;
+        this.onTap = onTap;
         this.enabled = enabled;
+        this.onSeek = onSeek;
         this.immediateSingleTap = immediateSingleTap;
-        feedback = BrowseUi.text(surface.getContext(), "", 14, android.graphics.Color.WHITE);
-        feedback.setGravity(Gravity.CENTER);
-        feedback.setPadding(dp(14), dp(10), dp(14), dp(10));
-        feedback.setBackground(BrowseUi.rounded(surface.getContext(), 0xC014181D, 18));
-        feedback.setVisibility(View.GONE);
-        feedback.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        surface.addView(feedback, new FrameLayout.LayoutParams(-2, -2));
-        detector = new GestureDetector(surface.getContext(), new GestureDetector.SimpleOnGestureListener() {
-            @Override public boolean onDown(MotionEvent e) { dragged = false; return true; }
-            @Override public boolean onSingleTapUp(MotionEvent e) {
-                if (FullscreenVideoGestures.this.immediateSingleTap && enabled.getAsBoolean())
-                    dispatchSingleTap();
-                return true;
-            }
-            @Override public boolean onSingleTapConfirmed(MotionEvent e) {
-                if (!FullscreenVideoGestures.this.immediateSingleTap && enabled.getAsBoolean())
-                    dispatchSingleTap();
-                return true;
-            }
-            @Override public boolean onDoubleTap(MotionEvent e) { return true; }
-            @Override public boolean onDoubleTapEvent(MotionEvent e) {
-                if (e.getActionMasked() == MotionEvent.ACTION_UP) {
-                    if (!dragged && enabled.getAsBoolean()) seek(e.getX() >= surface.getWidth() / 2f);
-                }
-                return true;
-            }
-            @Override public boolean onScroll(MotionEvent first, MotionEvent next, float dx, float dy) {
-                dragged = true;
-                return false;
-            }
-            @Override public void onLongPress(MotionEvent e) {
-                if (enabled.getAsBoolean()) surface.performLongClick();
-            }
+        ViewConfiguration configuration = ViewConfiguration.get(surface.getContext());
+        touchSlop = configuration.getScaledTouchSlop();
+        doubleTapSlop = configuration.getScaledDoubleTapSlop();
+        feedback = new VideoSeekFeedback(surface.getContext());
+        surface.addView(feedback, new FrameLayout.LayoutParams(-1, -1));
+        surface.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View view) {}
+            @Override public void onViewDetachedFromWindow(View view) { cancel(); }
         });
-        ViewCompat.addAccessibilityAction(surface, "Show or hide video controls", (v, args) -> {
-            if (!enabled.getAsBoolean()) return false;
-            dispatchSingleTap(); return true;
-        });
-        ViewCompat.addAccessibilityAction(surface, "Rewind 10 seconds", (v, args) -> {
-            if (!enabled.getAsBoolean()) return false;
-            seek(false); return true;
-        });
-        ViewCompat.addAccessibilityAction(surface, "Forward 10 seconds", (v, args) -> {
-            if (!enabled.getAsBoolean()) return false;
-            seek(true); return true;
-        });
+        ViewCompat.addAccessibilityAction(surface, surface.getContext().getString(R.string.video_toggle_controls),
+                (view, args) -> {
+                    if (!enabled.getAsBoolean()) return false;
+                    cancel();
+                    onTap.run();
+                    return true;
+                });
+        ViewCompat.addAccessibilityAction(surface, surface.getContext().getString(R.string.video_rewind_action),
+                (view, args) -> seekFromAccessibility(false));
+        ViewCompat.addAccessibilityAction(surface, surface.getContext().getString(R.string.video_forward_action),
+                (view, args) -> seekFromAccessibility(true));
     }
 
-    private void dispatchSingleTap() {
-        if (singleTap != null) singleTap.run(); else controls.onVideoTap();
-    }
-
-    @Override public boolean onTouch(View v, MotionEvent event) {
-        if (!enabled.getAsBoolean()) return false;
-        // Never call requestDisallowInterceptTouchEvent: a scrolling/paging parent can cancel us.
+    @Override public boolean onTouch(View view, MotionEvent event) {
+        if (!enabled.getAsBoolean()) {
+            cancel();
+            return false;
+        }
         if (event.getPointerCount() > 1 || event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
             cancel();
             return true;
         }
-        // onDoubleTapEvent bypasses onScroll, so independently reject movement after the second down.
-        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-            downX = event.getX(); downY = event.getY();
-        } else if (event.getActionMasked() == MotionEvent.ACTION_MOVE &&
-                Math.hypot(event.getX() - downX, event.getY() - downY) >
-                        android.view.ViewConfiguration.get(v.getContext()).getScaledTouchSlop()) dragged = true;
-        detector.onTouchEvent(event);
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                beginTap(event);
+                break;
+            case MotionEvent.ACTION_MOVE:
+                if (tracking && movedBeyondSlop(event)) cancel();
+                break;
+            case MotionEvent.ACTION_UP:
+                if (tracking) {
+                    boolean held = event.getEventTime() - downTime >= ViewConfiguration.getLongPressTimeout();
+                    if (held || movedBeyondSlop(event) || isForward(event.getX()) != isForward(downX)) {
+                        cancel();
+                    } else finishTap(event);
+                }
+                break;
+            default:
+                break;
+        }
         return true;
     }
 
-    private float downX, downY;
+    private void beginTap(MotionEvent event) {
+        downX = event.getX();
+        downY = event.getY();
+        downTime = event.getEventTime();
+        tracking = true;
+        boolean forward = isForward(downX);
+        // Once a pair has sought, every timely tap on that half adds one step.
+        boolean repeating = seekSeconds != 0 && (seekSeconds > 0) == forward
+                && event.getEventTime() - seekTime <= REPEAT_TIMEOUT_MS;
+        if (!repeating) seekSeconds = 0;
+        boolean doubleTap = pendingTap && isForward(tapX) == forward
+                && event.getEventTime() - tapUpTime <= ViewConfiguration.getDoubleTapTimeout()
+                && Math.hypot(downX - tapX, downY - tapY) <= doubleTapSlop;
+        seekOnUp = repeating || doubleTap;
+        handler.removeCallbacks(confirmSingleTap);
+        if (doubleTap) pendingTap = false;
+        else if (pendingTap) confirmTap();
+        if (surface.isLongClickable()) {
+            handler.postAtTime(longPress, downTime + ViewConfiguration.getLongPressTimeout());
+        }
+    }
 
-    void seek(boolean forward) {
+    private void finishTap(MotionEvent event) {
+        tracking = false;
+        handler.removeCallbacks(longPress);
+        if (seekOnUp) {
+            seek(isForward(downX), event.getX(), event.getY(), event.getEventTime());
+            return;
+        }
+        pendingTap = true;
+        tapX = downX;
+        tapY = downY;
+        tapUpTime = event.getEventTime();
+        if (immediateSingleTap) onTap.run();
+        handler.postAtTime(confirmSingleTap, tapUpTime + ViewConfiguration.getDoubleTapTimeout());
+    }
+
+    private boolean movedBeyondSlop(MotionEvent event) {
+        return Math.hypot(event.getX() - downX, event.getY() - downY) > touchSlop;
+    }
+
+    private boolean isForward(float x) {
+        return x >= surface.getWidth() / 2f;
+    }
+
+    private void confirmTap() {
+        pendingTap = false;
+        if (!immediateSingleTap && enabled.getAsBoolean()) onTap.run();
+    }
+
+    private void performLongPress() {
+        cancel();
+        if (enabled.getAsBoolean()) surface.performLongClick();
+    }
+
+    private boolean seekFromAccessibility(boolean forward) {
+        if (!enabled.getAsBoolean()) return false;
+        cancel();
+        boolean handled = seek(forward, surface.getWidth() * (forward ? .75f : .25f),
+                surface.getHeight() / 2f, SystemClock.uptimeMillis());
+        if (handled) {
+            surface.announceForAccessibility(surface.getContext().getString(
+                    forward ? R.string.video_forward_action : R.string.video_rewind_action));
+            seekSeconds = 0;
+        }
+        return handled;
+    }
+
+    private boolean seek(boolean forward, float x, float y, long eventTime) {
         Player current = player.get();
-        if (current == null || !current.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) return;
-        long target = Math.max(0L, current.getCurrentPosition() + (forward ? 10_000L : -10_000L));
+        if (current == null || !current.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) {
+            return false;
+        }
         long duration = current.getDuration();
-        current.seekTo(duration > 0L ? Math.min(duration, target) : target);
-        controls.show();
-        feedback.removeCallbacks(clearFeedback);
-        feedback.animate().cancel();
-        feedback.setText(forward ? "Forward 10s  ››" : "‹‹  Rewind 10s");
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) feedback.getLayoutParams();
-        params.gravity = Gravity.CENTER_VERTICAL | (forward ? Gravity.RIGHT : Gravity.LEFT);
-        params.leftMargin = params.rightMargin = Math.max(dp(12), surface.getWidth() / 12);
-        feedback.setLayoutParams(params);
-        feedback.setAlpha(1f);
-        feedback.setVisibility(View.VISIBLE);
-        feedback.postDelayed(clearFeedback, 650L);
-        surface.announceForAccessibility(forward ? "Forward 10 seconds" : "Rewind 10 seconds");
+        if (duration <= 0L) return false;
+
+        long position = current.getCurrentPosition();
+        int step = forward ? SEEK_SECONDS : -SEEK_SECONDS;
+        long target = Math.max(0L, Math.min(duration, position + step * 1000L));
+        if (target != position) current.seekTo(target);
+        seekSeconds += step;
+        seekTime = eventTime;
+        feedback.show(forward, Math.abs(seekSeconds), x, y);
+        onSeek.run();
+        return true;
     }
 
     void cancel() {
-        dragged = true;
-        long now = android.os.SystemClock.uptimeMillis();
-        MotionEvent canceled = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 0f, 0f, 0);
-        detector.onTouchEvent(canceled);
-        canceled.recycle();
-        feedback.removeCallbacks(clearFeedback);
-        feedback.animate().cancel();
-        feedback.setVisibility(View.GONE);
+        tracking = false;
+        pendingTap = false;
+        seekSeconds = 0;
+        handler.removeCallbacks(confirmSingleTap);
+        handler.removeCallbacks(longPress);
+        feedback.hide();
     }
-
-    private void feedbackGone() {
-        if (ZeroChillMotion.animationsEnabled(surface.getContext())) {
-            feedback.animate().alpha(0f).setDuration(ZeroChillMotion.QUICK_MS)
-                    .withEndAction(() -> feedback.setVisibility(View.GONE)).start();
-        } else feedback.setVisibility(View.GONE);
-    }
-
-    private int dp(int value) { return BrowseUi.dp(surface.getContext(), value); }
 }
