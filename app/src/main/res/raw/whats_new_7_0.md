@@ -1,8 +1,8 @@
-# ZEROCHILL 7.2.0
+# ZEROCHILL 7.3.0
 
-- Comments stay in place. Type directly above the keyboard and enjoy a cleaner header.
-- Shows rotates naturally. Turn your phone with Auto Rotate enabled, or use manual fullscreen when rotation is locked.
-- Bunkr albums play like series. Browse numbered videos and episode ranges, with next-video playback in album order. Images stay separate, and cleaner titles keep original filenames available.
-- DMs are easier to use. Tap web links to open or copy them, and long-press a text message for a clear Copy message action.
-- ShitTok keeps the video clear. The broad dark gradient is gone, with outlined, shadowed text keeping titles readable.
-- Search arrives smoothly. Results fade and gently settle into place without delaying cached or live results.
+- Double-tap either side of a video in Shows or OnlyFap to rewind or skip ahead 10 seconds. Keep tapping to go farther. The feedback follows your selected accent.
+- Bunkr galleries fit thumbnails and embedded media more cleanly, and retry when a full-size photo fails to load.
+- Shows can play older WMV and ASF videos through the built-in player.
+- The ShitTok All / OnlyFap switch follows your accent and stays closer to center when you’re signed out.
+- ShitTok now limits how long it retries when the feed has trouble loading.
+- In-app updates hand the verified APK to Android’s installer for you to confirm.

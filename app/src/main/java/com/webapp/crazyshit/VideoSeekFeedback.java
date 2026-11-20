@@ -65,6 +65,7 @@ final class VideoSeekFeedback extends View {
 
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        int accent = AppearanceTheme.accent(getContext());
         float half = getWidth() / 2f;
         float left = forward ? half : 0f;
         float right = forward ? getWidth() : half;
@@ -76,7 +77,7 @@ final class VideoSeekFeedback extends View {
             float remaining = 1f - elapsed;
             float expansion = 1f - remaining * remaining;
             float radius = 12f * density + Math.max(half, getHeight() / 2f) * expansion;
-            paint.setColor(UiPalette.PRIMARY);
+            paint.setColor(accent);
             paint.setAlpha(Math.round(60f * remaining));
             canvas.drawCircle(centerX, centerY, radius, paint);
             paint.setStyle(Paint.Style.STROKE);
@@ -96,7 +97,7 @@ final class VideoSeekFeedback extends View {
         paint.setAlpha(Math.round(205f * opacity));
         canvas.drawRoundRect(x - width / 2f, y - height, x + width / 2f, y + height,
                 height, height, paint);
-        paint.setColor(UiPalette.TEXT_PRIMARY);
+        paint.setColor(accent);
         paint.setAlpha(Math.round(255f * opacity));
         paint.setTextScaleX(Math.min(1f, width / textWidth));
         canvas.drawText(label, x, y - (paint.ascent() + paint.descent()) / 2f, paint);
