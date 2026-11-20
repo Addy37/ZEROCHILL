@@ -14,6 +14,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.media3.common.Player;
+import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -37,7 +38,7 @@ import static org.robolectric.Shadows.shadowOf;
 public class CreatorPlayerQolTest {
     private Player player(AtomicBoolean playing, AtomicLong position) {
         ArrayList<Player.Listener> listeners = new ArrayList<>();
-        return (Player) Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[] {Player.class},
+        return (Player) Proxy.newProxyInstance(ExoPlayer.class.getClassLoader(), new Class<?>[] {ExoPlayer.class},
                 (proxy, method, args) -> {
                     switch (method.getName()) {
                         case "isPlaying": case "getPlayWhenReady": return playing.get();
@@ -81,7 +82,7 @@ public class CreatorPlayerQolTest {
         AtomicLong position = new AtomicLong(30_000L);
         Player player = player(playing, position);
         controls.bind(player);
-        FullscreenVideoGestures gestures = new FullscreenVideoGestures(surface, () -> player, controls, () -> true);
+        FullscreenVideoGestures gestures = new FullscreenVideoGestures(surface, () -> player, controls::onVideoTap, () -> true);
         tap(gestures, surface, 80, 0);
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(350));
         assertFalse(controls.isVisible());
@@ -90,14 +91,66 @@ public class CreatorPlayerQolTest {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(350));
         assertTrue(controls.isVisible());
         assertTrue(playing.get());
+        VideoSeekFeedback feedback = ReflectionHelpers.getField(gestures, "feedback");
         tap(gestures, surface, 300, 1200);
+        assertEquals(30_000L, position.get());
         tap(gestures, surface, 300, 1300);
         assertEquals(40_000L, position.get());
-        gestures.seek(false);
-        assertEquals(30_000L, position.get());
-        position.set(3000L); gestures.seek(false); assertEquals(0L, position.get());
-        position.set(59_000L); gestures.seek(true); assertEquals(60_000L, position.get());
+        assertEquals("+10s ››", ReflectionHelpers.getField(feedback, "label"));
+        tap(gestures, surface, 300, 1440);
+        assertEquals(50_000L, position.get());
+        assertEquals("+20s ››", ReflectionHelpers.getField(feedback, "label"));
+        tap(gestures, surface, 300, 1590);
+        assertEquals(60_000L, position.get());
+        assertEquals("+30s ››", ReflectionHelpers.getField(feedback, "label"));
+        tap(gestures, surface, 300, 1740);
+        assertEquals(60_000L, position.get());
+        assertTrue(playing.get());
+
+        position.set(13_000L);
+        tap(gestures, surface, 80, 1890);
+        assertEquals(13_000L, position.get());
+        tap(gestures, surface, 80, 2000);
+        assertEquals(3000L, position.get());
+        assertEquals("‹‹ -10s", ReflectionHelpers.getField(feedback, "label"));
+        tap(gestures, surface, 80, 2130);
+        assertEquals(0L, position.get());
+        assertEquals("‹‹ -20s", ReflectionHelpers.getField(feedback, "label"));
+        assertEquals(View.VISIBLE, feedback.getVisibility());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1));
+        assertEquals(View.INVISIBLE, feedback.getVisibility());
+        tap(gestures, surface, 80, 3300);
+        assertEquals(View.INVISIBLE, feedback.getVisibility());
+        assertTrue(playing.get());
         controls.release(); gestures.cancel(); host.finish();
+    }
+
+    @Test public void showsDetailDispatchSeeksInEmbeddedAndFullscreenModes() {
+        VideoDetailActivity activity = Robolectric.buildActivity(VideoDetailActivity.class, new Intent()).get();
+        activity.setTheme(R.style.Theme_CrazyShit);
+        for (String field : new String[] {"mediaUrl", "pageUrl", "title", "views", "uploader", "comments",
+                "userAgent", "cookies", "relatedFeedUrl", "source", "mediaReferer", "posterUrl"}) {
+            ReflectionHelpers.setField(activity, field, "");
+        }
+        ReflectionHelpers.callInstanceMethod(activity, "buildUi");
+        AtomicLong position = new AtomicLong(30_000L);
+        AtomicBoolean playing = new AtomicBoolean(false);
+        PlayerView surface = ReflectionHelpers.getField(activity, "playerView");
+        ReflectionHelpers.setField(activity, "player", player(playing, position));
+        layout(surface, 360, 500);
+
+        dispatchTap(surface, 290, 0);
+        dispatchTap(surface, 290, 100);
+        assertEquals(40_000L, position.get());
+        ReflectionHelpers.callInstanceMethod(activity, "syncFullscreenChrome",
+                ReflectionHelpers.ClassParameter.from(boolean.class, true),
+                ReflectionHelpers.ClassParameter.from(boolean.class, false));
+        dispatchTap(surface, 290, 230);
+        assertEquals(40_000L, position.get());
+        dispatchTap(surface, 290, 350);
+        assertEquals(50_000L, position.get());
+        assertFalse(playing.get());
+        ((FullscreenVideoGestures) ReflectionHelpers.getField(activity, "fullscreenGestures")).cancel();
     }
 
     @Test public void transportButtonPausesAndPlaysAndPausedChromeDoesNotExpire() {
@@ -136,7 +189,7 @@ public class CreatorPlayerQolTest {
         AtomicLong position = new AtomicLong(30_000L);
         Player player = player(new AtomicBoolean(true), position);
         controls.bind(player);
-        FullscreenVideoGestures gestures = new FullscreenVideoGestures(surface, () -> player, controls, () -> true);
+        FullscreenVideoGestures gestures = new FullscreenVideoGestures(surface, () -> player, controls::onVideoTap, () -> true);
         tap(gestures, surface, 300, 0);
         event(gestures, surface, MotionEvent.ACTION_DOWN, 300, 300, 100);
         event(gestures, surface, MotionEvent.ACTION_MOVE, 300, 430, 130);
@@ -398,13 +451,30 @@ public class CreatorPlayerQolTest {
         event(gestures, view, MotionEvent.ACTION_DOWN, x, 300, time);
         event(gestures, view, MotionEvent.ACTION_UP, x, 300, time + 30);
     }
-    private long eventBase = -1L;
+    private void dispatchTap(PlayerView surface, float x, long time) {
+        long down = advanceTo(time);
+        MotionEvent event = MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, x, 200, 0);
+        surface.dispatchTouchEvent(event);
+        event.recycle();
+        long up = advanceTo(time + 30);
+        event = MotionEvent.obtain(down, up, MotionEvent.ACTION_UP, x, 200, 0);
+        surface.dispatchTouchEvent(event);
+        event.recycle();
+    }
+
     private void event(FullscreenVideoGestures gestures, PlayerView view, int action, float x, float y, long time) {
+        long now = advanceTo(time);
+        MotionEvent event = MotionEvent.obtain(now, now, action, x, y, 0);
+        gestures.onTouch(view, event); event.recycle();
+    }
+
+    private long eventBase = -1L;
+
+    private long advanceTo(long offset) {
         if (eventBase < 0L) eventBase = android.os.SystemClock.uptimeMillis();
-        time += eventBase;
+        long time = eventBase + offset;
         long delay = time - android.os.SystemClock.uptimeMillis();
         if (delay > 0L) shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(delay));
-        MotionEvent event = MotionEvent.obtain(time, time, action, x, y, 0);
-        gestures.onTouch(view, event); event.recycle();
+        return time;
     }
 }

@@ -449,7 +449,10 @@ public class VideoDetailActivity extends Activity {
             haptic(v); setRotatableFullscreen(!rotatableFullscreen);
         });
         fullscreenGestures = new FullscreenVideoGestures(
-                playerView, () -> player, fullscreenControls, () -> fullscreenChromeActive);
+                playerView, () -> player, () -> {
+                    if (fullscreenChromeActive) fullscreenControls.onVideoTap();
+                    else playerView.performClick();
+                }, () -> !minimizing);
         playerView.setOnTouchListener(fullscreenGestures);
 
         View playerBack = playerView.findViewById(R.id.player_back);
@@ -2106,11 +2109,11 @@ public class VideoDetailActivity extends Activity {
         boolean changed = fullscreenChromeActive != fullscreen;
         fullscreenChromeActive = fullscreen;
         playerView.setUseController(!fullscreen);
-        if (changed) fullscreenControls.suspend(!fullscreen);
-        if (!fullscreen) {
-            fullscreenOverlay.setVisibility(View.GONE);
+        if (changed) {
+            fullscreenControls.suspend(!fullscreen);
             if (fullscreenGestures != null) fullscreenGestures.cancel();
         }
+        if (!fullscreen) fullscreenOverlay.setVisibility(View.GONE);
         if (fullscreen) {
             ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(title);
             fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
@@ -2578,6 +2581,7 @@ public class VideoDetailActivity extends Activity {
 
     @Override
     protected void onPause() {
+        if (fullscreenGestures != null) fullscreenGestures.cancel();
         if (orientationListener != null) orientationListener.disable();
         stopPortraitProgressTicker();
         super.onPause();
