@@ -95,12 +95,19 @@ final class HeaderProfileAvatar extends FrameLayout {
     }
 
     private void updateVisibility() {
+        int previous = getVisibility();
+        int visibility;
         if (profileInContent) {
-            setVisibility(GONE);
+            visibility = GONE;
         } else if (!owner.isEmpty() && owner.equals(session.current(activity))) {
-            setVisibility(VISIBLE);
+            visibility = VISIBLE;
         } else {
-            setVisibility(reserveSpaceWhenSignedOut ? INVISIBLE : GONE);
+            visibility = reserveSpaceWhenSignedOut ? INVISIBLE : GONE;
+        }
+        setVisibility(visibility);
+        if (previous != visibility && (previous == INVISIBLE || visibility == INVISIBLE)) {
+            // The header can measure its invisible slot at a different width.
+            requestLayout();
         }
     }
 
