@@ -167,7 +167,8 @@ public class ShitTokSourceModeTest {
             ReflectionHelpers.callInstanceMethod(feed, "appendUnique", from(List.class, Arrays.asList(broad)));
             assertEquals(Arrays.asList(current), queue);
             assertEquals(learned, ShitTokSmartRanker.localScoreAt(broad, rankingInstant), 0f);
-            assertTrue(feed.findViewWithTag("shittok_source_onlyfap").isSelected());
+            ShitTokSourceControl selector = new ShitTokSourceControl(activity.get());
+            assertTrue(selector.findViewWithTag("shittok_source_onlyfap").isSelected());
             feed.close();
         }
     }

@@ -15,7 +15,7 @@ permissions:
 jobs:
   signed-candidate:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 25
     env:
       ZEROCHILL_V7_TRAFFIC: 'true'
       SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
@@ -80,7 +80,8 @@ jobs:
               }.items():
                   out.write(key + "=" + value + "\n")
           PY
-      - name: Focused tests and signed release assembly
+      - name: Run focused regressions
+        timeout-minutes: 12
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/consolidated-tests.gradle" <<'EOF'
@@ -97,10 +98,15 @@ jobs:
                           '**/LegacyVideoFormatSupportTest.class',
                           '**/AppUpdaterInstallerTest.class',
                           '**/WhatsNewTest.class'
+                  systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
+                  testLogging { events 'passed', 'failed', 'skipped' }
               }
           }
           EOF
-          gradle --no-daemon -I "$RUNNER_TEMP/consolidated-tests.gradle" :app:testDebugUnitTest :app:assembleRelease
+          gradle --no-daemon --console=plain --max-workers=3 -I "$RUNNER_TEMP/consolidated-tests.gradle" :app:testDebugUnitTest
+      - name: Assemble signed release APK
+        timeout-minutes: 10
+        run: gradle --no-daemon --console=plain --max-workers=3 :app:assembleRelease
       - name: Validate signed upgrade and package media libraries
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1281,10 +1281,13 @@ public final class ChaosFeedView extends FrameLayout {
     final Set<String> blockedSnapshot = new HashSet<>(blockedCreatorKeys);
 
     final boolean startupBatch = items.isEmpty();
+    final boolean historyExplorationSpent = consecutiveDryLoads >= 3;
     io.execute(() -> {
         if (work.cancelled || batchGeneration != feedGeneration || closed) return;
         if (startupBatch) AppPerformance.startup("feed_worker");
         long batchStartedAt = android.os.SystemClock.elapsedRealtime();
+        long explorationDeadline = System.nanoTime()
+                + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(UNSEEN_EXPLORATION_MS);
         java.util.concurrent.BlockingQueue<NativeContentItem> candidates =
                 new java.util.concurrent.ArrayBlockingQueue<>(48);
         java.util.concurrent.BlockingQueue<NativeContentItem> historyFallback =
@@ -1355,9 +1358,9 @@ public final class ChaosFeedView extends FrameLayout {
                     }
                     // Reuse the source decks. Draining watched results frees provider slots
                     // for their next pages without adding work to the swipe path.
-                    while (!historyFallback.isEmpty() && !work.cancelled && acceptingCandidates.get()
+                    while (!historyExplorationSpent && !historyFallback.isEmpty() && !work.cancelled && acceptingCandidates.get()
                             && continuityWorkNeeded && batchGeneration == feedGeneration
-                            && android.os.SystemClock.elapsedRealtime() - batchStartedAt < UNSEEN_EXPLORATION_MS
+                            && System.nanoTime() < explorationDeadline
                             && !Thread.currentThread().isInterrupted()) {
                         if (candidates.remainingCapacity() >= ShitTokSourcePool.MAX_READY_PER_SOURCE) {
                             offer.accept(sourceMixer.takeReadyCandidates());
@@ -1376,8 +1379,8 @@ public final class ChaosFeedView extends FrameLayout {
                             && batchPreference == ContentPreference.get(activity)
                             && batchSources == ShitTokSourceMode.get(activity)
                             && android.os.SystemClock.elapsedRealtime() < until
-                            && (historyFallback.isEmpty() || android.os.SystemClock.elapsedRealtime()
-                                    - batchStartedAt < UNSEEN_EXPLORATION_MS)
+                            && (historyFallback.isEmpty() || (!historyExplorationSpent
+                                    && System.nanoTime() < explorationDeadline))
                             && !Thread.currentThread().isInterrupted()) {
                         if (candidates.remainingCapacity() >= ShitTokSourcePool.MAX_READY_PER_SOURCE)
                             offer.accept(sourceMixer.takePreference(batchPreference, item -> orientationAdmission.canOffer(item, candidates)));
@@ -1491,7 +1494,6 @@ public final class ChaosFeedView extends FrameLayout {
             if (freshAdded == 0 && !verified.deferred) { consecutiveDryLoads++; dryRefillCount++; modeDryRefills++; }
             else if (freshAdded > 0) consecutiveDryLoads = 0;
 
-            // Freshness never relaxes after dry batches. Recovery keeps exploring existing sources.
             int added = items.size() - before;
             if (added > 0 && freshAdded == 0) consecutiveDryLoads = 0;
 
