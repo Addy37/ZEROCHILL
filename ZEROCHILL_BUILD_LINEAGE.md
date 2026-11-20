@@ -1,5 +1,7 @@
 # ZEROCHILL build lineage
 
+`main` is the active source for development and test APKs. The signed 7.2.0 release and subsequent device-approved changes are on `main`. Historical branches and release records below are rollback references.
+
 ## ZEROCHILL 7.2.0 approved publication
 
 The user phone-tested and approved PR #451 candidate source
@@ -362,10 +364,10 @@ The approved devil-head launcher and themed icons and DEVIL WAKE splash came fro
 
 Before producing or sharing a ZEROCHILL test APK:
 
-1. Verify that its source commit is the approved product baseline or a descendant of it.
-2. Use `main` as the complete approved lineage unless the user specifies another active branch.
-3. Start new feature work from current `main`, rather than an older feature branch.
-4. Include the source branch and short commit SHA in a test APK filename.
+1. Fetch `origin/main` and verify with `tools/verify-android-build-lineage.sh` that the exact APK source contains that commit.
+2. Target `main` in the feature PR and start new feature work from the current tip.
+3. Record the base and build commit SHAs in the Actions summary and APK artifact.
+4. Include the source branch and short build SHA in the APK filename.
 5. Preserve the application ID, production signing identity, existing installs, and saved data.
 6. Record subsequent approved baselines and production release evidence here without replacing historical release records.
 

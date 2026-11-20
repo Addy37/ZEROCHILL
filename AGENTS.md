@@ -15,11 +15,10 @@ When instructions conflict, follow the higher-priority instruction and report th
 
 ## Source of truth and lineage
 
-- Treat `rebrand/zerochill` as the ZEROCHILL source-of-truth branch until it is merged into `main`, unless the user explicitly selects another active branch.
+- Use `main` as the active ZEROCHILL branch. Start new feature and test APK branches from the current remote `main`.
 - Read `ZEROCHILL_BUILD_LINEAGE.md` before substantial feature work, release work, or producing an APK.
 - Start new work from the current complete approved lineage. Do not build new features on an older feature branch because it happens to contain one desired change.
-- Keep `integration/zerochill-current` synchronized with the current approved complete product lineage when the lineage document calls for it.
-- Before sharing an APK, verify that its source commit is the approved baseline or a descendant of it.
+- Before sharing a test APK, verify that its source contains current remote `main` and that its pull request targets `main`.
 - APK filenames must identify the source branch and short commit SHA.
 - Never claim a build contains work that is not in its actual source commit.
 
