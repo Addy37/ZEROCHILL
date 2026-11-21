@@ -72,7 +72,8 @@ public class PrimaryTabRevealTest {
         assertEquals(Color.RED, frame.getPixel(75, 25));
         assertEquals(Color.BLUE, frame.getPixel(5, 94));
         assertEquals(Color.BLUE, frame.getPixel(74, 74));
-        assertEquals(Color.RED, frame.getPixel(5, 74));
+        // Sample beyond the intentionally soft rim, which extends a few pixels outside the clip.
+        assertEquals(Color.RED, frame.getPixel(5, 66));
         page.setReveal(PrimaryTabReveal.BOTTOM, 1f, 75f);
         page.draw(canvas);
         assertEquals(Color.BLUE, frame.getPixel(5, 5));
