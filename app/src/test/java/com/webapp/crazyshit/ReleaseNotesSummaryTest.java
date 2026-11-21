@@ -57,6 +57,17 @@ public class ReleaseNotesSummaryTest {
     }
 
     @Test
+    public void maintenanceNoticeRemainsVisibleInCompactUpdaterSummary() {
+        String firstParagraph = "Smooth screen transitions, faster OnlyFap loading, and better creator matching. Some Bunkr videos are unavailable due to server maintenance outside ZEROCHILL's control.";
+        String notes = "# ZEROCHILL 7.4.0\\n\\n" + firstParagraph + "\\n\\n## What's new\\n\\n- New motion.\\n";
+        String message = ReleaseNotesSummary.fromMarkdown(notes, "ZeroChill v7.4.0", "7.4.0");
+        assertEquals(firstParagraph, message);
+        assertTrue(message.length() <= 180);
+        assertTrue(message.contains("Bunkr"));
+        assertTrue(message.contains("outside ZEROCHILL's control"));
+    }
+
+    @Test
     public void longSummaryIsBoundedForCompactUpdateCard() {
         String body = "# ZEROCHILL 5.4.0\n\n"
                 + "This is a deliberately very long release summary that keeps adding useful words so the compact update card remains readable on a phone instead of expanding into a huge wall of text while the user is trying to decide whether to download the update right now.";

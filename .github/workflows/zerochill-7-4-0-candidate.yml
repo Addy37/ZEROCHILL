@@ -1,0 +1,190 @@
+name: ZEROCHILL 7.4.0 Signed Release Candidate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: zerochill-7-4-0-candidate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    if: >-
+      github.repository == 'Addy37/ZEROCHILL' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'release/zerochill-7.4.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      APP_VERSION_CODE: '7004000'
+      APP_VERSION_NAME: '7.4.0'
+      ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+      ZEROCHILL_SOURCE_BRANCH: ${{ github.head_ref }}
+      ZEROCHILL_V7_TRAFFIC: 'true'
+      SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ANON_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/dynamic-api
+      SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
+      ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ''
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Verify current main and record source lineage
+        run: bash tools/verify-android-build-lineage.sh "$RUNNER_TEMP/BUILD_LINEAGE.txt"
+      - name: Validate release version and update-dialog copy
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib
+          version = os.environ['INPUT_VERSION'].strip()
+          declared = pathlib.Path('RELEASE_VERSION').read_text().strip()
+          release = pathlib.Path('RELEASE_NOTES.md').read_text()
+          bundled = pathlib.Path('app/src/main/res/raw/whats_new_7_0.md').read_text()
+          assert version == declared == '7.4.0', 'Release version differs from approved notes'
+          assert release.startswith('# ZEROCHILL 7.4.0\\n'), 'Release title mismatch'
+          assert bundled.startswith('# ZEROCHILL 7.4.0\\n'), 'Bundled title mismatch'
+          def bullets(s):
+              return [line[2:].strip() for line in s.splitlines() if line.startswith('- ')]
+          assert len(bullets(release)) == 8, 'Unexpected release highlight count'
+          assert bullets(release) == bullets(bundled), 'GitHub / offline What's New mismatch'
+          paragraph = release.split('\\n\\n')[1].strip()
+          assert len(paragraph) <= 180, 'Updater summary will be truncated'
+          assert 'Bunkr' in paragraph and "outside ZEROCHILL's control" in paragraph
+          assert any('Retry' in line and 'maintenance' in line for line in bullets(release))
+          print('Updater summary, bundled What’s New, and Bunkr notice validated')
+          PY
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: Install Android build tools
+        run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+      - name: Restore production signing credentials
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib
+          raw = os.environ.get('SIGNING_BUNDLE', '')
+          if not raw:
+              raise SystemExit('Missing ANDROID_SIGNING_BUNDLE')
+          data = json.loads(raw.replace('\r','').replace('\n',''))
+          for key in ('keystore_base64','store_password','key_alias','key_password'):
+              if not data.get(key):
+                  raise SystemExit('Missing signing item: ' + key)
+          for key in ('store_password','key_alias','key_password'):
+              print('::add-mask::' + data[key])
+          path = pathlib.Path(os.environ['RUNNER_TEMP'])/'zerochill-7-4-0-candidate.jks'
+          path.write_bytes(base64.b64decode(data['keystore_base64']))
+          path.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'],'a') as out:
+              for key, value in {
+                  'ANDROID_KEYSTORE_PATH': str(path),
+                  'ANDROID_KEYSTORE_PASSWORD': data['store_password'],
+                  'ANDROID_KEY_ALIAS': data['key_alias'],
+                  'ANDROID_KEY_PASSWORD': data['key_password']
+              }.items():
+                  out.write(key+'='+value+'\n')
+          PY
+      - name: Run release notes, motion, navigation, creator and playback tests; assemble APKs
+        run: >-
+          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
+          :app:testReleaseUnitTest
+          --tests '*WhatsNewTest'
+          --tests '*ReleaseNotesSummaryTest'
+          --tests '*UpdateCardControllerTest'
+          --tests '*UpdateCardOverflowTest'
+          --tests '*CreatorGalleryMatchingTest'
+          --tests '*BottomNavigationInsetsTest'
+          --tests '*CreatorGalleryRevealIntegrationTest'
+          --tests '*CreatorGalleryTransitionTest'
+          --tests '*FavoriteCreatorsScrollTest'
+          --tests '*LibraryProfileTest'
+          --tests '*NavigationMotionControllerTest'
+          --tests '*OnlyFapLibraryMetadataTest'
+          --tests '*PrimaryTabLibraryTest'
+          --tests '*PrimaryTabNavigationTest'
+          --tests '*PrimaryTabRevealTest'
+          --tests '*ShitTokLoadingStateTest'
+          --tests '*ShitTokStartupPreparationTest'
+          --tests '*ShitTokSelectedPreparationTest'
+          --tests '*ShitTokAudioOwnershipTest'
+          --tests '*ShitTokSwipeStartTest'
+          --tests '*PrimaryTabWorkQueueTest'
+          :app:assembleDebug :app:assembleRelease
+      - name: Verify install upgrade identity and checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p candidate "$RUNNER_TEMP/stable"
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir "$RUNNER_TEMP/stable"
+          SAFE_REF="${ZEROCHILL_SOURCE_BRANCH//\//-}"
+          APK="candidate/ZeroChill-${APP_VERSION_NAME}-${SAFE_REF}-${ZEROCHILL_SOURCE_SHA:0:7}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          export CANDIDATE_APK="$APK"
+          python3 - <<'PY'
+          import os, pathlib, re, subprocess
+          tools = pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
+          def inspect(apk):
+              badging = subprocess.check_output([str(tools/'aapt2'),'dump','badging',apk],text=True)
+              package = re.search(r"package: name='([^']+)' versionCode='(\d+)'",badging)
+              assert package, 'Missing package metadata'
+              certs = subprocess.check_output([str(tools/'apksigner'),'verify','--verbose','--print-certs',apk],text=True)
+              cert = re.search(r'Signer #1 certificate SHA-256 digest: (\w+)',certs)
+              assert cert, 'Missing certificate'
+              return package[1],int(package[2]),cert[1]
+          candidate = inspect(os.environ['CANDIDATE_APK'])
+          stable = inspect(str(pathlib.Path(os.environ['RUNNER_TEMP'])/'stable/ZeroChill.apk'))
+          assert candidate[0] == stable[0] == 'com.addy37.crazyshitunofficial'
+          assert candidate[1] == int(os.environ['APP_VERSION_CODE']) and candidate[1] > max(stable[1], 7003013)
+          assert candidate[2] == stable[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356'
+          revision = os.environ['ZEROCHILL_SOURCE_SHA']
+          config = pathlib.Path('app/build/generated/source/buildConfig/release/com/webapp/crazyshit/BuildConfig.java')
+          assert f'SOURCE_REVISION = "{revision}";' in config.read_text(), 'Incorrect APK source revision'
+          report = ('Source: '+os.environ['ZEROCHILL_SOURCE_SHA']+'\n'
+              +'Branch: '+os.environ['ZEROCHILL_SOURCE_BRANCH']+'\n'
+              +'Application ID: '+candidate[0]+'\n'
+              +'Version code: '+str(candidate[1])+'\n'
+              +'Certificate SHA-256: '+candidate[2]+'\n'
+              +'Production package, certificate and upgrade gates passed.\n'
+              +'No public release. This signed candidate is for verification before publication.\n')
+          pathlib.Path('candidate/VALIDATION.txt').write_text(report)
+          print(report)
+          PY
+          cp "$RUNNER_TEMP/BUILD_LINEAGE.txt" candidate/
+          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-7.4.0-candidate-signed-${{ env.ZEROCHILL_SOURCE_SHA }}
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload tab and playback test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-7.4.0-candidate-tests-${{ env.ZEROCHILL_SOURCE_SHA }}
+          path: app/build/test-results/testReleaseUnitTest/
+          if-no-files-found: warn
+          retention-days: 14
