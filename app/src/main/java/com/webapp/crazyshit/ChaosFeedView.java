@@ -3253,9 +3253,8 @@ public final class ChaosFeedView extends FrameLayout {
 
             poster = new ImageView(activity);
             poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            poster.setBackgroundColor(Color.BLACK);
+            poster.setBackgroundColor(Color.rgb(20, 20, 22));
             poster.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            mediaLayer.addView(poster, new FrameLayout.LayoutParams(-1, -1));
 
             playerView = (PlayerView) LayoutInflater.from(activity)
                     .inflate(R.layout.view_video_player_texture, mediaLayer, false);
@@ -3267,6 +3266,8 @@ public final class ChaosFeedView extends FrameLayout {
             playerView.setBackgroundColor(Color.BLACK);
             playerView.setContentDescription("Play or pause video");
             mediaLayer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
+            // The player's opaque background and shutter must stay behind the poster.
+            mediaLayer.addView(poster, new FrameLayout.LayoutParams(-1, -1));
 
             loading = new ZeroChillProgressBar(activity);
             loading.setContentDescription("Loading video");
@@ -4531,8 +4532,8 @@ public final class ChaosFeedView extends FrameLayout {
                 }
                 if (player.getPlaybackState() == Player.STATE_READY) {
                     syncLoading();
-                    poster.setVisibility(View.GONE);
                 }
+                syncPoster();
                 return;
             }
             ExoPlayer createdPlayer = player;
@@ -4565,6 +4566,7 @@ public final class ChaosFeedView extends FrameLayout {
                 public void onRenderedFirstFrame() {
                     if (listenerGeneration != feedGeneration || !validUiCallback(createdPlayer, listenerUrl, listenerToken)) return;
                     postOwnerUi(createdPlayer, listenerUrl, listenerToken, () -> {
+                        syncPoster();
                         if (boundPosition != selectedPosition) return;
                         syncLoading();
                         sourceMixer.onFirstFrame();
@@ -4592,7 +4594,7 @@ public final class ChaosFeedView extends FrameLayout {
                             root.removeCallbacks(skipFailedClipRunnable);
                             syncLoading();
                             failure.setVisibility(View.GONE);
-                            poster.setVisibility(View.GONE);
+                            syncPoster();
                             updateProgress();
                             maybeCompleteStartupHandoff();
                             preloadReadyComments(item, boundPosition);
@@ -4670,13 +4672,18 @@ public final class ChaosFeedView extends FrameLayout {
             createdPlayer.addListener(uiPlayerListener);
             if (createdPlayer.getPlaybackState() == Player.STATE_READY) {
                 syncLoading();
-                poster.setVisibility(View.GONE);
                 androidx.media3.common.VideoSize size = createdPlayer.getVideoSize();
                 uiPlayerListener.onVideoSizeChanged(size);
                 uiPlayerListener.onPlaybackStateChanged(Player.STATE_READY);
             }
+            syncPoster();
             syncLoading();
             if (autoplay && !userPaused && ownsPlayback()) playOwnedPlayer();
+        }
+
+        private void syncPoster() {
+            boolean rendered = item != null && playbackOwner.hasRenderedFrame(item.url, playerView);
+            poster.setVisibility(rendered && !failurePending ? View.GONE : View.VISIBLE);
         }
 
         private void syncLoading() {
@@ -4712,6 +4719,7 @@ public final class ChaosFeedView extends FrameLayout {
                 attachedToken = playbackOwner.token(item.url);
             }
             playbackOwner.attach(item.url, playerView);
+            syncPoster();
             syncMuteButtons();
         }
 
@@ -4728,6 +4736,7 @@ public final class ChaosFeedView extends FrameLayout {
             uiPlayerListener = null;
             attachedToken = -1;
             stream = null;
+            poster.setVisibility(View.VISIBLE);
             syncLoading();
             root.removeCallbacks(progressTick);
         }

@@ -4,31 +4,36 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
-import android.graphics.Canvas;
 import android.view.View;
 import android.widget.FrameLayout;
 
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager2.widget.ViewPager2;
 
-/** Draws the two retained pages in place while the pager continues to own selection. */
+/**
+ * A connected-screen alternative to the liquid page mask.
+ * The dock keeps owning selection and drag input. Only the retained screen pages
+ * get a short directional fade and depth treatment, without bitmap copies or blur.
+ */
 final class PrimaryTabReveal implements ViewPager2.PageTransformer {
     private static final float EDGE_EPSILON = .001f;
+    // Retained for the existing waterline implementation, which is unused by this trial.
     static final int BOTTOM = 1, FROM_LEFT = 2, FROM_RIGHT = 3;
-    private static final long TAP_DURATION_MS = 240L;
+    static final long TAP_DURATION_MS = 290L;
+    private static final float ENTRY_OFFSET_DP = 18f;
+    private static final float EXIT_OFFSET_DP = 5f;
     private final ViewPager2 pager;
     private final RecyclerView pages;
-    private final int[] dockLocation = new int[2];
-    private final int[] pagerLocation = new int[2];
+    private final float density;
     private ValueAnimator tap;
     private int tapFrom, tapTo;
-    private float tapX, tapY, tapProgress;
+    private float tapProgress;
     private int dragStart = RecyclerView.NO_POSITION;
-    private float dragPosition;
 
     PrimaryTabReveal(ViewPager2 pager) {
         this.pager = pager;
         pages = (RecyclerView) pager.getChildAt(0);
+        density = pager.getResources().getDisplayMetrics().density;
     }
 
     boolean startTap(int target, View dock) {
@@ -43,19 +48,13 @@ final class PrimaryTabReveal implements ViewPager2.PageTransformer {
                 || pages.findViewHolderForAdapterPosition(target) == null) return false;
 
         if (!reverse) {
-            dock.getLocationInWindow(dockLocation);
-            pager.getLocationInWindow(pagerLocation);
-            int slot = rtl() ? MainPagerAdapter.PAGE_COUNT - 1 - target : target;
-            float inset = 4f * dock.getResources().getDisplayMetrics().density;
-            tapX = dockLocation[0] - pagerLocation[0] + inset
-                    + (slot + .5f) * (dock.getWidth() - 2f * inset) / MainPagerAdapter.PAGE_COUNT;
-            tapY = dockLocation[1] - pagerLocation[1] + dock.getHeight() / 2f;
             tapFrom = from;
             tapTo = target;
         }
         tapProgress = startProgress;
         tap = ValueAnimator.ofFloat(startProgress, reverse ? 0f : 1f);
-        tap.setDuration(reverse ? Math.max(80L, Math.round(startProgress * TAP_DURATION_MS)) : TAP_DURATION_MS);
+        tap.setDuration(reverse ? Math.max(80L, Math.round(startProgress * TAP_DURATION_MS))
+                : TAP_DURATION_MS);
         tap.setInterpolator(ZeroChillMotion.EASE_OUT);
         tap.addUpdateListener(animation -> {
             tapProgress = (float) animation.getAnimatedValue();
@@ -79,11 +78,11 @@ final class PrimaryTabReveal implements ViewPager2.PageTransformer {
         cancel();
         if (ZeroChillMotion.animationsEnabled(pager.getContext())) {
             dragStart = pager.getCurrentItem();
-            dragPosition = dragStart;
         }
     }
 
-    void onPageScrolled(float position) { dragPosition = position; }
+    // The pager continues to drive the dock's existing position and gestures.
+    void onPageScrolled(float position) { }
 
     void finishDrag() {
         if (dragStart == RecyclerView.NO_POSITION) return;
@@ -108,84 +107,58 @@ final class PrimaryTabReveal implements ViewPager2.PageTransformer {
         return position >= start ? lower + 1 : lower;
     }
 
+    static float enteringAlpha(float progress) {
+        return .10f + .90f * progress;
+    }
+
+    static float enteringScale(float progress) {
+        return .990f + .010f * progress;
+    }
+
+    static float exitingScale(float progress) {
+        return 1f - .012f * progress;
+    }
+
     @Override public void transformPage(View view, float position) {
         if (!(view instanceof Page)) return;
         Page page = (Page) view;
         int id = pages.getChildAdapterPosition(view);
-        int from = RecyclerView.NO_POSITION;
-        int to = RecyclerView.NO_POSITION;
-        int shape = 0;
-        float progress = 0f;
-        if (tap != null) {
-            from = tapFrom;
-            to = tapTo;
-            shape = BOTTOM;
-            progress = tapProgress;
-        } else if (dragStart != RecyclerView.NO_POSITION) {
-            to = dragTarget(dragPosition, dragStart);
-            if (to != RecyclerView.NO_POSITION) {
-                boolean towardEnd = dragPosition >= dragStart;
-                from = towardEnd ? to - 1 : to + 1;
-                shape = towardEnd != rtl() ? FROM_RIGHT : FROM_LEFT;
-                progress = Math.abs(dragPosition - from);
+        if (tap != null && id != RecyclerView.NO_POSITION &&
+                (id == tapFrom || id == tapTo)) {
+            boolean incoming = id == tapTo;
+            float p = Math.max(0f, Math.min(1f, tapProgress));
+            float direction = (tapTo > tapFrom ? 1f : -1f) * (rtl() ? -1f : 1f);
+            float alignedX = -position * pager.getWidth() * (rtl() ? -1f : 1f);
+            page.setTranslationZ(incoming ? 1f : 0f);
+            if (incoming) {
+                page.setTranslationX(alignedX + direction * ENTRY_OFFSET_DP * density * (1f - p));
+                page.setAlpha(enteringAlpha(p));
+                page.setScaleX(enteringScale(p));
+                page.setScaleY(enteringScale(p));
+            } else {
+                // Keep the prior screen visible while the next screen becomes ready.
+                page.setTranslationX(alignedX - direction * EXIT_OFFSET_DP * density * p);
+                page.setAlpha(1f);
+                page.setScaleX(exitingScale(p));
+                page.setScaleY(exitingScale(p));
             }
+            return;
         }
 
-        boolean outgoing = id != RecyclerView.NO_POSITION && id == from;
-        boolean incoming = id != RecyclerView.NO_POSITION && id == to;
-        if (outgoing || incoming) {
-            page.setTranslationX(-position * pager.getWidth() * (rtl() ? -1f : 1f));
-            page.setTranslationZ(incoming ? 1f : 0f);
-            page.setAlpha(1f);
-            page.setScaleX(1f);
-            page.setScaleY(1f);
-            page.setReveal(incoming ? shape : 0, progress, tapX, tapY);
-        } else {
-            page.setTranslationX(0f);
-            page.setTranslationZ(0f);
-            page.setReveal(0, 0f, 0f, 0f);
-            float distance = ZeroChillMotion.animationsEnabled(pager.getContext())
-                    ? Math.min(1f, Math.abs(position)) : 0f;
-            page.setAlpha(1f - distance * .10f);
-            page.setScaleX(1f - distance * .012f);
-            page.setScaleY(page.getScaleX());
-        }
+        // A dock drag remains tied directly to the finger's native pager position.
+        page.setTranslationX(0f);
+        page.setTranslationZ(0f);
+        float distance = ZeroChillMotion.animationsEnabled(pager.getContext())
+                ? Math.min(1f, Math.abs(position)) : 0f;
+        float intensity = dragStart != RecyclerView.NO_POSITION ? .06f : .10f;
+        page.setAlpha(1f - intensity * distance);
+        page.setScaleX(1f - .006f * distance);
+        page.setScaleY(page.getScaleX());
     }
 
     private boolean rtl() { return pager.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL; }
 
     static final class Page extends FrameLayout {
-        private TabWaterline waterline;
-
         Page(Context context) { super(context); }
-
-        void setReveal(int shape, float progress, float originX, float originY) {
-            if (waterline == null) {
-                if (shape == 0) return;
-                waterline = new TabWaterline(getContext());
-            }
-            if (waterline.update(shape, progress, originX, originY)) invalidate();
-        }
-
-        @Override public void draw(Canvas canvas) {
-            if (waterline == null || waterline.isFullyOpen() || getWidth() <= 0 || getHeight() <= 0) {
-                super.draw(canvas);
-                return;
-            }
-            if (waterline.isClosed()) return;
-            float width = getWidth();
-            float height = getHeight();
-            int save = canvas.save();
-            waterline.clipPage(canvas, width, height);
-            super.draw(canvas);
-            int refracted = waterline.clipRefraction(canvas, width, height);
-            if (refracted >= 0) {
-                super.draw(canvas);
-                canvas.restoreToCount(refracted);
-            }
-            boolean trailing = waterline.drawHighlight(canvas, width, height);
-            canvas.restoreToCount(save);
-            if (trailing) postInvalidateOnAnimation();
-        }
     }
 }

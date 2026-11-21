@@ -60,6 +60,43 @@ public class ShitTokLoadingStateTest {
             assertEquals(View.GONE, visibility(f.selected));
         }
     }
+    @Test public void posterCoversReadyPlayerUntilItsFirstFrameAndReturnsOnDetach() {
+        try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            View poster = ReflectionHelpers.getField(f.selected, "poster");
+            PlayerView playerView = ReflectionHelpers.getField(f.selected, "playerView");
+            android.view.ViewGroup mediaLayer = (android.view.ViewGroup) poster.getParent();
+            assertTrue(mediaLayer.indexOfChild(poster) > mediaLayer.indexOfChild(playerView));
+            Player.Listener uiListener = ReflectionHelpers.getField(f.selected, "uiPlayerListener");
+
+            f.selectedPlayer.state = Player.STATE_READY;
+            uiListener.onPlaybackStateChanged(Player.STATE_READY);
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(View.VISIBLE, poster.getVisibility());
+
+            // The owner records the frame even if the holder's listener is not installed yet.
+            for (Player.Listener listener : new java.util.ArrayList<>(f.selectedPlayer.callbacks)) {
+                if (listener != uiListener) listener.onRenderedFirstFrame();
+            }
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            assertEquals(View.GONE, poster.getVisibility());
+
+            ReflectionHelpers.callInstanceMethod(f.selected, "detachLease");
+            assertEquals(View.VISIBLE, poster.getVisibility());
+            uiListener.onRenderedFirstFrame();
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(View.VISIBLE, poster.getVisibility());
+
+            ReflectionHelpers.callInstanceMethod(f.feed, "playSelected");
+            assertEquals(View.VISIBLE, poster.getVisibility());
+            for (Player.Listener listener : new java.util.ArrayList<>(f.selectedPlayer.callbacks)) {
+                listener.onRenderedFirstFrame();
+            }
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(View.GONE, poster.getVisibility());
+        }
+    }
+
     @Test public void legacyLaunchExtraCannotHoldShellForPlayerReadiness() {
         try (org.robolectric.android.controller.ActivityController<Activity> host =
                 Robolectric.buildActivity(Activity.class).setup()) {
