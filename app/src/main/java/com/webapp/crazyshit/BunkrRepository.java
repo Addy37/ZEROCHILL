@@ -682,14 +682,17 @@ public final class BunkrRepository {
         for (String candidate : origins.keySet()) {
             try {
                 Document doc = fetchDocument(context, candidate + pathAndQuery);
-                if (isBlockedPage(doc)) {
-                    last = new IOException("Bunkr page host was unavailable");
-                    continue;
-                }
-                if (BunkrMaintenance.recordFilePage(preferredUrl, doc)) {
+                boolean unavailable = isBlockedPage(doc);
+                // A file-specific notice can appear under a generic outage heading.
+                // A placeholder alone still needs an otherwise usable file page.
+                if (BunkrMaintenance.recordFilePage(preferredUrl, doc, unavailable)) {
                     if (forPlayback) throw new BunkrMaintenance.UnavailableException();
                     // Existing artwork repair can still use the file page's thumbnail metadata.
                     return doc;
+                }
+                if (unavailable) {
+                    last = new IOException("Bunkr page host was unavailable");
+                    continue;
                 }
                 String loadedOrigin = origin(doc.location());
                 if (isBunkrUrl(loadedOrigin)) preferredPageOrigin = loadedOrigin;

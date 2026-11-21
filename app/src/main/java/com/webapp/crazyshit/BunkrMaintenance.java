@@ -61,9 +61,13 @@ final class BunkrMaintenance {
     }
 
     static boolean recordFilePage(String url, Document doc) {
+        return recordFilePage(url, doc, false);
+    }
+
+    static boolean recordFilePage(String url, Document doc, boolean requireNotice) {
         String key = fileKey(url);
         if (key == null || !key.equals(fileKey(doc.location()))) return false;
-        if (!hasVisibleNotice(doc.body()) && !hasPlaceholderPlayer(doc)) return false;
+        if (!hasVisibleNotice(doc.body()) && (requireNotice || !hasPlaceholderPlayer(doc))) return false;
         remember(key);
         return true;
     }

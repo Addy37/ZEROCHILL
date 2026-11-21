@@ -30,6 +30,9 @@ public class BunkrResolutionTest {
             "<p>The server hosting this file is <strong>temporarily unavailable</strong> for maintenance. "
             + "Playback and downloads are disabled while maintenance is in progress. "
             + "Please check back again later.</p>";
+    static final String MAINTENANCE_FILE_PAGE =
+            "<title>Example.mp4</title><h1>Example.mp4</h1><button disabled>Download unavailable</button>"
+            + "<section><h2>Server under maintenance</h2>" + MAINTENANCE_NOTICE + "</section>";
 
     @Implements(value = Jsoup.class, isInAndroidSdk = false)
     public static class Wire {
@@ -185,6 +188,16 @@ public class BunkrResolutionTest {
         assertEquals(0, Wire.legacyRequests);
     }
 
+    @Test public void fileNoticeTakesPrecedenceOverMaintenanceHeading() {
+        Wire.html = MAINTENANCE_FILE_PAGE;
+        assertThrows(BunkrMaintenance.UnavailableException.class, () ->
+                PlayableSourceRouter.resolve(null, PAGE));
+        assertTrue(BunkrMaintenance.isKnown(PAGE));
+        assertEquals(1, Wire.pageRequests);
+        assertEquals(0, Wire.signRequests);
+        assertEquals(0, Wire.legacyRequests);
+    }
+
     @Test public void maintenanceExpiresAndPlaybackRecoversNormally() throws Exception {
         String healthy = Wire.html;
         Wire.html += MAINTENANCE_NOTICE;
@@ -250,6 +263,7 @@ public class BunkrResolutionTest {
         for (String page : new String[]{
                 "<p>File not found</p><video src='https://static.bunkr.ru/maint.mp4'></video>",
                 "<title>503 Service unavailable</title><p>Servers are currently under heavy load</p>",
+                "<h2>Server under maintenance</h2>",
                 "<p>The server is temporarily unavailable</p>",
                 "<video src='https://external.example/maint.mp4'></video>",
                 "<h1>Unsupported.avi</h1><video src='https://legacy.cdn.cr/movie.avi'></video>"}) {
