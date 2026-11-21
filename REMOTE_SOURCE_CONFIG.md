@@ -9,8 +9,9 @@ and per-source availability.
 Schema 1 supports exactly seven configurable sources: Fapello, Bunkr, WikiFeet,
 WikiFeet X, Kaotic, OnlyHaven and BaddieHub. CrazyShit and EFukt retain their
 existing compiled integrations. Source parsing/control flow remains in Android.
-The bundled document is the known-good fallback. The shared backend validator,
-Android parser and private Admin editor use the same supported source set.
+The bundled document is the known-good fallback. Schema 1 still requires the
+disabled `wikifeet` compatibility entry for older clients. The app and Admin
+provider controls have retired regular WikiFeet. WikiFeet X uses `wikifeetx`.
 
 ## Runtime order
 
@@ -41,8 +42,8 @@ the active cache.
 | Global | Source kill switches on/off, fallback-domain use on/off |
 | Fapello | Enabled, base/fallback domains, search/creator/listing/popular-video routes, User-Agent, Referer override, approved headers, request/ajax timeouts, retry count, creator/media/video/image/next/playable selectors, bounded parser regex, CDN hosts |
 | Bunkr | Enabled, Balbums index, page/fallback origins, legacy API endpoints, signing URL, download root, User-Agent, Referer override, approved headers, request/sign timeouts, retry count, album/video/image selectors, CDN hosts |
-| WikiFeet | Enabled, base/fallback domains, picture/thumbnail hosts, search route/selector, User-Agent, Referer override, approved headers, request/ajax timeouts, retry count |
-| WikiFeet X | Same supported values as WikiFeet, with an independent configuration |
+| WikiFeet | Disabled schema-1 compatibility entry for older app versions |
+| WikiFeet X | Enabled, base/fallback domains, picture/thumbnail hosts, search route/selector, User-Agent, Referer override, approved headers, request/ajax timeouts, retry count |
 | Kaotic | Enabled, base/fallback domains, feed routes, User-Agent, Referer override, approved headers, request timeout/retry count, card/playable selectors, bounded page/media regex |
 | OnlyHaven (cum.st) | Enabled, base/fallback domains, media/image CDN bases, creator-search UI/API, category search/list routes and provider category tokens, creator-page/posts routes, User-Agent, Referer override, approved headers, request timeout/retry count, creator/media/playable selectors, bounded creator/media regex |
 | BaddieHub | Enabled, base/fallback domains, latest/categories/category pagination routes, User-Agent, Referer override, approved headers, request timeout/retry count, category/card/player selectors |

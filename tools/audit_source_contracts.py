@@ -452,7 +452,7 @@ def baddiehub():
 
 def main():
     checks = {'onlyhaven': onlyhaven, 'fapello': fapello, 'bunkr': bunkr,
-              'wikifeet': lambda: wiki('wikifeet'), 'wikifeetx': lambda: wiki('wikifeetx'),
+              'wikifeetx': lambda: wiki('wikifeetx'),
               'kaotic': lambda: video_source('kaotic'), 'baddiehub': baddiehub,
               'crazyshit': lambda: video_source('crazyshit'), 'efukt': lambda: video_source('efukt')}
     parser = argparse.ArgumentParser(description=__doc__)
