@@ -46,6 +46,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
     }.filterIsInstance<Activity>().first()
     private var page by mutableStateOf<Backdrop>(emptyBackdrop())
     private val position = mutableFloatStateOf(0f)
+    private val pagerInMotion = mutableStateOf(false)
     private val committedIndex = mutableIntStateOf(0)
     private val collapse = mutableFloatStateOf(0f)
     private val unread = mutableStateOf(false)
@@ -90,10 +91,11 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
         }
     }
 
-    fun update(backdrop: ViewPageBackdrop?, pagerPosition: Float, folded: Float, hasUnread: Boolean) {
+    fun update(backdrop: ViewPageBackdrop?, pagerPosition: Float, moving: Boolean, folded: Float, hasUnread: Boolean) {
         page = backdrop ?: emptyBackdrop()
         position.floatValue = pagerPosition
-        if (!nav.isSquareDragging() && kotlin.math.abs(pagerPosition - pagerPosition.roundToInt()) < .001f) {
+        pagerInMotion.value = moving
+        if (!moving && kotlin.math.abs(pagerPosition - pagerPosition.roundToInt()) < .001f) {
             committedIndex.intValue = pagerPosition.roundToInt().coerceIn(0, 3)
         }
         collapse.floatValue = folded
@@ -111,6 +113,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
     @Composable private fun Navigation() {
         val selectedIndex = remember { { committedIndex.intValue } }
         val externalPosition = remember { { position.floatValue } }
+        val moving = remember { { pagerInMotion.value } }
         val shell = rememberLayerBackdrop()
         val config = remember(appearanceRevision.intValue) { navigationGlassConfig(activity) }
         val selectedInk = Color(AppearanceTheme.accent(activity))
@@ -141,7 +144,7 @@ internal class SquareNavigationBridge(private val nav: ZeroChillBottomNavigation
                     lensDepth = 24.dp,
                     drawContainer = false,
                     pagerPosition = externalPosition,
-                    isNavigationDragging = nav::isSquareDragging,
+                    isNavigationDragging = moving,
                     onNavigationDragStart = nav::startSquareDrag,
                     onNavigationDragBy = nav::dragSquareBy,
                     onNavigationDragEnd = nav::endSquareDrag,

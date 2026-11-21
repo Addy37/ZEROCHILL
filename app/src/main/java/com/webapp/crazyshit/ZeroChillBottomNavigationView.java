@@ -27,6 +27,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
     private ViewPageBackdrop pageBackdrop;
     private boolean libraryUnread;
     private boolean dragging;
+    private boolean pagerInMotion;
 
     ZeroChillBottomNavigationView(Context context) {
         super(context);
@@ -81,6 +82,11 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         pagerPosition = Math.max(0f, Math.min(3f, position));
         updateBridge();
     }
+    void setPagerInMotion(boolean moving, int currentItem) {
+        pagerInMotion = moving;
+        if (!moving) setPagerPosition(currentItem);
+        else updateBridge();
+    }
     void refreshItemColors() { updateBridge(); }
     void setOnNavigationDragListener(OnNavigationDragListener listener) { navigationDragListener = listener; }
     boolean startSquareDrag() {
@@ -96,7 +102,6 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         updateBridge();
     }
     void selectSquareTab(int index) { setSelectedItemId(PAGE_NAV_IDS[index]); }
-    boolean isSquareDragging() { return dragging; }
 
     void setCollapsed(boolean collapsed, boolean animated) {
         float target = collapsed ? 1f : 0f;
@@ -138,7 +143,7 @@ final class ZeroChillBottomNavigationView extends BottomNavigationView {
         updateBridge();
     }
     private void updateBridge() {
-        if (bridge != null) bridge.update(pageBackdrop, pagerPosition, collapseProgress, libraryUnread);
+        if (bridge != null) bridge.update(pageBackdrop, pagerPosition, pagerInMotion, collapseProgress, libraryUnread);
     }
     boolean isCollapsedForTest() { return collapsedTarget; }
     float collapseProgressForTest() { return collapseProgress; }

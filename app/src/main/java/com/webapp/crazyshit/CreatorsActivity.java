@@ -270,7 +270,20 @@ public final class CreatorsActivity extends Activity {
         }
     }
 
-    private void openCreator(CreatorCatalog.FavoriteGroup group) {
+    @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+        if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+            CreatorGalleryTransition.clearTap(this);
+        }
+        CreatorGalleryTransition.recordTap(this, event);
+        return super.dispatchTouchEvent(event);
+    }
+
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        CreatorGalleryTransition.clearTap(this);
+        return super.dispatchKeyEvent(event);
+    }
+
+    private void openCreator(CreatorCatalog.FavoriteGroup group, View anchor) {
         if (group == null || group.item == null) return;
         BrowseUi.hideKeyboard(this, input);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
@@ -278,7 +291,7 @@ public final class CreatorsActivity extends Activity {
         if (sessionId.isEmpty() && spec.grouped) {
             sessionId = CreatorGalleryPreloader.composeInMemoryMergedSession(this, spec);
         }
-        startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+        CreatorGalleryTransition.start(this, NativeFeedBrowserActivity.createCreatorGallery(
                 this,
                 spec.item.title,
                 spec.query,
@@ -288,7 +301,7 @@ public final class CreatorsActivity extends Activity {
                 spec.seedNames,
                 spec.seedUrls,
                 spec.seedImages
-        ));
+        ), anchor, group.item);
     }
 
     private void confirmMerge(CreatorCatalog.FavoriteGroup source, CreatorCatalog.FavoriteGroup target) {
@@ -585,7 +598,7 @@ public final class CreatorsActivity extends Activity {
             );
             bindBadges(holder, card);
 
-            holder.itemView.setOnClickListener(v -> openCreator(group));
+            holder.itemView.setOnClickListener(v -> openCreator(group, holder.avatar));
             holder.more.setContentDescription("Creator options for " + item.title);
             holder.more.setOnClickListener(v -> showMenu(v, group));
 

@@ -39,7 +39,7 @@ final class LibraryHubView extends ScrollView {
     interface Listener {
         void onOpenWatchLater(NativeContentItem item);
         void onOpenHistory(PlaybackHistoryStore.Item item);
-        void onOpenCreator(NativeContentItem creator);
+        void onOpenCreator(CreatorCatalog.FavoriteGroup group, View anchor);
     }
 
     private static final String USER_AGENT =
@@ -134,6 +134,19 @@ final class LibraryHubView extends ScrollView {
                 () -> activity.startActivity(new Intent(activity, DownloadedActivity.class)),
                 () -> openSavedVideos(FavoritesActivity.START_HISTORY), this::openMediaFavorites);
         content.addView(collection, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+        if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+            CreatorGalleryTransition.clearTap(getContext());
+        }
+        CreatorGalleryTransition.recordTap(getContext(), event);
+        return super.dispatchTouchEvent(event);
+    }
+
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        CreatorGalleryTransition.clearTap(getContext());
+        return super.dispatchKeyEvent(event);
     }
 
     private void ensureContent() {
@@ -563,7 +576,7 @@ final class LibraryHubView extends ScrollView {
         wrapper.addView(name, nameParams);
 
         View.OnClickListener openCreator = v -> {
-            if (listener != null) listener.onOpenCreator(creator);
+            if (listener != null) listener.onOpenCreator(group, image);
         };
         wrapper.setOnClickListener(openCreator);
         avatar.setOnClickListener(openCreator);

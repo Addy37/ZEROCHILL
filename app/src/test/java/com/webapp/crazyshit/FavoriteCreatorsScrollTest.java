@@ -163,6 +163,8 @@ public class FavoriteCreatorsScrollTest {
             adapter.bindViewHolder(holder, 0);
             holder.itemView.performClick();
             Intent launched = shadowOf(activity).getNextStartedActivity();
+            assertTrue(CreatorGalleryTransition.isScoped(launched));
+            assertEquals(OnlyFapGalleryActivity.class.getName(), launched.getComponent().getClassName());
             assertEquals(id, launched.getStringExtra(NativeFeedBrowserActivity.EXTRA_CREATOR_GALLERY_SESSION));
             assertNull(BunkrGallerySessionStore.snapshot(id));
             assertEquals(0, Preloads.warmCalls);

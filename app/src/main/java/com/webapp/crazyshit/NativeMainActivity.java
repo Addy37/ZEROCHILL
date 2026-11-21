@@ -88,6 +88,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private NativeMiniPlayer miniPlayer;
     private FrameLayout legacyContent;
     private ViewPager2 primaryPager;
+    private PrimaryTabReveal tabReveal;
     private MainPagerAdapter primaryPagerAdapter;
     private AppUpdater appUpdater;
     private boolean whatsNewPending;
@@ -369,22 +370,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 MainPagerAdapter.pagerPositionForPage(MainPagerAdapter.PAGE_CHAOS),
                 false
         );
-        primaryPager.setPageTransformer((page, position) -> {
-            if (ZeroChillMotion.animationsEnabled(page.getContext())) {
-                float distance = Math.min(1f, Math.abs(position));
-                page.setAlpha(1f - (distance * 0.10f));
-                float scale = 1f - (distance * 0.012f);
-                page.setScaleX(scale);
-                page.setScaleY(scale);
-            } else {
-                page.setAlpha(1f);
-                page.setScaleX(1f);
-                page.setScaleY(1f);
-            }
-        });
+        tabReveal = new PrimaryTabReveal(primaryPager);
+        primaryPager.setPageTransformer(tabReveal);
         primaryPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
+                tabReveal.onPageScrolled(position + positionOffset);
                 if (bottomNavigation != null) {
                     bottomNavigation.setPagerPosition(position + positionOffset);
                 }
@@ -392,12 +383,17 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
             @Override
             public void onPageScrollStateChanged(int state) {
-                primaryPagerAdapter.onPrimaryMotionChanged(state == ViewPager2.SCROLL_STATE_IDLE);
+                boolean idle = state == ViewPager2.SCROLL_STATE_IDLE;
+                if (bottomNavigation != null) {
+                    bottomNavigation.setPagerInMotion(!idle, primaryPager.getCurrentItem());
+                }
+                if (idle) tabReveal.finishDrag();
+                primaryPagerAdapter.onPrimaryMotionChanged(idle);
             }
 
             @Override
             public void onPageSelected(int position) {
-                if (bottomNavigation != null) {
+                if (bottomNavigation != null && primaryPager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE) {
                     bottomNavigation.setPagerPosition(position);
                 }
                 showPagerChrome(MainPagerAdapter.pageForPagerPosition(position));
@@ -470,6 +466,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         });
 
         bottomNavigation = new ZeroChillBottomNavigationView(this);
+        bottomNavigation.setPagerPosition(primaryPager.getCurrentItem());
         navigationMotion = new NavigationMotionController(
                 compact -> bottomNavigation.setCollapsed(compact, true),
                 dp(10), MainPagerAdapter.PAGE_CHAOS);
@@ -483,6 +480,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         menu.add(Menu.NONE, NAV_LIBRARY, 3, "Library").setIcon(R.drawable.ic_more_library);
         bottomNavigation.setOnNavigationDragListener(
                 new ZeroChillBottomNavigationView.OnNavigationDragListener() {
+                    private int dragOrigin;
+
                     @Override
                     public boolean onNavigationDragStart() {
                         if (primaryPager == null ||
@@ -490,7 +489,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                                 primaryPager.isFakeDragging()) {
                             return false;
                         }
-                        return primaryPager.beginFakeDrag();
+                        dragOrigin = primaryPager.getCurrentItem();
+                        if (!primaryPager.beginFakeDrag()) return false;
+                        tabReveal.startDrag();
+                        return true;
                     }
 
                     @Override
@@ -499,7 +501,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                             float pageWidth = Math.max(1f, primaryPager.getWidth());
                             // The capsule moves toward the destination icon while the page
                             // content moves in the opposite direction underneath it.
-                            primaryPager.fakeDragBy(-deltaPageFraction * pageWidth);
+                            float direction = primaryPager.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL ? 1f : -1f;
+                            primaryPager.fakeDragBy(direction * deltaPageFraction * pageWidth);
                         }
                     }
 
@@ -509,7 +512,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                         float releasePosition = bottomNavigation == null
                                 ? primaryPager.getCurrentItem()
                                 : bottomNavigation.pagerPositionForTest();
-                        int target = Math.max(
+                        int target = canceled ? dragOrigin : Math.max(
                                 0,
                                 Math.min(MainPagerAdapter.PAGE_COUNT - 1, Math.round(releasePosition))
                         );
@@ -524,19 +527,19 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         bottomNavigation.setOnItemSelectedListener(item -> {
             int id = item.getItemId();
             if (id == NAV_SERIES) {
-                showSeries();
+                showPrimaryTabFromDock(MainPagerAdapter.PAGE_SERIES);
                 return true;
             }
             if (id == NAV_ONLYFAP) {
-                showOnlyFapPage();
+                showPrimaryTabFromDock(MainPagerAdapter.PAGE_ONLYFAP);
                 return true;
             }
             if (id == NAV_CHAOS) {
-                showPrimaryPage(MainPagerAdapter.PAGE_CHAOS);
+                showPrimaryTabFromDock(MainPagerAdapter.PAGE_CHAOS);
                 return true;
             }
             if (id == NAV_LIBRARY) {
-                showPrimaryPage(MainPagerAdapter.PAGE_LIBRARY);
+                showPrimaryTabFromDock(MainPagerAdapter.PAGE_LIBRARY);
                 return true;
             }
             return false;
@@ -666,14 +669,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         showPrimaryPage(MainPagerAdapter.PAGE_CHAOS);
     }
 
-    private void showSeries() {
-        showPrimaryPage(MainPagerAdapter.PAGE_SERIES);
-    }
-
-    private void showOnlyFapPage() {
-        showPrimaryPage(MainPagerAdapter.PAGE_ONLYFAP);
-    }
-
     boolean isOnlyFapSearchContext() {
         return primaryPager != null &&
                 primaryPager.getVisibility() == View.VISIBLE &&
@@ -757,6 +752,13 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             return MainPagerAdapter.PAGE_CHAOS;
         }
         return MainPagerAdapter.pageForPagerPosition(primaryPager.getCurrentItem());
+    }
+
+    private void showPrimaryTabFromDock(int page) {
+        if (primaryPager.isFakeDragging()) bottomNavigation.endSquareDrag(true);
+        boolean animate = tabReveal.startTap(MainPagerAdapter.pagerPositionForPage(page), bottomNavigation);
+        showPrimaryPage(page);
+        if (animate) tabReveal.startArmedTap();
     }
 
     private void showPrimaryPage(int position) {
@@ -1450,6 +1452,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     }
 
     private void handleBackNavigation() {
+        if (bottomNavigation != null) bottomNavigation.endSquareDrag(true);
+        if (tabReveal != null) tabReveal.cancel();
         if (searchPanel != null) { searchPanel.back(); return; }
         if (screen == Screen.CHAOS && primaryPagerAdapter != null
                 && primaryPagerAdapter.exitChaosFullscreenForBack()) {
@@ -1513,6 +1517,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     @Override
     public void onConfigurationChanged(android.content.res.Configuration newConfig) {
+        if (tabReveal != null) tabReveal.cancel();
         super.onConfigurationChanged(newConfig);
         // NativeMain owns uiMode changes; Android does not recreate it automatically.
         if (!AppearanceTheme.colorSignature(this).equals(appliedAppearanceColors)) {
@@ -1600,6 +1605,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     @Override
     protected void onPause() {
+        if (bottomNavigation != null) bottomNavigation.endSquareDrag(true);
+        if (tabReveal != null) tabReveal.cancel();
         foregroundForWhatsNew = false;
         waitingForAppearance = false;
         super.onPause();

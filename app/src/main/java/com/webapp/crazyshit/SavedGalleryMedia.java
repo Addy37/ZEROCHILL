@@ -2,6 +2,7 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.view.View;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 
@@ -64,9 +65,9 @@ final class SavedGalleryMedia {
                 creator, new LinkedHashMap<>(), Collections.emptySet(), false)));
     }
 
-    static void openCreator(Activity activity, FavoriteStore.Item saved) {
+    static void openCreator(Activity activity, FavoriteStore.Item saved, View anchor) {
         Intent intent = creatorGallery(activity, saved);
-        if (intent != null) activity.startActivity(intent);
+        if (intent != null) CreatorGalleryTransition.start(activity, intent, anchor);
         else ZeroChillToast.makeText(activity, "Creator information is unavailable for this saved item.",
                 ZeroChillToast.LENGTH_SHORT).show();
     }

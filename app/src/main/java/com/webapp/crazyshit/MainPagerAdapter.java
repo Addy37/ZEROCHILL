@@ -179,16 +179,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             }
 
             @Override
-            public void onOpenCreator(NativeContentItem creator) {
-                if (creator == null) return;
-                CreatorGalleryPreloader.warm(activity, creator);
-                activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(
-                        activity,
-                        creator.title,
-                        creator.searchQuery.isEmpty() ? creator.title : creator.searchQuery,
-                        NativeFeedBrowserActivity.creatorProfileHint(creator),
-                        CreatorGalleryPreloader.sessionId(activity, creator)
-                ));
+            public void onOpenCreator(CreatorCatalog.FavoriteGroup group, View anchor) {
+                openFavoriteCreator(group, anchor);
             }
         }, true);
         AppPerformance.startupCost("library_shell", stageAt);
@@ -464,7 +456,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        FrameLayout container = new FrameLayout(parent.getContext());
+        FrameLayout container = new PrimaryTabReveal.Page(parent.getContext());
         container.setBackgroundColor(ZeroChillUi.background(activity));
         container.setLayoutParams(new RecyclerView.LayoutParams(-1, -1));
         return new Holder(container);
