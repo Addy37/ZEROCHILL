@@ -13,9 +13,11 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
+import org.robolectric.shadows.ShadowSystemClock;
 import java.io.IOException;
 import java.lang.reflect.Proxy;
 import java.net.URI;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -24,6 +26,13 @@ import java.util.Map;
 public class BunkrResolutionTest {
     static final String PAGE = "https://bunkr.cr/f/sample";
     static final String CDN = "https://c3mb-b.cdn.cr/storage/media/movie%20name.mp4?quality=original";
+    private static final String MAINTENANCE_NOTICE =
+            "<p>The server hosting this file is <strong>temporarily unavailable</strong> for maintenance. "
+            + "Playback and downloads are disabled while maintenance is in progress. "
+            + "Please check back again later.</p>";
+    static final String MAINTENANCE_FILE_PAGE =
+            "<title>Example.mp4</title><h1>Example.mp4</h1><button disabled>Download unavailable</button>"
+            + "<section><h2>Server under maintenance</h2>" + MAINTENANCE_NOTICE + "</section>";
 
     @Implements(value = Jsoup.class, isInAndroidSdk = false)
     public static class Wire {
@@ -78,6 +87,7 @@ public class BunkrResolutionTest {
     }
 
     @Before public void reset() {
+        BunkrMaintenance.retry(PAGE);
         Wire.signFails = false;
         Wire.signStatus = 0;
         Wire.legacyRequests = 0;
@@ -135,8 +145,10 @@ public class BunkrResolutionTest {
 
     @Test public void deniedFileDoesNotCycleThroughMirrorOrigins() {
         Wire.pageStatus = 403;
-        assertThrows(HttpStatusException.class, () ->
+        HttpStatusException error = assertThrows(HttpStatusException.class, () ->
                 new BunkrRepository().resolvePlayable(null, PAGE));
+        assertFalse(BunkrMaintenance.isConfirmed(error));
+        assertFalse(BunkrMaintenance.isKnown(PAGE));
         assertEquals(1, Wire.pageRequests);
     }
 
@@ -150,8 +162,128 @@ public class BunkrResolutionTest {
     }
 
     @Test public void verificationHtmlDoesNotCycleThroughMirrorOrigins() {
-        Wire.html = "<title>Checkpoint Sentinel</title><p>Verify you are human</p>";
-        assertThrows(IOException.class, () -> new BunkrRepository().resolvePlayable(null, PAGE));
+        Wire.html = "<title>Checkpoint Sentinel</title><p>Verify you are human</p>"
+                + MAINTENANCE_NOTICE;
+        IOException error = assertThrows(IOException.class, () ->
+                new BunkrRepository().resolvePlayable(null, PAGE));
+        assertFalse(BunkrMaintenance.isConfirmed(error));
+        assertFalse(BunkrMaintenance.isKnown(PAGE));
+        assertEquals(1, Wire.pageRequests);
+    }
+
+    @Test public void fileMaintenanceShortCircuitsRepeatPlaybackAcrossMirrors() {
+        Wire.html += MAINTENANCE_NOTICE;
+        BunkrRepository repository = new BunkrRepository();
+        IOException error = assertThrows(BunkrMaintenance.UnavailableException.class,
+                () -> repository.resolvePlayable(null, PAGE));
+        assertTrue(BunkrMaintenance.isConfirmed(new IllegalStateException(error)));
+        String mirror = "https://bunkr.fi/f/sample?from=album#bunkr-page";
+        assertTrue(BunkrMaintenance.isKnown(mirror));
+        assertFalse(BunkrMaintenance.isKnown("https://bunkr.cr/f/Sample"));
+        assertFalse(BunkrMaintenance.isKnown("https://other.example/f/sample"));
+        assertThrows(BunkrMaintenance.UnavailableException.class,
+                () -> PlayableSourceRouter.resolve(null, mirror));
+        assertEquals(1, Wire.pageRequests);
+        assertEquals(0, Wire.signRequests);
+        assertEquals(0, Wire.legacyRequests);
+    }
+
+    @Test public void fileNoticeTakesPrecedenceOverMaintenanceHeading() {
+        Wire.html = MAINTENANCE_FILE_PAGE;
+        assertThrows(BunkrMaintenance.UnavailableException.class, () ->
+                PlayableSourceRouter.resolve(null, PAGE));
+        assertTrue(BunkrMaintenance.isKnown(PAGE));
+        assertEquals(1, Wire.pageRequests);
+        assertEquals(0, Wire.signRequests);
+        assertEquals(0, Wire.legacyRequests);
+    }
+
+    @Test public void maintenanceExpiresAndPlaybackRecoversNormally() throws Exception {
+        String healthy = Wire.html;
+        Wire.html += MAINTENANCE_NOTICE;
+        BunkrRepository repository = new BunkrRepository();
+        assertThrows(BunkrMaintenance.UnavailableException.class,
+                () -> repository.resolvePlayable(null, PAGE));
+        Wire.html = healthy;
+        ShadowSystemClock.advanceBy(Duration.ofMinutes(4));
+        assertEquals(60_000, BunkrMaintenance.remainingMillis(PAGE));
+        assertThrows(BunkrMaintenance.UnavailableException.class,
+                () -> repository.resolvePlayable(null, PAGE));
+        ShadowSystemClock.advanceBy(Duration.ofMinutes(1));
+        assertFalse(BunkrMaintenance.isKnown(PAGE));
+        assertTrue(repository.resolvePlayable(null, PAGE).mediaUrl.startsWith(CDN));
+        assertEquals(2, Wire.pageRequests);
+        assertEquals(1, Wire.signRequests);
+    }
+
+    @Test public void artworkRepairRecordsMaintenanceAndExplicitRetryCanRecover() throws Exception {
+        String healthy = Wire.html;
+        String artwork = "https://static.scdn.st/thumbs/movie.jpg";
+        Wire.html = "<meta property='og:image' content='" + artwork + "'>" + MAINTENANCE_NOTICE;
+        BunkrRepository repository = new BunkrRepository();
+        assertEquals(artwork, repository.fetchFileArtwork(null, PAGE, ""));
+        assertTrue(BunkrMaintenance.isKnown(PAGE));
+        assertThrows(BunkrMaintenance.UnavailableException.class,
+                () -> repository.resolvePlayable(null, PAGE));
+        assertEquals(1, Wire.pageRequests);
+
+        Wire.html = healthy;
+        BunkrMaintenance.retry(PAGE);
+        assertFalse(BunkrMaintenance.isKnown(PAGE));
+        assertTrue(repository.resolvePlayable(null, PAGE).mediaUrl.startsWith(CDN));
+        assertEquals(2, Wire.pageRequests);
+    }
+
+    @Test public void maintenancePlaceholderRequiresActualPlayerSource() throws Exception {
+        String placeholder = "https://static.scdn.st/maintenance-vid.mp4?fallback=1";
+        String healthy = Wire.html;
+        Wire.html = healthy + "<script>const fallback = '" + placeholder + "';</script>"
+                + "<div hidden>" + MAINTENANCE_NOTICE + "</div>"
+                + "<video hidden src='" + placeholder + "'></video>";
+        BunkrRepository repository = new BunkrRepository();
+        assertTrue(repository.resolvePlayable(null, PAGE).mediaUrl.startsWith(CDN));
+        assertFalse(BunkrMaintenance.isKnown(PAGE));
+
+        Wire.html = "<video><source src='" + placeholder + "'></video>";
+        assertThrows(BunkrMaintenance.UnavailableException.class,
+                () -> repository.resolvePlayable(null, PAGE));
+        assertTrue(BunkrMaintenance.isKnown(PAGE));
+    }
+
+    @Test public void realPlayerSourceTakesPrecedenceOverPlaceholderAlternative() throws Exception {
+        String video = "https://legacy.cdn.cr/movie.mp4";
+        Wire.html = "<video><source src='https://static.bunkr.ru/maint.mp4'>"
+                + "<source src='" + video + "'></video>";
+        assertEquals(video, new BunkrRepository().resolvePlayable(null, PAGE).mediaUrl);
+        assertFalse(BunkrMaintenance.isKnown(PAGE));
+    }
+
+    @Test public void onlyPositiveFileEvidenceMarksMaintenance() {
+        BunkrRepository repository = new BunkrRepository();
+        for (String page : new String[]{
+                "<p>File not found</p><video src='https://static.bunkr.ru/maint.mp4'></video>",
+                "<title>503 Service unavailable</title><p>Servers are currently under heavy load</p>",
+                "<h2>Server under maintenance</h2>",
+                "<p>The server is temporarily unavailable</p>",
+                "<video src='https://external.example/maint.mp4'></video>",
+                "<h1>Unsupported.avi</h1><video src='https://legacy.cdn.cr/movie.avi'></video>"}) {
+            Wire.html = page;
+            IOException error = assertThrows(IOException.class,
+                    () -> repository.resolvePlayable(null, PAGE));
+            assertFalse(BunkrMaintenance.isConfirmed(error));
+            assertFalse(BunkrMaintenance.isKnown(PAGE));
+        }
+        Wire.transportFails = true;
+        IOException error = assertThrows(IOException.class, () -> repository.resolvePlayable(null, PAGE));
+        assertFalse(BunkrMaintenance.isConfirmed(error));
+        assertFalse(BunkrMaintenance.isKnown(PAGE));
+    }
+
+    @Test public void filePageWithMediaExtensionAlsoChecksForMaintenance() {
+        String slugWithExtension = PAGE + "-file.mp4";
+        Wire.html = MAINTENANCE_NOTICE;
+        assertThrows(BunkrMaintenance.UnavailableException.class,
+                () -> new BunkrRepository().resolvePlayable(null, slugWithExtension));
         assertEquals(1, Wire.pageRequests);
     }
 

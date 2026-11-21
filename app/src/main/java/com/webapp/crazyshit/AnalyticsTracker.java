@@ -98,7 +98,7 @@ final class AnalyticsTracker {
         else if(OnlyHavenRepository.isOnlyHavenUrl(url)) source="onlyhaven";
         else if(EfuktRepository.isEfuktUrl(url)) source="efukt";
         else if(WebVideoSourceRepository.isKaoticUrl(url)) source="kaotic";
-        else if(WikiFeetRepository.isWikiFeetUrl(url)) source="wikifeet";
+        else if(WikiFeetRepository.isXPageUrl(url) || WikiFeetRepository.isXMediaUrl(url)) source="wikifeetx";
         else if(url!=null && url.contains("crazyshit.com/")) source="crazyshit";
         failure(context,metric,source);
     }

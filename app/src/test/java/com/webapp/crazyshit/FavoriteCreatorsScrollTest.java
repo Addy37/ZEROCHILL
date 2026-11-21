@@ -145,14 +145,16 @@ public class FavoriteCreatorsScrollTest {
     @Test public void tapPassesPersistedSessionWithoutRestoringOnTheListThread() throws Exception {
         seedFavorites(1);
         String query = "Testcreator000";
-        String id = BunkrGallerySessionStore.createCreator(query, "", query);
+        CreatorGallerySpec spec = CreatorGallerySpec.from(CreatorCatalog.favoriteGroups(context).get(0));
+        String id = BunkrGallerySessionStore.createCreator(query, "", spec.sessionKey);
+        String persistedKey = "creator:" + CreatorNameMatcher.normalized(spec.sessionKey);
         NativeContentItem item = new NativeContentItem(NativeContentItem.KIND_IMAGE, "Cached photo",
                 "https://fapello.com/testcreator000/1/", "", "", "", "", "");
         BunkrGallerySessionStore.recordCreatorBatch(context, id, Collections.singletonList(item), false,
                 new JSONObject().put("query", query));
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (!id.equals(context.getSharedPreferences("onlyfap_hot_gallery_sessions", 0)
-                .getString("creator:testcreator000", "")) && System.nanoTime() < deadline) Thread.sleep(10);
+                .getString(persistedKey, "")) && System.nanoTime() < deadline) Thread.sleep(10);
         Map<?, ?> sessions = ReflectionHelpers.getStaticField(BunkrGallerySessionStore.class, "SESSIONS");
         sessions.clear();
         try (ActivityController<CreatorsActivity> controller = Robolectric.buildActivity(CreatorsActivity.class).setup()) {

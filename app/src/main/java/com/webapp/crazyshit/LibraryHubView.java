@@ -590,7 +590,9 @@ final class LibraryHubView extends ScrollView {
         for (FavoriteStore.Item item : items) {
             NativeContentItem content = item.content;
             if (content == null) continue;
-            View card = compactMediaCard(item.title, item.url, content.imageUrl, "♥", false);
+            boolean retired = WikiFeetRepository.isRetiredItem(content);
+            View card = compactMediaCard(item.title, retired ? "" : item.url,
+                    retired ? "" : content.imageUrl, "♥", false, WikiFeetRepository.imageReferer(content));
             card.setOnClickListener(v -> SavedGalleryMedia.open(activity, item));
             rail.addCard(card, item.url, portraitThumbnails.getOrDefault(item.url, false));
         }
@@ -712,13 +714,18 @@ final class LibraryHubView extends ScrollView {
             String badge,
             boolean small
     ) {
+        return compactMediaCard(title, pageUrl, posterUrl, badge, small, "");
+    }
+
+    private View compactMediaCard(String title, String pageUrl, String posterUrl, String badge,
+                                  boolean small, String referer) {
         MaterialCardView card = mediaCard(small ? 16 : 18);
         FrameLayout frame = new FrameLayout(activity);
         card.addView(frame, new MaterialCardView.LayoutParams(-1, -1));
 
         NativeContentItem content = videoItem(title, pageUrl, posterUrl);
         ImageView image = mediaImage(frame);
-        loadMediaImage(image, pageUrl, content.imageUrl, false);
+        loadMediaImage(image, pageUrl, content.imageUrl, false, referer);
 
         View shade = new View(activity);
         shade.setBackground(bottomShade());
@@ -895,7 +902,13 @@ final class LibraryHubView extends ScrollView {
             String preferredImage,
             boolean preferContinueFrame
     ) {
+        loadMediaImage(image, pageUrl, preferredImage, preferContinueFrame, "");
+    }
+
+    private void loadMediaImage(ImageView image, String pageUrl, String preferredImage,
+                                boolean preferContinueFrame, String referer) {
         String cleanPage = clean(pageUrl);
+        if (WikiFeetRepository.isRetiredPageUrl(cleanPage)) return;
         if (!cleanPage.isEmpty()) {
             thumbnailTargets.computeIfAbsent(cleanPage, key -> new ArrayList<>()).add(image);
         }
@@ -910,7 +923,7 @@ final class LibraryHubView extends ScrollView {
 
         String preferred = clean(preferredImage);
         if (!preferred.isEmpty()) {
-            loadResolvedImage(image, preferred, cleanPage);
+            loadResolvedImage(image, preferred, cleanPage, referer);
             return;
         }
 
@@ -948,7 +961,7 @@ final class LibraryHubView extends ScrollView {
         }
 
         String url = creator == null ? "" : clean(creator.imageUrl);
-        if (url.isEmpty()) return;
+        if (url.isEmpty() || (avatarOverride == null && WikiFeetRepository.isRetiredItem(creator))) return;
         try {
             com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
                     Glide.with(image)
@@ -1003,10 +1016,14 @@ final class LibraryHubView extends ScrollView {
     }
 
     private void loadResolvedImage(ImageView image, String source, String pageUrl) {
+        loadResolvedImage(image, source, pageUrl, "");
+    }
+
+    private void loadResolvedImage(ImageView image, String source, String pageUrl, String referer) {
         if (closed || image == null || clean(source).isEmpty()) return;
         Object model = source.startsWith("file:")
                 ? source
-                : remoteImage(source, pageUrl);
+                : remoteImage(source, referer.isEmpty() ? pageUrl : referer);
         try {
             Glide.with(image)
                     .load(model)

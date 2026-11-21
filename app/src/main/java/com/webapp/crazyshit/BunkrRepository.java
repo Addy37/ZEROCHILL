@@ -245,12 +245,13 @@ public final class BunkrRepository {
             throws IOException {
         requireEnabled();
         String canonical = normalizeUrl(pageUrl, indexUrl());
-        if (isDirectAsset(canonical)) {
+        if (BunkrMaintenance.isKnown(canonical)) throw new BunkrMaintenance.UnavailableException();
+        if (isDirectAsset(canonical) && !BunkrMaintenance.isFilePage(canonical)) {
             return new CrazyShitRepository.StreamInfo(canonical, pageUrl, fileTitle(canonical));
         }
 
         Document doc = isBunkrUrl(canonical)
-                ? fetchBunkrDocument(context, canonical, pathAndQuery(canonical))
+                ? fetchBunkrDocument(context, canonical, pathAndQuery(canonical), true)
                 : fetchDocument(context, canonical);
         String resolvedPageUrl = doc.location().isEmpty() ? canonical : doc.location();
         String title = clean(doc.selectFirst("h1") == null ? doc.title() : doc.selectFirst("h1").text());
@@ -662,6 +663,15 @@ public final class BunkrRepository {
             String preferredUrl,
             String pathAndQuery
     ) throws IOException {
+        return fetchBunkrDocument(context, preferredUrl, pathAndQuery, false);
+    }
+
+    private Document fetchBunkrDocument(
+            Context context,
+            String preferredUrl,
+            String pathAndQuery,
+            boolean forPlayback
+    ) throws IOException {
         LinkedHashMap<String, Boolean> origins = new LinkedHashMap<>();
         String requestedOrigin = origin(preferredUrl);
         if (isBunkrUrl(requestedOrigin)) origins.put(requestedOrigin, true);
@@ -672,7 +682,15 @@ public final class BunkrRepository {
         for (String candidate : origins.keySet()) {
             try {
                 Document doc = fetchDocument(context, candidate + pathAndQuery);
-                if (isBlockedPage(doc)) {
+                boolean unavailable = isBlockedPage(doc);
+                // A file-specific notice can appear under a generic outage heading.
+                // A placeholder alone still needs an otherwise usable file page.
+                if (BunkrMaintenance.recordFilePage(preferredUrl, doc, unavailable)) {
+                    if (forPlayback) throw new BunkrMaintenance.UnavailableException();
+                    // Existing artwork repair can still use the file page's thumbnail metadata.
+                    return doc;
+                }
+                if (unavailable) {
                     last = new IOException("Bunkr page host was unavailable");
                     continue;
                 }
@@ -680,7 +698,7 @@ public final class BunkrRepository {
                 if (isBunkrUrl(loadedOrigin)) preferredPageOrigin = loadedOrigin;
                 return doc;
             } catch (IOException error) {
-                if (requiresUserAction(error)) throw error;
+                if (requiresUserAction(error) || BunkrMaintenance.isConfirmed(error)) throw error;
                 last = error;
             }
         }
@@ -955,11 +973,33 @@ public final class BunkrRepository {
         return isPlayableName(url) || isImageName(url);
     }
 
-    private boolean isMaintenanceVideo(String url) {
+    private static boolean isMaintenanceVideo(String url) {
         if (url == null) return false;
         String lower = url.toLowerCase(Locale.US);
         return lower.endsWith("/maint.mp4") || lower.contains("/maint.mp4?") ||
                 lower.endsWith("/maintenance-vid.mp4") || lower.contains("/maintenance-vid.mp4?");
+    }
+
+    static boolean isOfficialMaintenanceVideo(String url) {
+        try {
+            URI uri = URI.create(url);
+            String path = uri.getRawPath();
+            // Root-level site assets are distinguishable from similarly named uploaded media.
+            if (path == null || path.lastIndexOf('/') != 0 || !isMaintenanceVideo(path)) return false;
+            if (!"https".equalsIgnoreCase(uri.getScheme())
+                    && !"http".equalsIgnoreCase(uri.getScheme())) return false;
+            if (isBunkrUrl(url)) return true;
+            String mediaHost = host(url);
+            SourceConfig.Bunkr config = config();
+            List<String> cdnHosts = config == null
+                    ? java.util.Arrays.asList("cdn.cr", "scdn.st", "bunkr.ru", "bunkrr.su")
+                    : config.cdnHosts;
+            for (String allowed : cdnHosts) {
+                if (mediaHost.equals(allowed) || mediaHost.endsWith("." + allowed)) return true;
+            }
+        } catch (IllegalArgumentException ignored) {
+        }
+        return false;
     }
 
     private boolean isBlockedPage(Document doc) {

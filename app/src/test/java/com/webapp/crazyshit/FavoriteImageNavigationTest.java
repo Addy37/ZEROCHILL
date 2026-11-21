@@ -138,12 +138,14 @@ public class FavoriteImageNavigationTest {
             View name = GlassMenuTestSupport.description(card, "Open gallery for " + NAME);
             assertNotNull(name);
             assertTrue(name.performClick());
-            assertGallery(shadowOf(activity).getNextStartedActivity(), NAME, PROFILE);
+            assertGallery(shadowOf(activity).getNextStartedActivity(), NAME, PROFILE,
+                    OnlyFapGalleryActivity.class);
             assertTrue(card.findViewWithTag("library-card-options").performClick());
             PopupWindow popup = shadowOf(RuntimeEnvironment.getApplication()).getLatestPopupWindow();
             GlassMenuTestSupport.assertGlass(popup);
             assertTrue(GlassMenuTestSupport.click(popup, "Open gallery"));
-            assertGallery(shadowOf(activity).getNextStartedActivity(), NAME, PROFILE);
+            assertGallery(shadowOf(activity).getNextStartedActivity(), NAME, PROFILE,
+                    OnlyFapGalleryActivity.class);
             assertEquals(1, FavoriteStore.mediaFavorites(context).size());
         }
     }
@@ -161,16 +163,28 @@ public class FavoriteImageNavigationTest {
         assertNull(SavedGalleryMedia.creatorGallery(activity, orphaned));
     }
 
-    @Test public void wikiFeetSavedProfileUsesTheExistingNativeGalleryRoute() {
+    @Test public void wikiFeetXSavedProfileUsesTheExactNativeGalleryRoute() {
+        String profile = "https://www.wikifeetx.com/Fixture_Creator";
+        NativeContentItem image = new NativeContentItem(NativeContentItem.KIND_IMAGE, NAME + " #123",
+                "https://pics.wikifeet.com/Fixture-Creator-Feet-123.jpg", "", "WikiFeet X",
+                profile, "", "WikiFeet X");
+        FavoriteStore.Item saved = save(image);
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        assertGallery(SavedGalleryMedia.creatorGallery(activity, saved), NAME, profile);
+        assertEquals(saved.url, FavoriteStore.mediaFavorites(context).get(0).url);
+    }
+
+    @Test public void retiredWikiFeetFavoritesStaySavedWithoutOpeningARequest() {
         String profile = "https://www.wikifeet.com/Fixture_Creator";
         NativeContentItem image = new NativeContentItem(NativeContentItem.KIND_IMAGE, NAME + " #123",
-                "wikifeet-image", "", "", profile, "", "WikiFeet");
-        FavoriteStore.Item saved = new FavoriteStore.Item(image.title, image.url, 0, image, true, false, "");
+                "https://pics.wikifeet.com/Fixture-Creator-Feet-123.jpg", "", "WikiFeet",
+                profile, "", "WikiFeet");
+        FavoriteStore.Item saved = save(image);
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        Intent gallery = SavedGalleryMedia.creatorGallery(activity, saved);
-        assertNotNull(gallery);
-        assertEquals(NativeFeedBrowserActivity.class.getName(), gallery.getComponent().getClassName());
-        assertEquals(NAME, gallery.getStringExtra(NativeFeedBrowserActivity.EXTRA_BUNKR_CREATOR_QUERY));
+        assertNull(SavedGalleryMedia.creatorGallery(activity, saved));
+        SavedGalleryMedia.open(activity, saved);
+        assertNull(shadowOf(activity).getNextStartedActivity());
+        assertEquals(saved.url, FavoriteStore.mediaFavorites(context).get(0).url);
     }
 
     private NativeContentItem photo(String url, String title, String profile) {
@@ -200,8 +214,12 @@ public class FavoriteImageNavigationTest {
         return popup;
     }
     private void assertGallery(Intent intent, String name, String profile) {
+        assertGallery(intent, name, profile, NativeFeedBrowserActivity.class);
+    }
+
+    private void assertGallery(Intent intent, String name, String profile, Class<? extends Activity> target) {
         assertNotNull(intent);
-        assertEquals(NativeFeedBrowserActivity.class.getName(), intent.getComponent().getClassName());
+        assertEquals(target.getName(), intent.getComponent().getClassName());
         assertEquals(name, intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_BUNKR_CREATOR_QUERY));
         assertEquals(profile, intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_FAPELLO_PROFILE_URL));
     }

@@ -5,7 +5,6 @@ import android.content.SharedPreferences;
 import android.os.SystemClock;
 
 import org.json.JSONArray;
-import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -212,7 +211,8 @@ final class FapzoneCreatorRepository {
                     "",
                     "Random Fapello discovery pick",
                     model.name
-            ));
+            ).withCreatorIdentity(java.util.Arrays.asList(model.username, model.verifiedAlias),
+                    java.util.Collections.singletonList(model.url)));
             if (result.size() >= DISCOVER_CANDIDATES) break;
         }
 
@@ -287,7 +287,9 @@ final class FapzoneCreatorRepository {
                                 model.imageUrl.toLowerCase(Locale.US).contains("load.svg")) continue;
                         pageItems.add(new NativeContentItem(NativeContentItem.KIND_CREATOR,
                                 model.name, model.url, model.imageUrl, "", model.url, "",
-                                "Random Fapello discovery pick", model.name));
+                                "Random Fapello discovery pick", model.name)
+                                .withCreatorIdentity(java.util.Arrays.asList(model.username, model.verifiedAlias),
+                                        java.util.Collections.singletonList(model.url)));
                     }
                     java.util.Collections.shuffle(pageItems);
                     pool.addAll(pageItems);
@@ -363,18 +365,14 @@ final class FapzoneCreatorRepository {
     }
 
     private static String creatorUrlKey(NativeContentItem item) {
-        String url = clean(item == null ? "" : item.url).toLowerCase(Locale.US);
-        if (url.isEmpty()) return "";
-        while (url.endsWith("/")) url = url.substring(0, url.length() - 1);
-        return "url:" + url;
+        String profile = OnlyFapCreatorResults.profileKey(item == null ? "" : item.url);
+        return profile.isEmpty() ? "" : "url:" + profile;
     }
 
     private static String creatorNameKey(NativeContentItem item) {
-        if (item == null) return "";
-        String value = clean(item.searchQuery);
-        if (value.isEmpty()) value = clean(item.title);
-        String compact = compact(value);
-        return compact.isEmpty() ? "" : "name:" + compact;
+        if (item == null || !creatorUrlKey(item).isEmpty()) return "";
+        String name = CreatorIdentity.key(item.title);
+        return name.isEmpty() ? "" : "name:" + name;
     }
 
     static String titleFor(int mode) {
@@ -414,19 +412,21 @@ final class FapzoneCreatorRepository {
 
         NativeContentItem album = null;
         try {
-            album = chooseAlbum(creator.name, bunkr.searchAlbums(context, creator.name, 1));
+            String identity = creator.username.isEmpty() ? creator.name : creator.username;
+            album = chooseAlbum(identity, bunkr.searchAlbums(context, identity, 1));
         } catch (Exception ignored) {
         }
 
+        String bunkrPreview = album == null ? "" : clean(album.imageUrl);
         String fapelloPreview = model == null ? "" : clean(model.imageUrl);
         if (model != null && fapelloPreview.isEmpty()) {
             try {
-                fapelloPreview = chooseFapelloPreview(fapello.fetchModelMedia(context, model, 1));
+                fapelloPreview = chooseFapelloPreview(fapello.fetchCreatorPreview(context, model,
+                        thumbnailScore(bunkrPreview, false) > 0));
             } catch (Exception ignored) {
             }
         }
 
-        String bunkrPreview = album == null ? "" : clean(album.imageUrl);
         String imageUrl = chooseThumbnail(fapelloPreview, bunkrPreview);
         String cardUrl;
         String imageReferer;
@@ -512,16 +512,20 @@ final class FapzoneCreatorRepository {
             int rank,
             FapelloRepository.Model model
     ) {
+        String handle = FapelloRepository.galleryHandle(model);
         NativeContentItem album = null;
         try {
-            album = chooseAlbum(model.name, bunkr.searchAlbums(context, model.name, 1));
+            String identity = handle.isEmpty() ? model.name : handle;
+            album = chooseAlbum(identity, bunkr.searchAlbums(context, identity, 1));
         } catch (Exception ignored) {
         }
 
+        String bunkrPreview = album == null ? "" : clean(album.imageUrl);
         String fapelloPreview = clean(model.imageUrl);
         if (fapelloPreview.isEmpty()) {
             try {
-                fapelloPreview = chooseFapelloPreview(fapello.fetchModelMedia(context, model, 1));
+                fapelloPreview = chooseFapelloPreview(fapello.fetchCreatorPreview(context, model,
+                        thumbnailScore(bunkrPreview, false) > 0));
             } catch (Exception ignored) {
             }
         }
@@ -529,7 +533,6 @@ final class FapzoneCreatorRepository {
         // Keep the exact Fapello profile on the card. The creator gallery uses it directly
         // instead of having to rediscover or guess the profile slug from the display name.
         String cardUrl = model.url;
-        String bunkrPreview = album == null ? "" : clean(album.imageUrl);
         String imageUrl = chooseThumbnail(fapelloPreview, bunkrPreview);
         String imageReferer = imageUrl.equals(fapelloPreview)
                 ? model.url
@@ -542,23 +545,22 @@ final class FapzoneCreatorRepository {
                 String.valueOf(rank + 1),
                 imageReferer,
                 "",
-                "Bunkr + Fapello + OnlyHaven + WikiFeet + WikiFeet X",
+                "Bunkr + Fapello + OnlyHaven + WikiFeet X",
                 model.name
-        );
+        ).withCreatorIdentity(java.util.Arrays.asList(handle, model.username, model.verifiedAlias),
+                album == null ? java.util.Collections.singletonList(model.url)
+                        : java.util.Arrays.asList(model.url, album.url));
         return new ResolvedCreator(rank, item);
     }
 
     private NativeContentItem chooseAlbum(String creatorName, List<NativeContentItem> albums) {
         if (albums == null || albums.isEmpty()) return null;
-        String creator = compact(creatorName);
         NativeContentItem best = null;
         long bestScore = Long.MIN_VALUE;
         for (NativeContentItem album : albums) {
-            if (album == null || !BunkrRepository.isAlbumUrl(album.url)) continue;
-            String title = compact(album.title);
-            int nameScore = title.equals(creator) ? 3 : title.contains(creator) ? 2 : -1;
-            if (creator.isEmpty() || nameScore < 0) continue;
-            long score = (nameScore * 1_000_000L) + fileCount(album.description);
+            if (album == null || !BunkrRepository.isAlbumUrl(album.url)
+                    || !CreatorGalleryMatch.albumMatches(album.title, creatorName)) continue;
+            long score = fileCount(album.description);
             if (best == null || score > bestScore) {
                 best = album;
                 bestScore = score;
@@ -635,10 +637,10 @@ final class FapzoneCreatorRepository {
     ) {
         creators.sort(Comparator.comparingInt(value -> value.rank));
         ArrayList<NativeContentItem> result = new ArrayList<>();
-        Set<String> names = new HashSet<>();
+        Set<String> profiles = new HashSet<>();
         for (ResolvedCreator creator : creators) {
             if (creator == null || creator.item == null ||
-                    !names.add(compact(creator.item.title))) continue;
+                    !profiles.add(primaryCreatorKey(creator.item))) continue;
             result.add(creator.item);
             if (result.size() >= limit) break;
         }
@@ -660,12 +662,12 @@ final class FapzoneCreatorRepository {
         LinkedHashMap<String, NativeContentItem> merged = new LinkedHashMap<>();
         if (resolved != null) {
             for (NativeContentItem item : resolved) {
-                if (item != null) merged.putIfAbsent(compact(item.title), item);
+                if (item != null) merged.putIfAbsent(primaryCreatorKey(item), item);
             }
         }
         if (warm != null) {
             for (NativeContentItem item : warm) {
-                if (item != null) merged.putIfAbsent(compact(item.title), item);
+                if (item != null) merged.putIfAbsent(primaryCreatorKey(item), item);
             }
         }
         ArrayList<NativeContentItem> result = new ArrayList<>(merged.values());
@@ -685,34 +687,9 @@ final class FapzoneCreatorRepository {
             if (!allowStale && (updated <= 0L ||
                     System.currentTimeMillis() - updated > CACHE_AGE_MS)) return result;
             JSONArray values = new JSONArray(prefs.getString("items", "[]"));
-            for (int i = 0; i < values.length() && result.size() < limit; i++) {
-                JSONObject value = values.optJSONObject(i);
-                if (value == null) continue;
-                String name = clean(value.optString("name", ""));
-                String url = clean(value.optString("url", ""));
-                String query = clean(value.optString("query", name));
-                if (name.isEmpty() || query.isEmpty() ||
-                        (!BunkrRepository.isAlbumUrl(url) &&
-                                !FapelloRepository.isModelUrl(url) &&
-                                !OnlyHavenRepository.isOnlyHavenUrl(url))) {
-                    continue;
-                }
-                result.add(new NativeContentItem(
-                        NativeContentItem.KIND_CREATOR,
-                        name,
-                        url,
-                        value.optString("image", ""),
-                        value.optString("rank", ""),
-                        value.optString("referer", url),
-                        "",
-                        value.optString(
-                                "description",
-                                mode == MODE_TOP_50
-                                        ? "Random Fapello discovery pick"
-                                        : "Bunkr + Fapello + OnlyHaven + WikiFeet + WikiFeet X"
-                        ),
-                        query
-                ));
+            for (NativeContentItem item : ContentItemCodec.decodeList(values, limit)) {
+                if (item.isCreator() && !item.title.isEmpty()
+                        && FapelloRepository.isModelUrl(item.url)) result.add(withListedHandle(item));
             }
         } catch (Exception ignored) {
             result.clear();
@@ -720,20 +697,20 @@ final class FapzoneCreatorRepository {
         return result;
     }
 
+    static NativeContentItem withListedHandle(NativeContentItem item) {
+        FapelloRepository.Model profile = new FapelloRepository.Model(item.title, item.url, "");
+        String handle = FapelloRepository.galleryHandle(profile);
+        if (handle.isEmpty() || handle.equals(profile.username)) return item;
+
+        java.util.LinkedHashSet<String> aliases = new java.util.LinkedHashSet<>();
+        aliases.add(handle);
+        aliases.addAll(item.creatorAliases);
+        return item.withCreatorIdentity(new ArrayList<>(aliases), item.creatorProfileUrls);
+    }
+
     private void writeCache(Context context, int mode, List<NativeContentItem> items) {
         try {
-            JSONArray values = new JSONArray();
-            for (NativeContentItem item : items) {
-                JSONObject value = new JSONObject();
-                value.put("name", item.title);
-                value.put("url", item.url);
-                value.put("query", item.searchQuery);
-                value.put("image", item.imageUrl);
-                value.put("referer", item.uploader);
-                value.put("rank", item.views);
-                value.put("description", item.description);
-                values.put(value);
-            }
+            JSONArray values = ContentItemCodec.encodeList(items, DISCOVER_CANDIDATES);
             context.getSharedPreferences(cacheName(mode), Context.MODE_PRIVATE)
                     .edit()
                     .putLong("updated", System.currentTimeMillis())
@@ -750,10 +727,10 @@ final class FapzoneCreatorRepository {
         throw new IOException("Unknown OnlyFap creator mode");
     }
 
-    private String cacheName(int mode) {
-        if (mode == MODE_TOP_50) return "onlyfap_discover_v2";
-        // v3 discards cards cached before static Fapello routes were excluded from listings.
-        return "fapzone_creator_feed_v3_" + mode;
+    static String cacheName(int mode) {
+        if (mode == MODE_TOP_50) return "onlyfap_discover_v3";
+        // Old cards can contain artwork chosen by a partial album match.
+        return "fapzone_creator_feed_v4_" + mode;
     }
 
     private String serviceLabel(String service) {
@@ -770,12 +747,6 @@ final class FapzoneCreatorRepository {
         } catch (Exception ignored) {
             return Integer.MAX_VALUE;
         }
-    }
-
-    private static String compact(String value) {
-        return value == null
-                ? ""
-                : value.toLowerCase(Locale.US).replaceAll("[^a-z0-9]", "");
     }
 
     private static String clean(String value) {

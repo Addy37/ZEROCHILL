@@ -24,6 +24,6 @@ enum ShitTokSourceMode {
     }
     boolean allowsSource(String source) {
         return this == ALL || source.equals("onlyhaven") || source.equals("fapello")
-                || source.equals("bunkr") || source.equals("baddiehub") || source.equals("shit-show");
+                || source.equals("bunkr") || source.equals("shit-show");
     }
 }

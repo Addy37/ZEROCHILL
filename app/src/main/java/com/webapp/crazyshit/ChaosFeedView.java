@@ -2036,6 +2036,13 @@ public final class ChaosFeedView extends FrameLayout {
             prepareVisible(position);
             return;
         }
+        if (BunkrMaintenance.isKnown(item.url)) {
+            ChaosHolder holder = position == selectedPosition ? holderAt(position) : null;
+            if (holder != null && !holder.maintenanceFailure) {
+                showSelectedMaintenance(holder, position, item, null);
+            }
+            return;
+        }
         if (unplayable.contains(item.url)) {
             if (shouldRetryResolution(item, position)) {
                 unplayable.remove(item.url);
@@ -2061,6 +2068,7 @@ public final class ChaosFeedView extends FrameLayout {
                 return;
             }
             CrazyShitRepository.StreamInfo stream = ChaosStartupPreloader.takeResolved(item.url);
+            Throwable resolveError = null;
             Trace.beginSection("zc.shittok.resolve_bg");
             boolean acquired = false;
             try {
@@ -2069,17 +2077,28 @@ public final class ChaosFeedView extends FrameLayout {
                     acquired = true;
                 }
                 if (stream == null) stream = resolvePlayable(item);
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                resolveError = error;
             } finally {
                 if (acquired) inventoryResolutionSlots.release();
                 Trace.endSection();
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            Throwable failure = resolveError;
             activity.runOnUiThread(() -> {
                 if (closed || resolutionGeneration != feedGeneration) return;
                 resolving.remove(item.url);
                 ShitTokPoolDiagnostics.record("sourceEnd", item.url);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    if (BunkrMaintenance.isConfirmed(failure) || BunkrMaintenance.isKnown(item.url)) {
+                        int current = indexOfUrl(item.url);
+                        ChaosHolder holder = current == selectedPosition ? holderAt(current) : null;
+                        if (holder != null && playbackOwner.accepts(item.url, leaseToken)) {
+                            showSelectedMaintenance(holder, current, item, failure);
+                        }
+                        requestContinuity();
+                        return;
+                    }
                     if (shouldRetryResolution(item, position)) {
                         scheduleResolutionRetry(item, position);
                         return;
@@ -2818,22 +2837,35 @@ public final class ChaosFeedView extends FrameLayout {
         final int retryToken = playbackOwner.token(pageUrl);
         streamCache.remove(pageUrl);
         unplayable.remove(pageUrl);
+        if (showSelectedMaintenance(holder, position, retryItem, originalError)) return;
         resolveRetried.add(pageUrl);
         resolving.add(pageUrl);
 
         io.execute(() -> {
             CrazyShitRepository.StreamInfo refreshed = null;
+            Throwable refreshError = null;
             try {
                 refreshed = resolvePlayable(retryItem);
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                refreshError = error;
             }
             CrazyShitRepository.StreamInfo resolved = refreshed;
+            Throwable failure = refreshError;
             activity.runOnUiThread(() -> {
                 if (closed || retryGeneration != feedGeneration) return;
                 resolving.remove(pageUrl);
                 boolean valid = resolved != null
                         && resolved.mediaUrl != null
                         && !resolved.mediaUrl.isEmpty();
+                boolean ownsRequest = playbackOwner.accepts(pageUrl, retryToken)
+                        && !isPaging() && holder.isBoundTo(pageUrl, position);
+                if (!valid && (BunkrMaintenance.isConfirmed(failure) || BunkrMaintenance.isKnown(pageUrl))) {
+                    if (!ownsRequest || !showSelectedMaintenance(holder, position, retryItem, failure)) {
+                        prepareVisible(position);
+                        requestContinuity();
+                    }
+                    return;
+                }
                 if (valid) {
                     unplayable.remove(pageUrl);
                     streamCache.put(pageUrl, resolved);
@@ -2841,7 +2873,7 @@ public final class ChaosFeedView extends FrameLayout {
                     unplayable.add(pageUrl);
                 }
 
-                if (!playbackOwner.accepts(pageUrl, retryToken) || isPaging() || !holder.isBoundTo(pageUrl, position)) {
+                if (!ownsRequest) {
                     prepareVisible(position);
                     return;
                 }
@@ -2853,6 +2885,20 @@ public final class ChaosFeedView extends FrameLayout {
                 holder.prepare(resolved, active && hostResumed && position == selectedPosition);
             });
         });
+    }
+
+    private boolean showSelectedMaintenance(
+            ChaosHolder holder, int position, NativeContentItem item, Throwable failure
+    ) {
+        if (closed || !active || !hostResumed || isPaging()
+                || position != selectedPosition || holderAt(position) != holder
+                || !holder.isBoundTo(item.url, position)) return false;
+        if (!BunkrMaintenanceUi.showIfConfirmed(activity, item.url, failure, () -> {
+            if (active && hostResumed && position == selectedPosition && holderAt(position) == holder
+                    && holder.isBoundTo(item.url, position)) retryPlayback(holder, holder.lastPlaybackError);
+        })) return false;
+        holder.showMaintenanceFailure();
+        return true;
     }
 
     private void showPlaybackReport(ChaosHolder holder) {
@@ -3172,6 +3218,7 @@ public final class ChaosFeedView extends FrameLayout {
         boolean playbackSuspended;
         boolean retryAttempted;
         boolean failurePending;
+        boolean maintenanceFailure;
         boolean horizontalVideo;
         boolean aspectSampleRecorded;
         String videoLikeOwner;
@@ -4174,6 +4221,7 @@ public final class ChaosFeedView extends FrameLayout {
             scrubbing = false;
             retryAttempted = false;
             failurePending = false;
+            maintenanceFailure = false;
             horizontalVideo = false;
             aspectSampleRecorded = false;
             videoAspectRatio = 0f;
@@ -4540,6 +4588,7 @@ public final class ChaosFeedView extends FrameLayout {
                             analyticsBufferStart=0;
                             RatingFeedbackPrompt.recordSuccessfulPlayback(activity, nextStream.mediaUrl);
                             failurePending = false;
+                            maintenanceFailure = false;
                             root.removeCallbacks(skipFailedClipRunnable);
                             syncLoading();
                             failure.setVisibility(View.GONE);
@@ -4726,8 +4775,6 @@ public final class ChaosFeedView extends FrameLayout {
             NativeContentItem identity = creatorIdentity;
             if (identity == null) return;
             ShitTokSmartRanker.action(item, ShitTokSmartRanker.Action.GALLERY);
-            String query = identity.searchQuery.trim().isEmpty()
-                    ? identity.title : identity.searchQuery;
             String returnToken = transitionToken == null ? "" : transitionToken.trim();
             if (returnToken.isEmpty()) {
                 View sourceSurface = creatorSwipeSourceView();
@@ -4738,13 +4785,7 @@ public final class ChaosFeedView extends FrameLayout {
                 );
             }
             pauseAndRecord();
-            Intent intent = NativeFeedBrowserActivity.createCreatorGallery(
-                    activity,
-                    identity.title,
-                    query,
-                    NativeFeedBrowserActivity.creatorProfileHint(identity),
-                    ShitTokCreatorGalleryPreloader.sessionId(activity, query)
-            );
+            Intent intent = NativeFeedBrowserActivity.createCreatorGallery(activity, identity);
             if (!returnToken.isEmpty()) {
                 intent.putExtra(
                         NativeFeedBrowserActivity.EXTRA_SHITTOK_RETURN_TRANSITION,
@@ -5222,11 +5263,23 @@ public final class ChaosFeedView extends FrameLayout {
 
         void showRetrying() {
             failurePending = false;
+            maintenanceFailure = false;
             root.removeCallbacks(skipFailedClipRunnable);
             root.removeCallbacks(progressTick);
             syncLoading();
             failure.setText("Trying another link…");
             failure.setContentDescription("Playback failed. Trying another link.");
+            failure.setVisibility(View.VISIBLE);
+            poster.setVisibility(View.VISIBLE);
+        }
+
+        void showMaintenanceFailure() {
+            maintenanceFailure = true;
+            failurePending = true;
+            syncLoading();
+            failure.setText(activity.getString(R.string.bunkr_maintenance_title) + "\n"
+                    + activity.getString(R.string.bunkr_maintenance_message));
+            failure.setContentDescription(failure.getText());
             failure.setVisibility(View.VISIBLE);
             poster.setVisibility(View.VISIBLE);
         }

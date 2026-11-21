@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        source: [onlyhaven, fapello, bunkr, wikifeet, wikifeetx, kaotic, baddiehub, crazyshit, efukt]
+        source: [onlyhaven, fapello, bunkr, wikifeetx, kaotic, baddiehub, crazyshit, efukt]
     steps:
       - uses: actions/checkout@v6
       - name: Check source contracts without fetching media

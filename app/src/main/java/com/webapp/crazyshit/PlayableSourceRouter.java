@@ -16,13 +16,19 @@ final class PlayableSourceRouter {
     static CrazyShitRepository.StreamInfo resolve(Context context, NativeContentItem item)
             throws IOException {
         if (item == null) return null;
-        String pageUrl = item.url == null ? "" : item.url;
-        return resolve(context, pageUrl);
+        if (WikiFeetRepository.isRetiredItem(item)) return null;
+        return resolve(context, item.url, item.uploader);
     }
 
     static CrazyShitRepository.StreamInfo resolve(Context context, String pageUrl) throws IOException {
+        return resolve(context, pageUrl, "");
+    }
+
+    private static CrazyShitRepository.StreamInfo resolve(Context context, String pageUrl, String origin)
+            throws IOException {
+        if (WikiFeetRepository.isRetiredPageUrl(pageUrl)) return null;
         try {
-            CrazyShitRepository.StreamInfo result=resolveInternal(context,pageUrl);
+            CrazyShitRepository.StreamInfo result=resolveInternal(context,pageUrl,origin);
             if(result==null) AnalyticsTracker.provider(context,pageUrl,"provider_missing");
             return result;
         } catch(IOException error) {
@@ -31,16 +37,18 @@ final class PlayableSourceRouter {
         }
     }
 
-    private static CrazyShitRepository.StreamInfo resolveInternal(Context context,String pageUrl) throws IOException {
+    private static CrazyShitRepository.StreamInfo resolveInternal(Context context, String pageUrl, String origin)
+            throws IOException {
         if (BaddieHubRepository.isBaddieHubUrl(pageUrl)) {
             return new BaddieHubRepository().resolvePlayable(context, pageUrl);
         }
         if (XMegaDriveRepository.isXMegaDriveUrl(pageUrl)) {
             return new XMegaDriveRepository().resolvePlayable(context, pageUrl);
         }
-        if (WikiFeetRepository.isWikiFeetUrl(pageUrl)) {
-            return new WikiFeetRepository().resolvePlayable(pageUrl);
+        if (WikiFeetRepository.isXMediaUrl(pageUrl) || WikiFeetRepository.isXPageUrl(pageUrl)) {
+            return new WikiFeetRepository().resolvePlayable(pageUrl, origin);
         }
+        if (WikiFeetRepository.isWikiFeetUrl(pageUrl)) return null;
         if (FapelloRepository.isFapelloUrl(pageUrl)) {
             return new FapelloRepository().resolvePlayable(context, pageUrl);
         }

@@ -80,6 +80,11 @@ public final class BunkrGalleryActivity extends Activity {
     private GalleryContextMenu mediaContextMenu;
     private String albumTitle;
     private String albumUrl;
+    private ArrayList<String> creatorSeedNames;
+    private ArrayList<String> creatorSeedUrls;
+    private ArrayList<String> creatorSeedImages;
+    private ArrayList<String> creatorAliases;
+    private String creatorSessionKey;
     private String creatorQuery;
     private String fapelloProfileUrl;
     private String mediaFilter;
@@ -142,6 +147,15 @@ public final class BunkrGalleryActivity extends Activity {
         albumUrl = value(getIntent().getStringExtra(EXTRA_ALBUM_URL));
         creatorQuery = value(getIntent().getStringExtra(EXTRA_CREATOR_QUERY));
         fapelloProfileUrl = value(getIntent().getStringExtra(EXTRA_FAPELLO_PROFILE_URL));
+        creatorSeedNames = getIntent().getStringArrayListExtra(NativeFeedBrowserActivity.EXTRA_CREATOR_SEED_NAMES);
+        creatorSeedUrls = getIntent().getStringArrayListExtra(NativeFeedBrowserActivity.EXTRA_CREATOR_SEED_URLS);
+        creatorSeedImages = getIntent().getStringArrayListExtra(NativeFeedBrowserActivity.EXTRA_CREATOR_SEED_IMAGES);
+        creatorAliases = getIntent().getStringArrayListExtra(NativeFeedBrowserActivity.EXTRA_CREATOR_ALIASES);
+        String favoriteKey = value(getIntent().getStringExtra(
+                NativeFeedBrowserActivity.EXTRA_CREATOR_GALLERY_CACHE_KEY));
+        creatorSessionKey = CreatorGallerySpec.sessionKey(creatorQuery, fapelloProfileUrl,
+                favoriteKey.isEmpty() ? creatorQuery : favoriteKey,
+                creatorSeedNames, creatorSeedUrls, creatorAliases);
         mediaFilter = value(getIntent().getStringExtra(EXTRA_MEDIA_FILTER));
         if (!FILTER_PICTURES.equals(mediaFilter) && !FILTER_VIDEOS.equals(mediaFilter)) {
             mediaFilter = FILTER_ALL;
@@ -178,18 +192,21 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void initializeGallery(BunkrGallerySessionStore.Snapshot snapshot) {
+        if (isCreatorGallery() && snapshot != null && !creatorSessionKey.equals(snapshot.creatorQuery)) {
+            snapshot = null;
+        }
         if (snapshot == null) {
             sessionId = isCreatorGallery()
-                    ? BunkrGallerySessionStore.createCreator(albumTitle, albumUrl, creatorQuery)
+                    ? BunkrGallerySessionStore.createCreator(albumTitle, albumUrl, creatorSessionKey)
                     : BunkrGallerySessionStore.create(albumTitle, albumUrl);
             if (isCreatorGallery()) {
                 creatorGalleryRepository.reset(
-                        sessionId, creatorQuery, fapelloProfileUrl, albumTitle);
+                        sessionId, creatorQuery, fapelloProfileUrl, albumTitle,
+                        creatorSeedNames, creatorSeedUrls, creatorSeedImages, creatorAliases);
             }
         } else {
             albumTitle = snapshot.title;
             albumUrl = snapshot.albumUrl;
-            if (!snapshot.creatorQuery.isEmpty()) creatorQuery = snapshot.creatorQuery;
             currentPage = snapshot.currentPage;
             endReached = snapshot.endReached;
         }
@@ -359,7 +376,8 @@ public final class BunkrGalleryActivity extends Activity {
             try {
                 BunkrCreatorGalleryRepository.Batch creatorBatch = isCreatorGallery()
                         ? creatorGalleryRepository.fetchNext(
-                                this, sessionId, creatorQuery, fapelloProfileUrl, albumTitle)
+                                this, sessionId, creatorQuery, fapelloProfileUrl, albumTitle,
+                                creatorSeedNames, creatorSeedUrls, creatorSeedImages, creatorAliases, null)
                         : null;
                 List<NativeContentItem> result = creatorBatch == null
                         ? repository.fetchAlbum(this, albumUrl, 1)
@@ -423,7 +441,8 @@ public final class BunkrGalleryActivity extends Activity {
             try {
                 BunkrCreatorGalleryRepository.Batch creatorBatch = isCreatorGallery()
                         ? creatorGalleryRepository.fetchNext(
-                                this, sessionId, creatorQuery, fapelloProfileUrl, albumTitle)
+                                this, sessionId, creatorQuery, fapelloProfileUrl, albumTitle,
+                                creatorSeedNames, creatorSeedUrls, creatorSeedImages, creatorAliases, null)
                         : null;
                 List<NativeContentItem> result = creatorBatch == null
                         ? repository.fetchAlbum(this, albumUrl, requestPage)
@@ -740,10 +759,7 @@ public final class BunkrGalleryActivity extends Activity {
                 return;
             }
             try {
-                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(
-                        this,
-                        item.url
-                );
+                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(this, item);
                 if (!hasPlayableStream(resolved)) throw new IOException("Media source returned no playable URL");
                 runOnUiThread(() -> {
                     if (!canApplyMediaResult(requestGeneration)) return;
@@ -781,7 +797,7 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void preloadVideo(int position, NativeContentItem item) {
-        if (resolvingMedia.contains(item.url)) return;
+        if (resolvingMedia.contains(item.url) || BunkrMaintenance.isKnown(item.url)) return;
         String cached = cachedVideoUrl(position, item);
         if (!cached.isEmpty() || isOnlyHavenDirectVideo(item)) {
             String url = cached.isEmpty() ? item.url : cached;
@@ -810,7 +826,7 @@ public final class BunkrGalleryActivity extends Activity {
                 return;
             }
             try {
-                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(this, item.url);
+                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(this, item);
                 if (!hasPlayableStream(resolved)) throw new IOException("Media source returned no playable URL");
                 runOnUiThread(() -> {
                     if (!canApplyMediaResult(requestGeneration)) return;
@@ -848,8 +864,9 @@ public final class BunkrGalleryActivity extends Activity {
                     resolvingMedia.remove(item.url);
                     if (pendingVideoPosition == position && pager.getCurrentItem() == position) {
                         pendingVideoPosition = -1;
-                        adapter.setFailed(position, true);
-                        showBunkrResolutionFailure(item, error);
+                        showBunkrResolutionFailure(position, item, error);
+                    } else if (BunkrMaintenance.isConfirmed(error)) {
+                        adapter.refreshMaintenance(position);
                     }
                 });
             }
@@ -861,6 +878,7 @@ public final class BunkrGalleryActivity extends Activity {
             toggleChrome();
             return;
         }
+        if (showVideoMaintenance(position, item, null)) return;
         playbackRecovery.reset();
         releasePlayer();
         String cached = cachedVideoUrl(position, item);
@@ -883,10 +901,7 @@ public final class BunkrGalleryActivity extends Activity {
         int requestGeneration = generation;
         mediaIo.execute(() -> {
             try {
-                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(
-                        this,
-                        item.url
-                );
+                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(this, item);
                 if (!hasPlayableStream(resolved)) throw new IOException("Media source returned no playable URL");
                 runOnUiThread(() -> {
                     if (!canApplyMediaResult(requestGeneration) ||
@@ -908,11 +923,12 @@ public final class BunkrGalleryActivity extends Activity {
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
-                    if (!canApplyMediaResult(requestGeneration)
-                            || pager.getCurrentItem() != position) return;
-                    adapter.setLoading(position, false);
-                    adapter.setFailed(position, true);
-                    showBunkrResolutionFailure(item, error);
+                    if (!canApplyMediaResult(requestGeneration)) return;
+                    if (pager.getCurrentItem() == position) {
+                        showBunkrResolutionFailure(position, item, error);
+                    } else if (BunkrMaintenance.isConfirmed(error)) {
+                        adapter.setLoading(position, false);
+                    }
                 });
             }
         });
@@ -934,7 +950,23 @@ public final class BunkrGalleryActivity extends Activity {
         return cached;
     }
 
-    private void showBunkrResolutionFailure(NativeContentItem item, Throwable error) {
+    private boolean showVideoMaintenance(int position, NativeContentItem item, Throwable error) {
+        if (item == null) return false;
+        if (!BunkrMaintenanceUi.showIfConfirmed(this, item.url, error, () -> {
+            if (!canApplyMediaResult(generation) || pager.getCurrentItem() != position
+                    || adapter.itemAt(position) != item) return;
+            videoReferers.remove(item.url);
+            adapter.setResolvedUrl(position, "");
+            BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
+            playVideo(position, item);
+        })) return false;
+        adapter.setLoading(position, false);
+        return true;
+    }
+
+    private void showBunkrResolutionFailure(int position, NativeContentItem item, Throwable error) {
+        if (showVideoMaintenance(position, item, error)) return;
+        adapter.setFailed(position, true);
         if (item == null || !BunkrRepository.isBunkrUrl(item.url)) {
             ZeroChillToast.makeText(this, "Couldn't play this video.", ZeroChillToast.LENGTH_SHORT).show();
             return;
@@ -1030,6 +1062,11 @@ public final class BunkrGalleryActivity extends Activity {
                 BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
                 videoReferers.remove(item.url);
                 adapter.setResolvedUrl(position, "");
+                if (BunkrMaintenance.isConfirmed(error) || BunkrMaintenance.isKnown(item.url)) {
+                    releasePlayer();
+                    showVideoMaintenance(position, item, error);
+                    return;
+                }
                 if (playbackRecovery.recover(BunkrGalleryActivity.this, error, recovered -> {
                     if (!canApplyMediaResult(generation) || pager.getCurrentItem() != position) return;
                     if (recovered == null || !hasPlayableStream(recovered.stream)) {
@@ -1049,6 +1086,12 @@ public final class BunkrGalleryActivity extends Activity {
                     resumed.seekTo(recovered.position);
                     resumed.setPlayWhenReady(recovered.playWhenReady && recoveryResumed);
                 }, () -> {
+                    if (!canApplyMediaResult(generation) || pager.getCurrentItem() != position) return;
+                    if (BunkrMaintenance.isKnown(item.url)) {
+                        releasePlayer();
+                        showVideoMaintenance(position, item, null);
+                        return;
+                    }
                     RatingFeedbackPrompt.recordPlaybackError(BunkrGalleryActivity.this);
                     releasePlayer(); adapter.setFailed(position, true);
                     ZeroChillToast.makeText(BunkrGalleryActivity.this, "Couldn't refresh this video. Tap it to retry.", ZeroChillToast.LENGTH_SHORT).show();
@@ -1438,7 +1481,7 @@ public final class BunkrGalleryActivity extends Activity {
         ArrayList<NativeContentItem> filtered = new ArrayList<>();
         if (items == null) return filtered;
         for (NativeContentItem item : items) {
-            if (item == null) continue;
+            if (item == null || WikiFeetRepository.isRetiredItem(item)) continue;
             if (FILTER_PICTURES.equals(mediaFilter) && !item.isImage()) continue;
             if (FILTER_VIDEOS.equals(mediaFilter) && !item.isVideo()) continue;
             filtered.add(item);

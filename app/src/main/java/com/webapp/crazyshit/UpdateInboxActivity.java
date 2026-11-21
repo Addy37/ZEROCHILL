@@ -762,8 +762,9 @@ public final class UpdateInboxActivity extends Activity {
             holder.itemView.setOnClickListener(v -> open(entry));
             Glide.with(holder.avatar).clear(holder.avatar);
             holder.avatar.setImageResource(R.drawable.ic_zerochill_devil);
-            String referer = item.uploader.startsWith("http") ? item.uploader : item.url;
-            loadImage(holder.avatar, item.imageUrl, referer, R.drawable.ic_zerochill_devil, false);
+            if (!CreatorNotificationNavigator.isRetired(entry.creatorItem)) {
+                loadImage(holder.avatar, item.imageUrl, mediaReferer(item), R.drawable.ic_zerochill_devil, false);
+            }
         }
 
         private TextView actionPill(String label) {
@@ -874,8 +875,9 @@ public final class UpdateInboxActivity extends Activity {
                 NativeContentItem item = entry.creatorItem.item;
                 Glide.with(holder.avatar).clear(holder.avatar);
                 holder.avatar.setImageResource(R.drawable.ic_zerochill_devil);
-                loadImage(holder.avatar, item.imageUrl, item.uploader.startsWith("http") ? item.uploader : item.url,
-                        R.drawable.ic_zerochill_devil, false);
+                if (!CreatorNotificationNavigator.isRetired(entry.creatorItem)) {
+                    loadImage(holder.avatar, item.imageUrl, mediaReferer(item), R.drawable.ic_zerochill_devil, false);
+                }
             } else bindAvatar(holder.avatar, entry);
             bindThumbnail(holder, entry);
         }
@@ -1092,12 +1094,12 @@ public final class UpdateInboxActivity extends Activity {
 
             String imageUrl = entry.avatarUrl;
             String referer = entry.avatarReferer;
+            if (WikiFeetRepository.isRetiredPageUrl(referer)) return;
             if ((imageUrl == null || imageUrl.trim().isEmpty()) && entry.firstItem() != null) {
                 NativeContentItem first = entry.firstItem();
+                if (WikiFeetRepository.isRetiredItem(first)) return;
                 imageUrl = first.imageUrl;
-                referer = first.uploader == null || first.uploader.trim().isEmpty()
-                        ? first.url
-                        : first.uploader;
+                referer = mediaReferer(first);
             }
             loadImage(avatar, imageUrl, referer, fallback, true);
         }
@@ -1114,10 +1116,8 @@ public final class UpdateInboxActivity extends Activity {
                     first = cached;
                 }
             }
-            String imageUrl = first == null ? "" : first.imageUrl;
-            String referer = first == null ? "" :
-                    (first.uploader == null || first.uploader.trim().isEmpty()
-                            ? first.url : first.uploader);
+            String imageUrl = first == null || WikiFeetRepository.isRetiredItem(first) ? "" : first.imageUrl;
+            String referer = first == null ? "" : mediaReferer(first);
             boolean show = entry.creatorItem == null && imageUrl != null && !imageUrl.trim().isEmpty();
             if (!show && UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)) {
                 requestLocalSocialArtwork(entry);
@@ -1166,6 +1166,12 @@ public final class UpdateInboxActivity extends Activity {
                     }
                 });
             });
+        }
+
+        private String mediaReferer(NativeContentItem item) {
+            String wikiFeetReferer = WikiFeetRepository.imageReferer(item);
+            if (!wikiFeetReferer.isEmpty()) return wikiFeetReferer;
+            return item.uploader.startsWith("http") ? item.uploader : item.url;
         }
 
         private void loadImage(

@@ -1,5 +1,10 @@
 package com.webapp.crazyshit;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+
 public final class NativeContentItem {
     public static final String KIND_MEDIA = "media";
     public static final String KIND_IMAGE = "image";
@@ -20,6 +25,8 @@ public final class NativeContentItem {
     public final String searchQuery;
     public final long publishedAtMillis;
     public final float aspectRatioHint;
+    final List<String> creatorAliases;
+    final List<String> creatorProfileUrls;
 
     public NativeContentItem(
             String kind,
@@ -100,6 +107,15 @@ public final class NativeContentItem {
             long publishedAtMillis,
             float aspectRatioHint
     ) {
+        this(kind, title, url, imageUrl, views, uploader, comments, description, searchQuery,
+                publishedAtMillis, aspectRatioHint, Collections.emptyList(), Collections.emptyList());
+    }
+
+    private NativeContentItem(
+            String kind, String title, String url, String imageUrl, String views, String uploader,
+            String comments, String description, String searchQuery, long publishedAtMillis,
+            float aspectRatioHint, List<String> creatorAliases, List<String> creatorProfileUrls
+    ) {
         this.kind = kind == null ? KIND_MEDIA : kind;
         this.title = title == null ? "" : title;
         this.url = url == null ? "" : url;
@@ -113,6 +129,28 @@ public final class NativeContentItem {
         this.aspectRatioHint = aspectRatioHint > 0f && Float.isFinite(aspectRatioHint)
                 ? aspectRatioHint
                 : 0f;
+        this.creatorAliases = creatorAliases;
+        this.creatorProfileUrls = creatorProfileUrls;
+    }
+
+    NativeContentItem withCreatorIdentity(List<String> aliases, List<String> profileUrls) {
+        if (!isCreator() || (creatorAliases.isEmpty() && creatorProfileUrls.isEmpty()
+                && (aliases == null || aliases.isEmpty()) && (profileUrls == null || profileUrls.isEmpty()))) {
+            return this;
+        }
+        return new NativeContentItem(kind, title, url, imageUrl, views, uploader, comments,
+                description, searchQuery, publishedAtMillis, aspectRatioHint,
+                boundedIdentityValues(aliases), boundedIdentityValues(profileUrls));
+    }
+
+    private static List<String> boundedIdentityValues(List<String> input) {
+        if (input == null || input.isEmpty()) return Collections.emptyList();
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        for (String value : input) {
+            if (value != null && !value.trim().isEmpty()) values.add(value.trim());
+            if (values.size() == 8) break;
+        }
+        return Collections.unmodifiableList(new ArrayList<>(values));
     }
 
     public boolean isCategory() {
@@ -156,7 +194,8 @@ public final class NativeContentItem {
                 choose(description, other.description),
                 choose(searchQuery, other.searchQuery),
                 publishedAtMillis > 0L ? publishedAtMillis : other.publishedAtMillis,
-                aspectRatioHint > 0f ? aspectRatioHint : other.aspectRatioHint
+                aspectRatioHint > 0f ? aspectRatioHint : other.aspectRatioHint,
+                creatorAliases, creatorProfileUrls
         );
     }
 

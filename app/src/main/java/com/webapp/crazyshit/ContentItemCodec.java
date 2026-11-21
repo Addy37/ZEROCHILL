@@ -11,11 +11,16 @@ final class ContentItemCodec {
     private ContentItemCodec() { }
 
     static JSONObject encode(NativeContentItem item) throws JSONException {
-        return new JSONObject().put("kind", item.kind).put("name", item.title)
+        JSONObject encoded = new JSONObject().put("kind", item.kind).put("name", item.title)
                 .put("url", item.url).put("image", item.imageUrl).put("views", item.views)
                 .put("referer", item.uploader).put("comments", item.comments)
                 .put("description", item.description).put("query", item.searchQuery)
                 .put("aspectRatio", item.aspectRatioHint);
+        if (!item.creatorAliases.isEmpty()) encoded.put("creatorAliases", new JSONArray(item.creatorAliases));
+        if (!item.creatorProfileUrls.isEmpty()) {
+            encoded.put("creatorProfiles", new JSONArray(item.creatorProfileUrls));
+        }
+        return encoded;
     }
 
     static NativeContentItem decode(JSONObject item) {
@@ -23,7 +28,16 @@ final class ContentItemCodec {
                 item.optString("name"), item.optString("url"), item.optString("image"),
                 item.optString("views", item.optString("rank")), item.optString("referer"),
                 item.optString("comments"), item.optString("description"),
-                item.optString("query", item.optString("name")), 0L, (float) item.optDouble("aspectRatio", 0));
+                item.optString("query", item.optString("name")), 0L, (float) item.optDouble("aspectRatio", 0))
+                .withCreatorIdentity(strings(item.optJSONArray("creatorAliases")),
+                        strings(item.optJSONArray("creatorProfiles")));
+    }
+
+    private static List<String> strings(JSONArray values) {
+        if (values == null) return java.util.Collections.emptyList();
+        List<String> result = new ArrayList<>();
+        for (int i = 0; i < Math.min(values.length(), 8); i++) result.add(values.optString(i));
+        return result;
     }
 
     static JSONArray encodeList(List<NativeContentItem> items, int limit) throws JSONException {

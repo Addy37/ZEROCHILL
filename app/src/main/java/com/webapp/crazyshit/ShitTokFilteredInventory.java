@@ -7,7 +7,7 @@ import java.util.function.LongSupplier;
 
 /** Bounded session inventories keyed by source mode and gender. OnlyHaven owns category evidence. */
 final class ShitTokFilteredInventory {
-    static final int HAVEN = 6, FAPELLO = 5, BUNKR = 9, SHOW = 4, BADDIE = 7;
+    static final int HAVEN = 6, FAPELLO = 5, BUNKR = 9, SHOW = 4;
     static final int PAGE_SIZE = 12, MAX_CREATORS = 48, MEDIA_PAGE = 36;
     private final Map<String, Session> sessions = new LinkedHashMap<>();
     private ShitTokSourceMode sourceMode = ShitTokSourceMode.ALL;
@@ -20,8 +20,6 @@ final class ShitTokFilteredInventory {
         OnlyHavenRepository.CategoryPage creators(ContentPreference mode, int offset) throws Exception;
         List<NativeContentItem> media(int source, Cursor cursor) throws Exception;
         List<NativeContentItem> show() throws Exception;
-        default List<NativeContentItem> baddie(ContentPreference mode,
-                List<OnlyHavenRepository.Creator> verified) throws Exception { return Collections.emptyList(); }
         boolean available(int source);
         default List<OnlyHavenRepository.Creator> known(ContentPreference mode) { return Collections.emptyList(); }
     }
@@ -83,44 +81,22 @@ final class ShitTokFilteredInventory {
         select(sources, mode);
         if (!sources.creatorInventory(mode) || !demand) return;
         Session session = session(mode);
-        for (int source : new int[]{HAVEN, FAPELLO, SHOW, BADDIE, BUNKR}) {
-            boolean eligible = (source != SHOW || sources.showEligible(mode))
-                    && (source != BADDIE || sources == ShitTokSourceMode.ONLY_FAP);
+        for (int source : new int[]{HAVEN, FAPELLO, SHOW, BUNKR}) {
+            boolean eligible = source != SHOW || sources.showEligible(mode);
             session.pool.setEligibility(source, eligible, backend.available(source));
             if (!eligible) continue;
-            if (source == BADDIE && mode != ContentPreference.ALL) {
-                synchronized (session) { if (session.creators.isEmpty()) continue; }
-            }
-            if (source != HAVEN && source != SHOW && source != BADDIE) {
+            if (source != SHOW) {
                 synchronized (session) {
                     Lane lane = session.lanes.get(source);
-                    if (lane.count() == 0 && lane.overflow.isEmpty()) continue;
-                }
-            }
-            if (source != SHOW && source != BADDIE) {
-                synchronized (session) {
-                    Lane lane = session.lanes.get(source);
-                    if (lane.count() > 0 || !lane.overflow.isEmpty() || (source == HAVEN && session.hasMore))
+                    boolean hasInventory = lane.count() > 0 || !lane.overflow.isEmpty();
+                    if (source != HAVEN && !hasInventory) continue;
+                    if (hasInventory || session.hasMore)
                         session.pool.continueInventory(source);
                 }
             }
             session.pool.request(source, true, backend.available(source),
-                    () -> source == SHOW ? loadShow(session) : source == BADDIE ? loadBaddie(session)
-                            : load(session, source, available), available);
+                    () -> source == SHOW ? loadShow(session) : load(session, source, available), available);
         }
-    }
-
-    private List<NativeContentItem> loadBaddie(Session session) throws Exception {
-        List<OnlyHavenRepository.Creator> verified;
-        synchronized (session) { verified = new ArrayList<>(session.creators.values()); }
-        List<NativeContentItem> items = backend.baddie(session.mode, verified);
-        if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
-        synchronized (session) {
-            for (NativeContentItem item : items) if (item != null && item.isVideo())
-                session.evidence.put(item.url, BADDIE);
-            trimEvidence(session);
-        }
-        return items;
     }
 
     private List<NativeContentItem> loadShow(Session session) throws Exception {
@@ -296,7 +272,7 @@ final class ShitTokFilteredInventory {
     synchronized boolean hasReady(ContentPreference mode) {
         Session session = session(mode);
         if (active != mode || session == null) return false;
-        for (int source : new int[]{HAVEN, FAPELLO, BUNKR, SHOW, BADDIE}) if (session.pool.hasReady(source)) return true;
+        for (int source : new int[]{HAVEN, FAPELLO, BUNKR, SHOW}) if (session.pool.hasReady(source)) return true;
         return false;
     }
 
@@ -347,19 +323,6 @@ final class ShitTokFilteredInventory {
         }
     }
 
-    /** Requires the existing identity resolver AND an unambiguous verified creator, never title classification. */
-    static OnlyHavenRepository.Creator linkedBaddie(NativeContentItem identity,
-            List<OnlyHavenRepository.Creator> verified) {
-        if (identity == null || !identity.isCreator()) return null;
-        OnlyHavenRepository.Creator match = null;
-        for (OnlyHavenRepository.Creator creator : verified) {
-            if (!ShitTokFilteredIdentity.strong(creator.name, identity.title)) continue;
-            if (match != null && !match.url.equals(creator.url)) return null;
-            match = creator;
-        }
-        return match;
-    }
-
     static Backend backend(Context context, ShitShowTapSource show) {
         return backend(context, show, Collections::emptyList);
     }
@@ -369,10 +332,6 @@ final class ShitTokFilteredInventory {
         OnlyHavenRepository haven = new OnlyHavenRepository();
         FapelloRepository fapello = new FapelloRepository();
         BunkrRepository bunkr = new BunkrRepository();
-        BaddieHubRepository baddie = new BaddieHubRepository();
-        BaddieHubCreatorMatcher matcher = new BaddieHubCreatorMatcher(app);
-        java.util.concurrent.atomic.AtomicInteger baddiePage = new java.util.concurrent.atomic.AtomicInteger();
-        ShitTokCreatorIdentityCache baddieIdentities = new ShitTokCreatorIdentityCache();
         return new Backend() {
             public OnlyHavenRepository.CategoryPage creators(ContentPreference mode, int offset) throws Exception {
                 if (mode == ContentPreference.ALL)
@@ -418,28 +377,6 @@ final class ShitTokFilteredInventory {
                 if (!cached.isEmpty()) ShitTokPoolDiagnostics.modeEvent(ShitTokPoolDiagnostics.modeToken(), "showCacheRaw", cached.size());
                 return cached.isEmpty() ? show.takeBatchOrWarm(app, 12) : cached;
             }
-            public List<NativeContentItem> baddie(ContentPreference mode,
-                    List<OnlyHavenRepository.Creator> verified) throws Exception {
-                ArrayList<NativeContentItem> result = new ArrayList<>();
-                for (NativeContentItem item : baddie.fetchPortraitFeed(app, 1 + baddiePage.getAndIncrement() % 3)) {
-                    String key = CreatorNameMatcher.normalized(item.title);
-                    NativeContentItem identity = baddieIdentities.resolve(key, () -> matcher.local(item));
-                    if (mode == ContentPreference.ALL) {
-                        if (identity == null || (!OnlyHavenRepository.isOnlyHavenUrl(identity.url)
-                                && !FapelloRepository.isModelUrl(identity.url))) result.add(item);
-                        else result.add(new NativeContentItem(item.kind, item.title, item.url, item.imageUrl,
-                                item.views, identity.url, item.comments, item.description, identity.title,
-                                item.publishedAtMillis, item.aspectRatioHint));
-                        continue;
-                    }
-                    OnlyHavenRepository.Creator creator = linkedBaddie(identity, verified);
-                    if (creator == null) continue;
-                    result.add(new NativeContentItem(item.kind, item.title, item.url, item.imageUrl,
-                            item.views, creator.url, item.comments, item.description, creator.name,
-                            item.publishedAtMillis, item.aspectRatioHint));
-                }
-                return result;
-            }
             public List<OnlyHavenRepository.Creator> known(ContentPreference mode) {
                 ArrayList<OnlyHavenRepository.Creator> result = new ArrayList<>();
                 for (NativeContentItem item : CreatorCatalog.all(app)) {
@@ -460,7 +397,6 @@ final class ShitTokFilteredInventory {
                 if (source == HAVEN) return config.onlyHaven.enabled;
                 if (source == FAPELLO) return !config.sourceKillSwitchesEnabled || config.fapello.enabled;
                 if (source == BUNKR) return !config.sourceKillSwitchesEnabled || config.bunkr.enabled;
-                if (source == BADDIE) return !config.sourceKillSwitchesEnabled || config.baddieHub.enabled;
                 return true;
             }
         };

@@ -1,9 +1,11 @@
 package com.webapp.crazyshit;
 
+import android.app.AlertDialog;
 import android.app.Application;
 import android.app.Dialog;
 import android.content.Intent;
 import android.os.Looper;
+import android.widget.TextView;
 
 import androidx.viewpager2.widget.ViewPager2;
 
@@ -24,6 +26,7 @@ import org.robolectric.util.ReflectionHelpers;
 import java.io.IOException;
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -37,6 +40,7 @@ import static org.robolectric.Shadows.shadowOf;
         shadows = BunkrGalleryResolutionLifecycleTest.BlockedBunkrPage.class)
 public class BunkrGalleryResolutionLifecycleTest {
     private static final String PAGE = "https://bunkr.cr/f/blocked-video";
+    private static final String MAINTENANCE_PAGE = "https://bunkr.cr/f/maintenance-fixture";
 
     @Implements(value = Jsoup.class, isInAndroidSdk = false)
     public static class BlockedBunkrPage {
@@ -47,6 +51,9 @@ public class BunkrGalleryResolutionLifecycleTest {
             return (Connection) Proxy.newProxyInstance(Connection.class.getClassLoader(),
                     new Class<?>[]{Connection.class}, (proxy, method, args) -> {
                         if ("get".equals(method.getName())) {
+                            if (url.endsWith("/f/maintenance-fixture")) {
+                                return Jsoup.parse(BunkrResolutionTest.MAINTENANCE_FILE_PAGE, url);
+                            }
                             entered.countDown();
                             try {
                                 if (!release.await(3, TimeUnit.SECONDS))
@@ -60,6 +67,38 @@ public class BunkrGalleryResolutionLifecycleTest {
                         if (method.getReturnType().isInstance(proxy)) return proxy;
                         return null;
                     });
+        }
+    }
+
+    @Test public void tappingMaintenanceFileShowsRetryInGallery() throws Exception {
+        BunkrMaintenance.retry(MAINTENANCE_PAGE);
+        NativeContentItem item = video(MAINTENANCE_PAGE);
+        String session = BunkrGallerySessionStore.create("Gallery", "");
+        BunkrGallerySessionStore.replace(session, Collections.singletonList(item), 1, true);
+        Intent intent = new Intent(RuntimeEnvironment.getApplication(), BunkrGalleryActivity.class)
+                .putExtra(BunkrGalleryActivity.EXTRA_SESSION_ID, session);
+        ExecutorService worker = Executors.newSingleThreadExecutor();
+        try (ActivityController<BunkrGalleryActivity> controller =
+                     Robolectric.buildActivity(BunkrGalleryActivity.class, intent).create()) {
+            BunkrGalleryActivity activity = controller.get();
+            ReflectionHelpers.setField(activity, "mediaIo", worker);
+            ReflectionHelpers.callInstanceMethod(activity, "onMediaTap",
+                    ReflectionHelpers.ClassParameter.from(int.class, 0),
+                    ReflectionHelpers.ClassParameter.from(NativeContentItem.class, item));
+            worker.submit(() -> { }).get(2, TimeUnit.SECONDS);
+            shadowOf(Looper.getMainLooper()).idle();
+
+            assertTrue(BunkrMaintenance.isKnown(MAINTENANCE_PAGE));
+            AlertDialog dialog = (AlertDialog) ShadowDialog.getLatestDialog();
+            assertNotNull(dialog);
+            TextView message = dialog.findViewById(android.R.id.message);
+            assertEquals(activity.getString(R.string.bunkr_maintenance_message), message.getText());
+            assertEquals(activity.getString(R.string.bunkr_maintenance_retry),
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).getText());
+            dialog.dismiss();
+        } finally {
+            worker.shutdownNow();
+            BunkrMaintenance.retry(MAINTENANCE_PAGE);
         }
     }
 

@@ -191,6 +191,10 @@ final class BunkrGalleryPagerAdapter
         return item != null && loading.contains(item.url);
     }
 
+    void refreshMaintenance(int position) {
+        notifyItemChanged(position, STATE_PAYLOAD);
+    }
+
     boolean isFailed(int position) {
         NativeContentItem item = itemAt(position);
         return item != null && failed.contains(item.url);
@@ -394,7 +398,10 @@ final class BunkrGalleryPagerAdapter
         failure.setVisibility(View.GONE);
         root.addView(failure, new FrameLayout.LayoutParams(-1, -1));
 
-        return new Holder(root, image, playerView, play, loadingDots, failure, controls, gestures);
+        BunkrMaintenanceUi.Badge maintenance = BunkrMaintenanceUi.addBadge(
+                root, Gravity.CENTER_VERTICAL | Gravity.END);
+        return new Holder(root, image, playerView, play, loadingDots, failure, controls, gestures,
+                maintenance);
     }
 
     @Override
@@ -598,6 +605,7 @@ final class BunkrGalleryPagerAdapter
         NativeContentItem item = itemAt(position);
         if (item == null || !item.url.equals(holder.boundUrl)) return;
         boolean active = item.isVideo() && position == activeVideoPosition && activePlayer != null;
+        holder.maintenance.bind(active ? null : item);
         if (holder.playerView.getPlayer() != (active ? activePlayer : null)) {
             holder.controls.release();
             holder.gestures.cancel();
@@ -665,6 +673,7 @@ final class BunkrGalleryPagerAdapter
         holder.reveal.cancelAndSettle();
         holder.imageRequest++;
         holder.boundUrl = "";
+        holder.maintenance.bind(null);
         holder.requestedImageUrl = "";
         holder.imageLoading = false;
         holder.hasUsableImage = false;
@@ -716,8 +725,8 @@ final class BunkrGalleryPagerAdapter
     }
 
     private String imageReferer(NativeContentItem item) {
-        if (item != null && WikiFeetRepository.isWikiFeetUrl(item.url) &&
-                WikiFeetRepository.isWikiFeetUrl(item.uploader)) return item.uploader;
+        String wikiFeetReferer = WikiFeetRepository.imageReferer(item);
+        if (!wikiFeetReferer.isEmpty()) return wikiFeetReferer;
         if (item != null && !FapelloRepository.isPostUrl(item.url) &&
                 FapelloRepository.isModelUrl(item.uploader)) return item.uploader;
         return item == null ? null : item.url;
@@ -739,6 +748,7 @@ final class BunkrGalleryPagerAdapter
         final TextView play;
         final GalleryVideoLoadingView loadingDots;
         final TextView failure;
+        final BunkrMaintenanceUi.Badge maintenance;
         final GalleryMediaReveal reveal;
         String boundUrl = "";
         String requestedImageUrl = "";
@@ -754,7 +764,8 @@ final class BunkrGalleryPagerAdapter
                 GalleryVideoLoadingView loadingDots,
                 TextView failure,
                 ShowsFullscreenControls controls,
-                FullscreenVideoGestures gestures
+                FullscreenVideoGestures gestures,
+                BunkrMaintenanceUi.Badge maintenance
         ) {
             super(root);
             this.image = image;
@@ -764,6 +775,7 @@ final class BunkrGalleryPagerAdapter
             this.play = play;
             this.loadingDots = loadingDots;
             this.failure = failure;
+            this.maintenance = maintenance;
             this.reveal = new GalleryMediaReveal(image, loadingDots);
         }
     }

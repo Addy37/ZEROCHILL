@@ -3,4 +3,7 @@
     <string name="app_name">ZeroChill</string>
     <string name="edition_name">ZeroChill</string>
     <string name="media_preview_unavailable">Preview unavailable</string>
+    <string name="bunkr_maintenance_title">Temporarily unavailable</string>
+    <string name="bunkr_maintenance_message">Bunkr is performing server maintenance. This video cannot play right now.</string>
+    <string name="bunkr_maintenance_retry">Retry</string>
 </resources>

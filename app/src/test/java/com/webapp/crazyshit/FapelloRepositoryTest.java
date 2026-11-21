@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -129,6 +130,40 @@ public final class FapelloRepositoryTest {
         assertEquals(1, queries[0]);
     }
 
+    @Test public void replacedNumberedRouteFindsExactHandleAndSkipsTheRetiredUrl() throws Exception {
+        FapelloRepository repository = new FapelloRepository();
+        FapelloRepository.Model stale = new FapelloRepository.Model(
+                "Haesicks", "https://fapello.com/haesicks-2/", "");
+        FapelloRepository.Model recovered = repository.findReplacementProfile(stale, (query, offset, limit) -> {
+            assertEquals("haesicks", query);
+            assertEquals(0, offset);
+            assertEquals(8, limit);
+            return "{\"results\":["
+                    + "{\"name\":\"Haesicks\",\"url\":\"/haesicks-2/\",\"username\":\"haesicks\"},"
+                    + "{\"name\":\"Haesicks archive\",\"url\":\"/haesicks-archive/\"},"
+                    + "{\"name\":\"Haesicks\",\"url\":\"/haesicks/\"}]}";
+        }, null);
+
+        assertEquals("https://fapello.com/haesicks/", recovered.url);
+    }
+
+    @Test public void staleProfileRecoveryRequiresHandleEvidenceAndRejectsAmbiguity() throws Exception {
+        FapelloRepository repository = new FapelloRepository();
+        FapelloRepository.Model stale = new FapelloRepository.Model(
+                "Fixture", "https://fapello.com/fixture-2/", "");
+        assertNull(repository.findReplacementProfile(stale, (query, offset, limit) ->
+                "{\"results\":[{\"name\":\"Fixture\",\"url\":\"/wrong-person/\"}]}", null));
+        assertNull(repository.findReplacementProfile(stale, (query, offset, limit) ->
+                "{\"results\":[{\"name\":\"Fixture\",\"url\":\"/fixture/\"},"
+                        + "{\"name\":\"Another Fixture\",\"url\":\"/other/\",\"username\":\"fixture\"}]}",
+                null));
+        assertEquals("different-handle", FapelloRepository.galleryHandle(
+                new FapelloRepository.Model("Fixture", "https://fapello.com/different-handle/", "")));
+        assertEquals("fixture-2", FapelloRepository.galleryHandle(
+                new FapelloRepository.Model("Fixture", "https://fapello.com/fixture-2/", "",
+                        "fixture-2", "")));
+    }
+
     private static Document aliasProfile(String canonical, String heading, String aliases) {
         return Jsoup.parse("<link rel='canonical' href='" + canonical + "'>"
                 + "<h2>" + heading + "</h2><p class='font-semibold'>" + aliases + "</p>",
@@ -161,6 +196,48 @@ public final class FapelloRepositoryTest {
         assertFalse(FapelloRepository.profileConfirmsAlias(unrelated, model, "sofiavictoria_iris"));
         assertFalse(FapelloRepository.profileConfirmsAlias(aliasProfile(model.url, model.name,
                 "sofiavictoria_iris"), model, "sofia"));
+        assertFalse(FapelloRepository.profileConfirmsAlias(aliasProfile(model.url, model.name,
+                "sofiavictoria_iris"), model, "sofiavictoria.iris"));
+    }
+
+    @Test public void galleryMatchesUsernameEvenWhenTheDisplayNameDiffers() throws Exception {
+        String body = "{\"results\":["
+                + "{\"name\":\"Rynkerbelle Archive\",\"url\":\"https://fapello.com/rynkerbelle-archive/\"},"
+                + "{\"displayName\":\"ryn! >_<\",\"username\":\"rynkerbelle\","
+                + "\"url\":\"https://fapello.com/profile-123/\"}]}";
+        List<FapelloRepository.Model> found = repository.searchModelsWithQueryFallback("rynkerbelle", 4,
+                (query, offset, size) -> body, model -> {
+                    fail("An explicit username needs no profile lookup");
+                    return null;
+                }, true);
+        assertEquals(1, found.size());
+        assertEquals("ryn! >_<", found.get(0).name);
+        assertEquals("https://fapello.com/profile-123/", found.get(0).url);
+    }
+
+    @Test public void galleryPreservesVerifiedProfileAliasInPresenceOfPartialSearchHit() throws Exception {
+        String body = "{\"results\":["
+                + "{\"name\":\"Rynkerbelle Archive\",\"url\":\"https://fapello.com/rynkerbelle-archive/\"},"
+                + "{\"name\":\"ryn! >_<\",\"url\":\"https://fapello.com/profile-123/\"}],\"has_more\":false}";
+        List<FapelloRepository.Model> found = repository.searchModelsWithQueryFallback("rynkerbelle", 4,
+                (query, offset, size) -> body,
+                model -> {
+                    if (model.url.contains("-archive")) throw new IOException("Unrelated profile unavailable");
+                    return aliasProfile(model.url, model.name, "rynkerbelle");
+                }, true);
+        assertEquals(1, found.size());
+        assertEquals("rynkerbelle", found.get(0).verifiedAlias);
+        assertTrue(CreatorGalleryMatch.fapelloMatches(found.get(0), "rynkerbelle"));
+        assertTrue(repository.searchModelsWithQueryFallback("rynkerbelle", 4,
+                (query, offset, size) -> body, null, true).isEmpty());
+    }
+
+    @Test public void sameDisplayNameOnDifferentUrlsIsAmbiguousEvenWithOneRequestedResult() throws Exception {
+        String body = "{\"results\":["
+                + "{\"name\":\"Shared Name\",\"url\":\"https://fapello.com/first-profile/\"},"
+                + "{\"name\":\"Shared Name\",\"url\":\"https://fapello.com/second-profile/\"}]}";
+        assertTrue(repository.searchModelsWithQueryFallback("Shared Name", 1,
+                (query, offset, size) -> body, null, true).isEmpty());
     }
 
     @Test public void namedSearchAndBroadFuzzyResultsNeverFetchAliasProfiles() throws Exception {

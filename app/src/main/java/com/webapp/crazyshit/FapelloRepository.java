@@ -1,7 +1,9 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
+import android.os.SystemClock;
 import android.util.Log;
+import android.util.LruCache;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
 
@@ -32,6 +34,14 @@ final class FapelloRepository {
     static final String LIST_HOT = "hot";
     static final String LIST_POPULAR = "popular";
     private static final int MODEL_PAGE_SIZE = 30;
+    private static final long GALLERY_CACHE_MS = 60_000L;
+    private static final long PREVIEW_COOLDOWN_MS = 30_000L;
+    private static final LruCache<String, GalleryValue<Model>> VERIFIED_GALLERY_MODELS = new LruCache<>(48);
+    private static final LruCache<String, GalleryValue<MediaPage>> FIRST_GALLERY_PAGES = new LruCache<>(16);
+    private static final Object PREVIEW_FAILURE_LOCK = new Object();
+    private static long previewConfigVersion = Long.MIN_VALUE;
+    private static long previewFailureUntil;
+    private static int previewFailures;
 
     static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
@@ -92,17 +102,93 @@ final class FapelloRepository {
                 model -> fetchDocument(context, model.url, baseUrl()));
     }
 
+    List<Model> searchGalleryModels(Context context, String query, int limit) throws IOException {
+        requireEnabled();
+        return searchGalleryModelsCached(query, limit, (name, offset, size) ->
+                        fetchBody(context, searchUrl(name, size, offset), baseUrl(), true),
+                model -> fetchDocument(context, model.url, baseUrl()));
+    }
+
+    List<Model> searchGalleryModelsCached(String query, int limit, SearchQueryFetcher fetcher,
+                                         SearchProfileFetcher profiles) throws IOException {
+        String cleanQuery = clean(query);
+        String key = configVersion() + ":" + limit + ":" + cleanQuery;
+        GalleryValue<Model> cached = VERIFIED_GALLERY_MODELS.get(key);
+        if (cached != null && cached.isFresh()) {
+            return new ArrayList<>(java.util.Collections.singletonList(cached.value));
+        }
+        List<Model> result = searchModelsWithQueryFallback(cleanQuery, limit, fetcher, profiles, true);
+        if (result.size() == 1
+                && CreatorGalleryMatch.fapelloRank(result.get(0), cleanQuery) == CreatorGalleryMatch.HANDLE) {
+            VERIFIED_GALLERY_MODELS.put(key, new GalleryValue<>(result.get(0)));
+        }
+        return result;
+    }
+
+    Model findReplacementProfile(Context context, Model stale) throws IOException {
+        return findReplacementProfile(stale, (name, offset, size) ->
+                fetchBody(context, searchUrl(name, size, offset), baseUrl(), true),
+                model -> fetchDocument(context, model.url, baseUrl()));
+    }
+
+    Model findReplacementProfile(Model stale, SearchQueryFetcher search, SearchProfileFetcher profiles)
+            throws IOException {
+        String query = galleryHandle(stale);
+        if (query.isEmpty()) return null;
+
+        List<Model> candidates = parseSearchResponse(search.fetch(query, 0, 8));
+        String retiredProfile = canonicalKey(stale.url);
+        Model match = null;
+        for (Model candidate : candidates) {
+            if (retiredProfile.equals(canonicalKey(candidate.url))) continue;
+            if (CreatorGalleryMatch.fapelloRank(candidate, query) != CreatorGalleryMatch.HANDLE) {
+                if (profiles == null || candidates.size() > 3) continue;
+                try {
+                    if (!profileConfirmsAlias(profiles.fetch(candidate), candidate, query)) continue;
+                } catch (IOException error) {
+                    if (Thread.currentThread().isInterrupted()) throw error;
+                    continue;
+                }
+            }
+            if (match != null) return null;
+            match = candidate;
+        }
+        return match;
+    }
+
+    static String galleryHandle(Model model) {
+        String slug = model.username;
+        String nameHandle = CreatorGalleryMatch.handle(model.name);
+        // A listing may use a numbered route for a creator whose displayed handle
+        // differs from that route only by the suffix.
+        boolean numberedRoute = !model.hasProviderUsername && !nameHandle.isEmpty()
+                && slug.matches(java.util.regex.Pattern.quote(nameHandle) + "-[0-9]{1,3}");
+        if (numberedRoute || CreatorGalleryMatch.exactHandle(model.verifiedAlias, nameHandle)) {
+            return nameHandle;
+        }
+        return slug;
+    }
+
     List<Model> searchModelsWithQueryFallback(String query, int limit, SearchQueryFetcher fetcher,
                                              SearchProfileFetcher profiles) throws IOException {
+        return searchModelsWithQueryFallback(query, limit, fetcher, profiles, false);
+    }
+
+    List<Model> searchModelsWithQueryFallback(String query, int limit, SearchQueryFetcher fetcher,
+                                             SearchProfileFetcher profiles, boolean gallery) throws IOException {
         String name = clean(query);
         List<Model> found = searchMatchingModels(name, limit,
-                (offset, size) -> fetcher.fetch(name, offset, size), profiles);
+                (offset, size) -> fetcher.fetch(name, offset, size), profiles, gallery);
         String compact = name.replaceAll("\\s+", "");
-        if (!found.isEmpty() || compact.equals(name)) return found;
-        // Fapello can return unrelated fuzzy results for spaced handles such as Carrot Soki.
-        // Keep the original matching/alias rules while retrying the compact handle once.
-        return searchMatchingModels(name, limit,
-                (offset, size) -> fetcher.fetch(compact, offset, size), profiles);
+        if (found.isEmpty() && !compact.equals(name)) {
+            // Retry the compact source query while keeping the original identity for verification.
+            found = searchMatchingModels(name, limit,
+                    (offset, size) -> fetcher.fetch(compact, offset, size), profiles, gallery);
+        }
+        if (!gallery || found.size() < 2) return found;
+        int best = CreatorGalleryMatch.fapelloRank(found.get(0), name);
+        return CreatorGalleryMatch.fapelloRank(found.get(1), name) == best
+                ? new ArrayList<>() : new ArrayList<>(found.subList(0, 1));
     }
 
     List<Model> searchMatchingModels(String query, int limit, SearchPageFetcher fetcher) throws IOException {
@@ -111,6 +197,11 @@ final class FapelloRepository {
 
     List<Model> searchMatchingModels(String query, int limit, SearchPageFetcher fetcher,
                                     SearchProfileFetcher profiles) throws IOException {
+        return searchMatchingModels(query, limit, fetcher, profiles, false);
+    }
+
+    private List<Model> searchMatchingModels(String query, int limit, SearchPageFetcher fetcher,
+                                            SearchProfileFetcher profiles, boolean gallery) throws IOException {
         String cleanQuery = clean(query);
         if (cleanQuery.isEmpty()) return new ArrayList<>();
         int safeLimit = Math.max(1, Math.min(8, limit));
@@ -133,12 +224,12 @@ final class FapelloRepository {
             }
             boolean exact = false;
             for (Model model : models) {
-                int rank = CreatorNameMatcher.rank(model.name, cleanQuery);
+                int rank = creatorRank(model, cleanQuery, gallery);
                 if (rank == Integer.MAX_VALUE) continue;
                 matches.putIfAbsent(canonicalKey(model.url), model);
                 if (rank == 0) exact = true;
             }
-            if (exact || matches.size() >= safeLimit) break;
+            if (exact || (!gallery && matches.size() >= safeLimit)) break;
             int count = models.size();
             more = false;
             try {
@@ -152,13 +243,21 @@ final class FapelloRepository {
             } catch (Exception ignored) { }
             // The API matches aliases but omits them from its JSON. Verify only a narrow,
             // complete result set against the creator header, never arbitrary page text.
-            if (matches.isEmpty() && !more && offset == 0 && models.size() <= 3 && profiles != null) {
+            if (!more && offset == 0 && models.size() <= 3 && profiles != null
+                    && (matches.isEmpty() || (gallery && !CreatorGalleryMatch.handle(cleanQuery).isEmpty()))) {
+                IOException aliasFailure = null;
                 for (Model model : models) {
                     if (Thread.currentThread().isInterrupted()) throw new IOException("Creator search interrupted");
-                    if (profileConfirmsAlias(profiles.fetch(model), model, cleanQuery)) {
-                        matches.putIfAbsent(canonicalKey(model.url), model);
+                    try {
+                        if (profileConfirmsAlias(profiles.fetch(model), model, cleanQuery)) {
+                            matches.put(canonicalKey(model.url), new Model(
+                                    model.name, model.url, model.imageUrl, model.username, cleanQuery));
+                        }
+                    } catch (IOException failure) {
+                        aliasFailure = failure;
                     }
                 }
+                if (matches.isEmpty() && aliasFailure != null) throw aliasFailure;
             }
             if (!more || count == 0) break;
             offset += count;
@@ -167,8 +266,15 @@ final class FapelloRepository {
             throw new IOException("Fapello search result window was incomplete; retry a more specific name");
         }
         ArrayList<Model> output = new ArrayList<>(matches.values());
-        output.sort(java.util.Comparator.comparingInt(model -> CreatorNameMatcher.rank(model.name, cleanQuery)));
-        return limitModels(output, safeLimit);
+        output.sort(java.util.Comparator.comparingInt(model -> creatorRank(model, cleanQuery, gallery)));
+        // Keep a second candidate for the caller's ambiguity check even when it requests one.
+        return limitModels(output, gallery ? Math.max(2, safeLimit) : safeLimit);
+    }
+
+    private static int creatorRank(Model model, String query, boolean gallery) {
+        int strongRank = CreatorGalleryMatch.fapelloRank(model, query);
+        if (gallery || strongRank == CreatorGalleryMatch.HANDLE) return strongRank;
+        return CreatorNameMatcher.rank(model.name, query);
     }
 
     static boolean profileConfirmsAlias(Document document, Model model, String query) {
@@ -180,10 +286,8 @@ final class FapelloRepository {
             if (CreatorNameMatcher.rank(heading.text(), model.name) != 0) continue;
             Element aliases = heading.nextElementSibling();
             if (aliases == null || !aliases.tagName().equals("p") || !aliases.hasClass("font-semibold")) continue;
-            String wanted = CreatorNameMatcher.normalized(query).replace(" ", "");
-            if (wanted.isEmpty()) return false;
             for (String alias : aliases.text().split(",")) {
-                if (CreatorNameMatcher.normalized(alias).replace(" ", "").equals(wanted)) return true;
+                if (CreatorGalleryMatch.exactName(query, alias)) return true;
             }
         }
         return false;
@@ -263,9 +367,10 @@ final class FapelloRepository {
         if (!(value instanceof JSONObject)) return;
         JSONObject object = (JSONObject) value;
         String url = normalizeUrl(first(object, "url", "profile_url", "profileUrl", "href"), baseUrl());
-        String name = clean(first(object, "name", "title", "username", "model"));
+        String name = clean(first(object, "displayName", "display_name", "name", "title", "username", "model"));
         if (isModelUrl(url) && !name.isEmpty()) {
-            models.putIfAbsent(canonicalKey(url), new Model(name, canonicalModelUrl(url), firstJsonImage(object)));
+            models.putIfAbsent(canonicalKey(url), new Model(name, canonicalModelUrl(url),
+                    firstJsonImage(object), first(object, "username", "handle"), ""));
         }
         for (String key : new String[]{"results", "models", "items", "data", "suggestions"}) {
             collectSearchModels(object.opt(key), models, depth + 1);
@@ -356,6 +461,101 @@ final class FapelloRepository {
     List<NativeContentItem> fetchModelMedia(Context context, Model model, int page)
             throws IOException {
         return fetchModelMediaPage(context, model, page).items;
+    }
+
+    MediaPage fetchGalleryModelMediaPage(Context context, Model model, int page) throws IOException {
+        requireEnabled();
+        if (model == null || page != 1) return fetchModelMediaPage(context, model, page);
+        String key = galleryPageKey(configVersion(), model);
+        MediaPage cached = cachedFirstPage(key);
+        if (cached != null) return cached;
+        MediaPage result = fetchModelMediaPage(context, model, page);
+        if (!result.items.isEmpty() && result.items.size() <= 96) {
+            FIRST_GALLERY_PAGES.put(key, new GalleryValue<>(copyPage(result)));
+        }
+        return result;
+    }
+
+    List<NativeContentItem> fetchCreatorPreview(Context context, Model model, boolean hasAlternative)
+            throws IOException {
+        requireEnabled();
+        long version = configVersion();
+        MediaPage cached = cachedFirstPage(galleryPageKey(version, model));
+        if (cached != null) return cached.items;
+        synchronized (PREVIEW_FAILURE_LOCK) {
+            updatePreviewConfig(version);
+            if (hasAlternative && SystemClock.elapsedRealtime() < previewFailureUntil) {
+                return java.util.Collections.emptyList();
+            }
+        }
+        try {
+            MediaPage page = fetchGalleryModelMediaPage(context, model, 1);
+            synchronized (PREVIEW_FAILURE_LOCK) {
+                if (version == previewConfigVersion) {
+                    previewFailures = 0;
+                    previewFailureUntil = 0L;
+                }
+            }
+            return page.items;
+        } catch (FapelloSourceException error) {
+            if (isTransientPreviewFailure(error) && !Thread.currentThread().isInterrupted()) {
+                synchronized (PREVIEW_FAILURE_LOCK) {
+                    if (version == previewConfigVersion && ++previewFailures >= 2) {
+                        previewFailures = 0;
+                        long now = SystemClock.elapsedRealtime();
+                        if (now >= previewFailureUntil) previewFailureUntil = now + PREVIEW_COOLDOWN_MS;
+                    }
+                }
+            }
+            throw error;
+        }
+    }
+
+    private static boolean isTransientPreviewFailure(FapelloSourceException error) {
+        return error.reason == FapelloSourceException.Reason.BLOCKED
+                || error.reason == FapelloSourceException.Reason.RATE_LIMITED
+                || error.reason == FapelloSourceException.Reason.NETWORK
+                || error.reason == FapelloSourceException.Reason.HTTP
+                    && (error.statusCode == 403 || error.statusCode >= 500);
+    }
+
+    private static void updatePreviewConfig(long version) {
+        if (version != previewConfigVersion) {
+            previewConfigVersion = version;
+            previewFailures = 0;
+            previewFailureUntil = 0L;
+        }
+    }
+
+    private static String galleryPageKey(long version, Model model) {
+        return version + ":" + model.url + "\n" + model.name;
+    }
+
+    private static MediaPage cachedFirstPage(String key) {
+        GalleryValue<MediaPage> cached = FIRST_GALLERY_PAGES.get(key);
+        return cached != null && cached.isFresh() ? copyPage(cached.value) : null;
+    }
+
+    private static MediaPage copyPage(MediaPage page) {
+        return new MediaPage(page.items, page.hasNext, page.nextPageUrl);
+    }
+
+    private static long configVersion() {
+        SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
+        return current == null ? Long.MIN_VALUE : current.configVersion;
+    }
+
+    private static final class GalleryValue<T> {
+        final long expiresAt = SystemClock.elapsedRealtime() + GALLERY_CACHE_MS;
+        final T value;
+
+        GalleryValue(T value) {
+            this.value = value;
+        }
+
+        boolean isFresh() {
+            return SystemClock.elapsedRealtime() < expiresAt;
+        }
     }
 
     MediaPage fetchModelMediaPage(Context context, Model model, int page) throws IOException {
@@ -1656,11 +1856,22 @@ final class FapelloRepository {
         final String name;
         final String url;
         final String imageUrl;
+        final String username;
+        final boolean hasProviderUsername;
+        final String verifiedAlias;
 
         Model(String name, String url, String imageUrl) {
+            this(name, url, imageUrl, "", "");
+        }
+
+        Model(String name, String url, String imageUrl, String username, String verifiedAlias) {
             this.name = name == null ? "" : name.trim();
             this.url = url == null ? "" : url.trim();
             this.imageUrl = imageUrl == null ? "" : imageUrl.trim();
+            String explicitHandle = CreatorGalleryMatch.handle(username);
+            this.hasProviderUsername = !explicitHandle.isEmpty();
+            this.username = hasProviderUsername ? explicitHandle : CreatorGalleryMatch.handle(modelSlug(this.url));
+            this.verifiedAlias = cleanStatic(verifiedAlias);
         }
     }
 }

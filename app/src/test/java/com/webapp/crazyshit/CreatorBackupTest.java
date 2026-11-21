@@ -88,6 +88,52 @@ public class CreatorBackupTest {
                 .getJSONObject(0).getString("name"));
     }
 
+    @Test public void backupRestoresVerifiedProfileMetadataWithoutChangingFavoriteKey() throws Exception {
+        NativeContentItem item = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                "Example Creator", "https://fapello.com/example/", "", "", "", "",
+                "Fapello", "Example Creator")
+                .withCreatorIdentity(Arrays.asList("known-handle"),
+                        Arrays.asList("https://fapello.com/example/"));
+        CreatorFavoriteStore.toggle(context, item);
+        JSONObject backup = AppBackupStore.export(context);
+        context.getSharedPreferences(CreatorCatalog.PREFS, 0).edit().clear().commit();
+        context.getSharedPreferences("creator_favorites", 0).edit().clear().commit();
+        AppBackupStore.restore(context, backup);
+        CreatorCatalog.FavoriteGroup restored = CreatorCatalog.favoriteGroups(context).get(0);
+        assertTrue(restored.item.creatorAliases.contains("known-handle"));
+        assertEquals(item.url, restored.item.url);
+        assertTrue(CreatorFavoriteStore.names(context).contains("example creator"));
+    }
+
+    @Test public void legacyFavoriteWithConflictingProfilesStaysUnresolved() {
+        context.getSharedPreferences("creator_favorites", 0).edit()
+                .putStringSet("creators", new HashSet<>(Arrays.asList("same"))).commit();
+        NativeContentItem first = new NativeContentItem(NativeContentItem.KIND_CREATOR, "Same",
+                "https://fapello.com/profile-one/", "", "", "", "", "Fapello", "same");
+        NativeContentItem second = new NativeContentItem(NativeContentItem.KIND_CREATOR, "Same",
+                "https://fapello.com/profile-two/", "", "", "", "", "Fapello", "same");
+        CreatorCatalog.remember(context, Arrays.asList(first, second));
+        assertEquals(2, CreatorCatalog.matching(context, "same", false, 10).size());
+        assertEquals("", CreatorCatalog.favoriteGroups(context).get(0).item.url);
+        assertTrue(CreatorFavoriteStore.names(context).contains("same"));
+    }
+
+    @Test public void legacyCompositeDiscardsUnverifiedProfileButRetainsFavorite() throws Exception {
+        NativeContentItem composite = new NativeContentItem(NativeContentItem.KIND_CREATOR, "Same",
+                "https://fapello.com/wrong-profile/", "https://example.com/other.jpg", "", "",
+                "", "Fapello + OnlyHaven", "same");
+        context.getSharedPreferences(CreatorCatalog.PREFS, 0).edit()
+                .putString("items", ContentItemCodec.encodeList(Arrays.asList(composite), 5).toString())
+                .commit();
+        context.getSharedPreferences("creator_favorites", 0).edit()
+                .putStringSet("creators", new HashSet<>(Arrays.asList("same"))).commit();
+        NativeContentItem favorite = CreatorCatalog.favoriteGroups(context).get(0).item;
+        assertEquals("Same", favorite.title);
+        assertEquals("", favorite.url);
+        assertEquals("", favorite.imageUrl);
+        assertTrue(CreatorFavoriteStore.contains(context, favorite));
+    }
+
     @Test public void roundTripMergesSavedItemsAndRestoresSettings() throws Exception {
         CreatorFavoriteStore.toggle(context, creator("Anna"));
         FavoriteStore.add(context, "First", "https://crazyshit.com/video/first");

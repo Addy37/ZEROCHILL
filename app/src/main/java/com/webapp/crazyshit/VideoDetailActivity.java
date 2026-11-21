@@ -1122,11 +1122,14 @@ public class VideoDetailActivity extends Activity {
         }
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
+            Exception resolveError = null;
             try {
                 stream = PlayableSourceRouter.resolve(this, requested);
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                resolveError = error;
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            Throwable failure = resolveError;
             runOnUiThread(() -> {
                 if (requestGeneration != deferredShowsResolveGeneration || showsSavedOnExit ||
                         isFinishing() || isDestroyed()) return;
@@ -1136,6 +1139,8 @@ public class VideoDetailActivity extends Activity {
                         startupPoster.setClickable(true);
                         startupPoster.setOnClickListener(v -> resolveDeferredShowsPlayback());
                     }
+                    if (BunkrMaintenanceUi.showIfConfirmed(this, requested.url, failure,
+                            this::resolveDeferredShowsPlayback)) return;
                     ZeroChillToast.makeText(
                             this,
                             "Couldn't resolve this video natively right now. Tap the player to retry.",
@@ -1571,9 +1576,8 @@ public class VideoDetailActivity extends Activity {
         View.OnClickListener open = view -> {
             savePlaybackState(false);
             if (player != null) player.pause();
-            startActivity(NativeFeedBrowserActivity.createCreatorGallery(this, creator.title,
-                    creator.searchQuery.isEmpty() ? creator.title : creator.searchQuery,
-                    NativeFeedBrowserActivity.creatorProfileHint(creator), onlyFapSession));
+            startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+                    this, CreatorGallerySpec.from(creator), onlyFapSession));
         };
         gallery.setOnClickListener(open);
         avatarFrame.setContentDescription("Open " + creator.title + " gallery");
@@ -1627,21 +1631,19 @@ public class VideoDetailActivity extends Activity {
             String session = "";
             if (generation != relatedLoadGeneration || Thread.currentThread().isInterrupted()) return;
             if (creator != null) {
-                String query = creator.searchQuery.isEmpty() ? creator.title : creator.searchQuery;
-                String profile = NativeFeedBrowserActivity.creatorProfileHint(creator);
-                session = CreatorGalleryPreloader.sessionId(this, creator);
+                CreatorGallerySpec spec = CreatorGallerySpec.from(creator);
+                session = CreatorGalleryPreloader.sessionId(this, spec.sessionKey);
                 BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(session);
-                boolean exact = snapshot != null && snapshot.items.stream().anyMatch(item ->
-                        profile.equals(ShitTokCreatorMetadata.knownProfileUrl(item)));
-                if (!exact) {
+                if (snapshot == null && !session.isEmpty()) {
+                    snapshot = BunkrGallerySessionStore.restoreRecentCreator(this, spec.sessionKey);
+                }
+                if (snapshot == null || snapshot.items.isEmpty()) {
                     session = BunkrGallerySessionStore.createCreator(creator.title,
-                            BunkrRepository.searchUrl(query), query);
+                            BunkrRepository.searchUrl(spec.query), spec.sessionKey);
                     try {
                         BunkrCreatorGalleryRepository repository = new BunkrCreatorGalleryRepository();
-                        repository.reset(session, query, profile, creator.title);
-                        BunkrCreatorGalleryRepository.Batch batch = repository.fetchNext(this, session,
-                                query, profile, creator.title);
-                        BunkrGallerySessionStore.appendPreview(session, batch.items);
+                        repository.fetchNext(this, session, spec.query, spec.profileHint, creator.title,
+                                spec.seedNames, spec.seedUrls, spec.seedImages, spec.aliases, null);
                     } catch (Exception ignored) { }
                     snapshot = BunkrGallerySessionStore.snapshot(session);
                 }
@@ -2235,11 +2237,14 @@ public class VideoDetailActivity extends Activity {
         final int requestGeneration = ++relatedPlayGeneration;
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
+            Exception resolveError = null;
             try {
                 stream = PlayableSourceRouter.resolve(this, item.url);
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                resolveError = error;
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            Throwable failure = resolveError;
             runOnUiThread(() -> {
                 if (queued != null) showsNextResolving = false;
                 if (showsSavedOnExit || isFinishing() || isDestroyed() ||
@@ -2253,6 +2258,8 @@ public class VideoDetailActivity extends Activity {
                 if (queued != null && !recoveryResumed) { loading.setVisibility(View.GONE); return; }
                 loading.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    if (BunkrMaintenanceUi.showIfConfirmed(this, item.url, failure,
+                            () -> playRelated(item, queued))) return;
                     ZeroChillToast.makeText(
                             this,
                             "Couldn't resolve that related video natively right now.",
@@ -3037,6 +3044,8 @@ public class VideoDetailActivity extends Activity {
         if (failureShown || showsSavedOnExit || isFinishing()) return;
         failureShown = true;
         dismissShowsLaunchCurtain(true);
+        if (isBunkrStream() && BunkrMaintenanceUi.showIfConfirmed(this, pageUrl, null,
+                () -> recoverPlayback(null))) return;
         RatingFeedbackPrompt.recordPlaybackError(this);
         android.app.AlertDialog.Builder failure = new ZeroChillDialog.Builder(this)
                 .setTitle("Couldn't play this stream")
@@ -3639,6 +3648,7 @@ public class VideoDetailActivity extends Activity {
 
     private boolean recoverPlayback(PlaybackException error) {
         if (showsSavedOnExit) return false;
+        if (error != null && isBunkrStream() && BunkrMaintenance.isKnown(pageUrl)) return false;
         if (error == null) failureShown = false;
         if (player instanceof LegacyWatchPlayer) {
             if (error != null) return false;
@@ -3658,6 +3668,11 @@ public class VideoDetailActivity extends Activity {
             buildPlayer(recovered.position);
             if (player != null) player.setPlayWhenReady(recovered.playWhenReady && recoveryResumed);
         }, this::showPlaybackFailure);
+    }
+
+    private boolean isBunkrStream() {
+        return mediaUrl != null && (mediaUrl.startsWith("https://") || mediaUrl.startsWith("http://"))
+                && BunkrRepository.isBunkrUrl(pageUrl);
     }
 
     private void releasePlayer() {

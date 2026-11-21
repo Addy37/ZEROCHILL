@@ -53,6 +53,8 @@ public final class RemoteSourceConfigManagerTest {
         assertEquals(FapelloRepository.BASE, config.fapello.baseUrl);
         assertEquals(BunkrRepository.INDEX, config.bunkr.indexUrl);
         assertEquals("bundled", RemoteSourceConfigManager.activeOrigin());
+        assertFalse(config.wikiFeet.enabled);
+        assertTrue(config.wikiFeetX.enabled);
         assertTrue("Local startup should only parse a small bundled file", elapsedMs < 2_000L);
 
     }
@@ -226,24 +228,35 @@ public final class RemoteSourceConfigManagerTest {
         assertTrue(RemoteSourceConfigManager.snapshot().bunkr.enabled);
     }
 
-    @Test public void bunkrFallbackAndWikiFeetHostsCanChangeRemotely() throws Exception {
+    @Test public void bunkrFallbackAndWikiFeetXHostsCanChangeRemotely() throws Exception {
         JSONObject config = defaults();
         config.put("configVersion", 6);
         config.put("updatedAt", "2026-09-13T12:00:00Z");
         JSONObject sources = config.getJSONObject("sources");
         sources.getJSONObject("bunkr").put("fallbackOrigins",
                 new JSONArray().put("https://bunkr-backup.example"));
-        JSONObject wiki = sources.getJSONObject("wikifeet");
-        wiki.put("baseUrl", "https://feet.example/");
-        wiki.put("pictureHost", "pictures.feet.example");
-        wiki.put("thumbnailHost", "thumbs.feet.example");
+        JSONObject wiki = sources.getJSONObject("wikifeetx");
+        wiki.put("baseUrl", "https://feet-x.example/");
+        wiki.put("pictureHost", "pictures.feet-x.example");
+        wiki.put("thumbnailHost", "thumbs.feet-x.example");
+        wiki.put("refererOverride", "https://feet-x.example/");
+        sources.getJSONObject("wikifeet").put("enabled", true);
+        config.getJSONObject("global").put("sourceKillSwitchesEnabled", false);
         RemoteSourceConfigManager.applyRemoteForTests(context, config.toString());
 
         assertTrue(BunkrRepository.isBunkrUrl("https://bunkr-backup.example/a/sample"));
-        assertEquals("https://feet.example/search/sample",
-                WikiFeetRepository.searchUrl(WikiFeetRepository.Site.WIKIFEET, "sample"));
-        assertEquals("https://pictures.feet.example/Sample-Feet-42.jpg",
-                WikiFeetRepository.originalUrl(WikiFeetRepository.Site.WIKIFEET, "Sample", 42));
+        WikiFeetRepository repository = new WikiFeetRepository();
+        assertEquals("https://feet-x.example/search/sample",
+                WikiFeetRepository.searchUrl(WikiFeetRepository.Site.WIKIFEET_X, "sample"));
+        String original = WikiFeetRepository.originalUrl(WikiFeetRepository.Site.WIKIFEET_X, "Sample", 42);
+        assertEquals("https://pictures.feet-x.example/Sample-Feet-42.jpg", original);
+        assertEquals("https://feet-x.example/", repository.resolvePlayable(original,
+                "https://feet-x.example/Sample").requestReferer);
+        org.junit.Assert.assertThrows(IOException.class, () -> repository.searchCreators(context,
+                WikiFeetRepository.Site.WIKIFEET, "Sample", 4));
+        org.junit.Assert.assertThrows(IOException.class, () -> repository.fetchCreatorMedia(context,
+                new WikiFeetRepository.Creator(WikiFeetRepository.Site.WIKIFEET, "Sample",
+                        "https://wikifeet.com/Sample", "", 1), 1, 24));
     }
 
     @Test public void newSourcesCanChangeRemotely() throws Exception {

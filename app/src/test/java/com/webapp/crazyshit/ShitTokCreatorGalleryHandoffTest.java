@@ -32,11 +32,10 @@ public class ShitTokCreatorGalleryHandoffTest {
     @Implements(value = CreatorGalleryPreloader.class, isInAndroidSdk = false)
     public static class Preloads {
         static String name, query, profile;
-        @Implementation protected static void warm(Context context, String name, String query,
-                String profile, int priority) {
-            Preloads.name = name;
-            Preloads.query = query;
-            Preloads.profile = profile;
+        @Implementation protected static void warm(Context context, CreatorGallerySpec spec, int priority) {
+            Preloads.name = spec.item.title;
+            Preloads.query = spec.query;
+            Preloads.profile = spec.profileHint;
         }
     }
 
@@ -156,7 +155,7 @@ public class ShitTokCreatorGalleryHandoffTest {
         Map<?, ?> states = ReflectionHelpers.getStaticField(BunkrCreatorGalleryRepository.class, "STATES");
         Object state = states.get(session);
         assertTrue((boolean) ReflectionHelpers.getField(state, "onlyHavenCatalogLoaded"));
-        ArrayDeque<?> pending = ReflectionHelpers.getField(state, "onlyHavenPending");
+        java.util.Deque<?> pending = ReflectionHelpers.getField(state, "onlyHavenPending");
         assertEquals(1, pending.size());
         OnlyHavenRepository.Creator creator = ReflectionHelpers.getField(pending.peek(), "creator");
         assertEquals(PROFILE, creator.url);

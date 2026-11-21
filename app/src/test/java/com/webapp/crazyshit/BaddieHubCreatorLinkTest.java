@@ -188,15 +188,22 @@ public class BaddieHubCreatorLinkTest {
         } finally { loader.close(); }
     }
     @Test public void titleAvatarAndCompletedHorizontalSwipeUseSameIdentityWithoutPlayerRestart() {
+        NativeContentItem clip = media("prettyassjas");
+        NativeContentItem model = creator("Canonical Name");
+        NativeContentItem canonical = new NativeContentItem(model.kind, model.title, model.url,
+                model.imageUrl, model.views, model.uploader, model.comments, model.description, clip.title);
+        CreatorCatalog.remember(app, Collections.singletonList(canonical));
+        BaddieHubCreatorMatcher matcher = new BaddieHubCreatorMatcher(app, title -> {
+            throw new AssertionError("Known creator must resolve without a live search");
+        });
         for (String action : new String[]{"title", "avatar", "swipe"}) {
             try (org.robolectric.android.controller.ActivityController<Activity> host =
                     Robolectric.buildActivity(Activity.class).setup()) {
                 ChaosFeedView feed = new ChaosFeedView(host.get(), item -> {}, false);
                 ShitTokCreatorMetadataLoader original = ReflectionHelpers.getField(feed, "creatorMetadata");
                 original.close(); Queue worker = new Queue();
-                NativeContentItem clip = media("prettyassjas"), canonical = creator("Canonical Name");
                 ShitTokCreatorMetadataLoader loader = new ShitTokCreatorMetadataLoader(worker, Runnable::run,
-                        item -> canonical, url -> ReflectionHelpers.callInstanceMethod(feed,
+                        matcher::local, url -> ReflectionHelpers.callInstanceMethod(feed,
                                 "onCreatorMetadataReady", from(String.class, url)));
                 ReflectionHelpers.setField(feed, "creatorMetadata", loader);
                 ExoPlayer player = new ExoPlayer.Builder(host.get()).build();

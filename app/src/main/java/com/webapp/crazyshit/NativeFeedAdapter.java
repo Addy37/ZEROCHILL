@@ -595,7 +595,10 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         progressFill.setScaleX(0f);
         progressTrack.addView(progressFill, new FrameLayout.LayoutParams(-1, -1));
 
-        return new MediaViews(mediaFrame, image, play, watchBadge, overlayComments, progressTrack, progressFill);
+        BunkrMaintenanceUi.Badge maintenance = episodePresentation
+                ? BunkrMaintenanceUi.addBadge(mediaFrame, Gravity.TOP | Gravity.END) : null;
+        return new MediaViews(mediaFrame, image, play, watchBadge, overlayComments, progressTrack,
+                progressFill, maintenance);
     }
 
     private CopyViews addCopy(
@@ -807,6 +810,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
     }
 
     private void bindPlaybackState(Holder holder, NativeContentItem item) {
+        if (holder.maintenance != null) holder.maintenance.bind(item);
         holder.image.setAlpha(1f);
         holder.watchBadge.setVisibility(View.GONE);
         holder.progressTrack.setVisibility(View.GONE);
@@ -1155,6 +1159,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         final TextView overlayComments;
         final View progressTrack;
         final View progressFill;
+        final BunkrMaintenanceUi.Badge maintenance;
 
         MediaViews(
                 FrameLayout frame,
@@ -1163,7 +1168,8 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
                 TextView watchBadge,
                 TextView overlayComments,
                 View progressTrack,
-                View progressFill
+                View progressFill,
+                BunkrMaintenanceUi.Badge maintenance
         ) {
             this.frame = frame;
             this.image = image;
@@ -1172,6 +1178,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             this.overlayComments = overlayComments;
             this.progressTrack = progressTrack;
             this.progressFill = progressFill;
+            this.maintenance = maintenance;
         }
     }
 
@@ -1200,6 +1207,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
         final TextView overlayComments;
         final View progressTrack;
         final View progressFill;
+        final BunkrMaintenanceUi.Badge maintenance;
         final TextView title;
         final TextView info;
         final TextView comments;
@@ -1216,6 +1224,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             this.overlayComments = media.overlayComments;
             this.progressTrack = media.progressTrack;
             this.progressFill = media.progressFill;
+            this.maintenance = media.maintenance;
             this.title = copy.title;
             this.info = copy.info;
             this.comments = copy.comments;
@@ -1233,6 +1242,7 @@ public final class NativeFeedAdapter extends RecyclerView.Adapter<NativeFeedAdap
             this.overlayComments = null;
             this.progressTrack = null;
             this.progressFill = null;
+            this.maintenance = null;
             this.title = null;
             this.info = null;
             this.comments = null;

@@ -604,16 +604,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private void openBrowseItem(NativeContentItem item, View anchor) {
         if (item == null) return;
         if (item.isCreator()) {
-            String query = item.searchQuery == null || item.searchQuery.trim().isEmpty()
-                    ? item.title
-                    : item.searchQuery.trim();
-            CreatorGalleryTransition.start(activity, NativeFeedBrowserActivity.createCreatorGallery(
-                    activity,
-                    item.title,
-                    query,
-                    NativeFeedBrowserActivity.creatorProfileHint(item),
-                    CreatorGalleryPreloader.sessionId(activity, item)
-            ), anchor, item);
+            CreatorGalleryTransition.start(activity,
+                    NativeFeedBrowserActivity.createCreatorGallery(activity, item), anchor, item);
             return;
         }
         if (item.url == null || item.url.isEmpty()) return;
@@ -641,21 +633,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 spec,
                 CreatorGalleryPreloader.PRIORITY_HIGH
         );
-        String sessionId = CreatorGalleryPreloader.sessionId(activity, spec.cacheKey);
+        String sessionId = CreatorGalleryPreloader.sessionId(activity, spec.sessionKey);
         if (sessionId.isEmpty() && spec.grouped) {
             sessionId = CreatorGalleryPreloader.composeInMemoryMergedSession(activity, spec);
         }
-        CreatorGalleryTransition.start(activity, NativeFeedBrowserActivity.createCreatorGallery(
-                activity,
-                spec.item.title,
-                spec.query,
-                spec.profileHint,
-                sessionId,
-                spec.cacheKey,
-                spec.seedNames,
-                spec.seedUrls,
-                spec.seedImages
-        ), anchor, group.item);
+        CreatorGalleryTransition.start(activity,
+                NativeFeedBrowserActivity.createCreatorGallery(activity, spec, sessionId), anchor, group.item);
     }
 
     private void openShowDetails(NativeContentItem item) {
@@ -736,14 +719,19 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         io.execute(() -> {
             NativeContentItem libraryContent = OnlyFapVideoMetadata.restore(activity, item);
             CrazyShitRepository.StreamInfo stream = null;
+            Exception resolveError = null;
             try {
                 stream = PlayableSourceRouter.resolve(activity, item);
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                resolveError = error;
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            Throwable failure = resolveError;
             activity.runOnUiThread(() -> {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    if (BunkrMaintenanceUi.showIfConfirmed(activity, item.url, failure,
+                            () -> openShowsVideo(item, manualLandscapeFullscreen, sourceView))) return;
                     ZeroChillToast.makeText(
                             activity,
                             "Couldn't resolve this video natively right now.",
@@ -878,14 +866,19 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         io.execute(() -> {
             NativeContentItem libraryContent = OnlyFapVideoMetadata.restore(activity, item);
             CrazyShitRepository.StreamInfo stream = null;
+            Exception resolveError = null;
             try {
                 stream = PlayableSourceRouter.resolve(activity, item);
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                resolveError = error;
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            Throwable failure = resolveError;
             activity.runOnUiThread(() -> {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    if (BunkrMaintenanceUi.showIfConfirmed(activity, item.url, failure,
+                            () -> openShowsResume(history, manualLandscapeFullscreen, sourceView))) return;
                     ZeroChillToast.makeText(
                             activity,
                             "Couldn't resume this video natively right now.",

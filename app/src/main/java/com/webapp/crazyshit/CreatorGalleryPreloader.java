@@ -71,138 +71,16 @@ final class CreatorGalleryPreloader {
     }
 
     static void warm(Context context, NativeContentItem creator, int priority) {
-        if (creator == null || !creator.isCreator()) return;
-        String query = creator.searchQuery == null || creator.searchQuery.trim().isEmpty()
-                ? creator.title
-                : creator.searchQuery.trim();
-        String sourceProfile = FapelloRepository.isModelUrl(creator.url) ||
-                OnlyHavenRepository.isOnlyHavenUrl(creator.url)
-                ? creator.url
-                : "";
-        warm(context, creator.title, query, sourceProfile, priority);
+        if (creator != null && creator.isCreator()) warm(context, CreatorGallerySpec.from(creator), priority);
     }
-
-    static void warm(Context context, String creatorName, String query, String fapelloProfileUrl) {
-        warm(context, creatorName, query, fapelloProfileUrl, PRIORITY_NORMAL);
-    }
-
-    static void warm(
-            Context context,
-            String creatorName,
-            String query,
-            String fapelloProfileUrl,
-            int priority
-    ) {
-        if (context == null) return;
-        String cleanName = clean(creatorName);
-        String cleanQuery = clean(query);
-        if (cleanQuery.isEmpty()) cleanQuery = cleanName;
-        if (cleanQuery.isEmpty()) return;
-
-        String key = key(cleanQuery);
-        String recent = BunkrGallerySessionStore.recentCreator(cleanQuery);
-        if (recent != null) {
-            BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(recent);
-            if (snapshot != null) warmImages(context, snapshot.items);
-            return;
-        }
-        String active = SESSIONS.get(key);
-        if (active != null && BunkrGallerySessionStore.snapshot(active) == null) {
-            SESSIONS.remove(key, active);
-        }
-        if (SESSIONS.containsKey(key) || WARMING.contains(key)) return;
-        if (!reserve()) return;
-        if (!WARMING.add(key)) {
-            RESERVED.decrementAndGet();
-            return;
-        }
-
-        Context app = context.getApplicationContext();
-        Context safeContext = app == null ? context : app;
-        String finalName = cleanName.isEmpty() ? cleanQuery : cleanName;
-        String finalQuery = cleanQuery;
-        String finalFapelloProfile = clean(fapelloProfileUrl);
-
-        WarmTask task = new WarmTask(
-                key,
-                priority,
-                SEQUENCE.getAndIncrement(),
-                () -> {
-            String sessionId = "";
-            try {
-                String nowRecent = BunkrGallerySessionStore.recentCreator(finalQuery);
-                if (nowRecent != null) {
-                    SESSIONS.put(key, nowRecent);
-                    BunkrGallerySessionStore.Snapshot snapshot =
-                            BunkrGallerySessionStore.snapshot(nowRecent);
-                    if (snapshot != null) warmImages(safeContext, snapshot.items);
-                    return;
-                }
-
-                String persistedId =
-                        BunkrGallerySessionStore.recentCreatorId(safeContext, finalQuery);
-                if (persistedId != null) {
-                    BunkrGallerySessionStore.Snapshot persisted =
-                            BunkrGallerySessionStore.restoreRecentCreator(
-                                    safeContext, finalQuery);
-                    if (persisted != null) {
-                        SESSIONS.put(key, persistedId);
-                        warmImages(safeContext, persisted.items);
-                        return;
-                    }
-                }
-
-                sessionId = BunkrGallerySessionStore.createCreator(
-                        finalName,
-                        BunkrRepository.searchUrl(finalQuery),
-                        finalQuery
-                );
-                SESSIONS.put(key, sessionId);
-
-                BunkrCreatorGalleryRepository repository = new BunkrCreatorGalleryRepository();
-                repository.reset(sessionId, finalQuery, finalFapelloProfile, finalName);
-                String activeSession = sessionId;
-                repository.fetchNext(
-                        safeContext,
-                        activeSession,
-                        finalQuery,
-                        finalFapelloProfile,
-                        finalName,
-                        items -> {
-                            if (items == null || items.isEmpty()) return;
-                            BunkrGallerySessionStore.appendPreview(activeSession, items);
-                            warmImages(safeContext, items);
-                        }
-                );
-
-                BunkrGallerySessionStore.Snapshot snapshot =
-                        BunkrGallerySessionStore.snapshot(activeSession);
-                if (snapshot != null) warmImages(safeContext, snapshot.items);
-            } catch (Exception ignored) {
-            } finally {
-                WARMING.remove(key);
-                RESERVED.decrementAndGet();
-                if (!sessionId.isEmpty()) {
-                    SESSIONS.remove(key, sessionId);
-                }
-            }
-        });
-        PENDING.put(key, task);
-        IO.execute(task);
-    }
-
 
     static void warm(Context context, CreatorGallerySpec spec, int priority) {
-        if (spec == null || spec.item == null) return;
-        if (!spec.grouped) {
-            warm(context, spec.item, priority);
-            return;
-        }
-        if (context == null) return;
+        if (context == null || spec == null || spec.item == null
+                || WikiFeetRepository.isRetiredItem(spec.item) && spec.seedUrls.isEmpty()) return;
 
         String cleanName = clean(spec.item.title);
         String cleanQuery = clean(spec.query);
-        String cleanCacheKey = clean(spec.cacheKey);
+        String cleanCacheKey = spec.sessionKey;
         if (cleanQuery.isEmpty() || cleanCacheKey.isEmpty()) return;
 
         String taskKey = key(cleanCacheKey);
@@ -217,8 +95,13 @@ final class CreatorGalleryPreloader {
         if (active != null && BunkrGallerySessionStore.snapshot(active) == null) {
             SESSIONS.remove(taskKey, active);
         }
-        if (SESSIONS.containsKey(taskKey) || WARMING.contains(taskKey)) return;
-        if (!reserve()) return;
+        if (SESSIONS.containsKey(taskKey)) return;
+        WarmTask queued = PENDING.get(taskKey);
+        if (queued != null) {
+            queued.promote(priority);
+            return;
+        }
+        if (WARMING.contains(taskKey) || !reserve()) return;
         if (!WARMING.add(taskKey)) {
             RESERVED.decrementAndGet();
             return;
@@ -266,7 +149,7 @@ final class CreatorGalleryPreloader {
                 ArrayList<NativeContentItem> cachedPreview =
                         restoredMemberItems(
                                 safeContext,
-                                mergedMemberQueries(finalQuery, finalSeedNames)
+                                spec.memberSessionKeys
                         );
                 sessionId = BunkrGallerySessionStore.createCreator(
                         finalName,
@@ -288,7 +171,8 @@ final class CreatorGalleryPreloader {
                         finalName,
                         finalSeedNames,
                         finalSeedUrls,
-                        finalSeedImages
+                        finalSeedImages,
+                        spec.aliases
                 );
                 String activeSession = sessionId;
                 repository.fetchNext(
@@ -300,6 +184,7 @@ final class CreatorGalleryPreloader {
                         finalSeedNames,
                         finalSeedUrls,
                         finalSeedImages,
+                        spec.aliases,
                         items -> {
                             if (items == null || items.isEmpty()) return;
                             BunkrGallerySessionStore.appendPreview(activeSession, items);
@@ -325,17 +210,17 @@ final class CreatorGalleryPreloader {
 
     static String composeInMemoryMergedSession(Context context, CreatorGallerySpec spec) {
         if (context == null || spec == null || !spec.grouped || spec.item == null) return "";
-        String warm = sessionId(context, spec.cacheKey);
+        String warm = sessionId(context, spec.sessionKey);
         if (!warm.isEmpty()) return warm;
 
         ArrayList<NativeContentItem> preview =
-                recentMemberItems(mergedMemberQueries(spec.query, spec.seedNames));
+                recentMemberItems(spec.memberSessionKeys);
         if (preview.isEmpty()) return "";
 
         String sessionId = BunkrGallerySessionStore.createCreator(
                 spec.item.title,
                 BunkrRepository.searchUrl(spec.query),
-                spec.cacheKey
+                spec.sessionKey
         );
         BunkrGallerySessionStore.appendPreview(sessionId, preview);
         warmImages(context, preview);
@@ -344,28 +229,7 @@ final class CreatorGalleryPreloader {
 
     static void cancelQueued(CreatorGallerySpec spec) {
         if (spec == null) return;
-        cancelQueuedKey(spec.grouped ? spec.cacheKey : spec.query);
-    }
-
-    private static ArrayList<String> mergedMemberQueries(
-            String primaryQuery,
-            List<String> memberQueries
-    ) {
-        ArrayList<String> result = new ArrayList<>();
-        java.util.HashSet<String> seen = new java.util.HashSet<>();
-        String primary = clean(primaryQuery);
-        if (!primary.isEmpty()) {
-            result.add(primary);
-            seen.add(key(primary));
-        }
-        if (memberQueries != null) {
-            for (String query : memberQueries) {
-                String cleanQuery = clean(query);
-                if (cleanQuery.isEmpty() || !seen.add(key(cleanQuery))) continue;
-                result.add(cleanQuery);
-            }
-        }
-        return result;
+        cancelQueuedKey(spec.sessionKey);
     }
 
     private static ArrayList<NativeContentItem> restoredMemberItems(
@@ -382,7 +246,8 @@ final class CreatorGalleryPreloader {
             if (snapshot == null || snapshot.items.isEmpty()) continue;
             int accepted = 0;
             for (NativeContentItem item : snapshot.items) {
-                if (item == null || item.url.isEmpty() || !seen.add(item.url)) continue;
+                if (item == null || item.url.isEmpty() || WikiFeetRepository.isRetiredItem(item)
+                        || !seen.add(item.url)) continue;
                 preview.add(item);
                 if (++accepted >= MERGED_MEMBER_ITEM_LIMIT
                         || preview.size() >= MERGED_PREVIEW_LIMIT) break;
@@ -404,7 +269,8 @@ final class CreatorGalleryPreloader {
             if (snapshot == null || snapshot.items.isEmpty()) continue;
             int accepted = 0;
             for (NativeContentItem item : snapshot.items) {
-                if (item == null || item.url.isEmpty() || !seen.add(item.url)) continue;
+                if (item == null || item.url.isEmpty() || WikiFeetRepository.isRetiredItem(item)
+                        || !seen.add(item.url)) continue;
                 preview.add(item);
                 if (++accepted >= MERGED_MEMBER_ITEM_LIMIT
                         || preview.size() >= MERGED_PREVIEW_LIMIT) break;
@@ -418,7 +284,7 @@ final class CreatorGalleryPreloader {
         if (cleanQuery.isEmpty()) return;
         String key = key(cleanQuery);
         WarmTask task = PENDING.get(key);
-        if (task == null || task.priority >= PRIORITY_HIGH || !IO.remove(task)) return;
+        if (task == null || !task.removeIfLowPriority()) return;
         if (PENDING.remove(key, task)) {
             WARMING.remove(key);
             RESERVED.decrementAndGet();
@@ -427,26 +293,15 @@ final class CreatorGalleryPreloader {
 
     static void cancelQueued(NativeContentItem creator) {
         if (creator == null || !creator.isCreator()) return;
-        String query = creator.searchQuery == null || creator.searchQuery.trim().isEmpty()
-                ? creator.title
-                : creator.searchQuery.trim();
-        cancelQueuedKey(query);
+        cancelQueuedKey(CreatorGallerySpec.from(creator).sessionKey);
     }
 
     static String sessionId(NativeContentItem creator) {
-        if (creator == null) return "";
-        String query = creator.searchQuery == null || creator.searchQuery.trim().isEmpty()
-                ? creator.title
-                : creator.searchQuery.trim();
-        return sessionId(query);
+        return creator == null ? "" : sessionId(CreatorGallerySpec.from(creator).sessionKey);
     }
 
     static String sessionId(Context context, NativeContentItem creator) {
-        if (creator == null) return "";
-        String query = creator.searchQuery == null || creator.searchQuery.trim().isEmpty()
-                ? creator.title
-                : creator.searchQuery.trim();
-        return sessionId(context, query);
+        return creator == null ? "" : sessionId(context, CreatorGallerySpec.from(creator).sessionKey);
     }
 
     static String sessionId(String query) {
@@ -538,8 +393,8 @@ final class CreatorGalleryPreloader {
     }
 
     private static String imageReferer(NativeContentItem item) {
-        if (item != null && WikiFeetRepository.isWikiFeetUrl(item.url) &&
-                WikiFeetRepository.isWikiFeetUrl(item.uploader)) return item.uploader;
+        String wikiFeetReferer = WikiFeetRepository.imageReferer(item);
+        if (!wikiFeetReferer.isEmpty()) return wikiFeetReferer;
         if (item != null && !FapelloRepository.isPostUrl(item.url) &&
                 FapelloRepository.isModelUrl(item.uploader)) return item.uploader;
         if (item != null && OnlyHavenRepository.isOnlyHavenUrl(item.uploader)) {
@@ -550,7 +405,7 @@ final class CreatorGalleryPreloader {
 
     private static final class WarmTask implements Runnable, Comparable<WarmTask> {
         private final String key;
-        private final int priority;
+        private volatile int priority;
         private final long sequence;
         private final Runnable work;
 
@@ -559,6 +414,16 @@ final class CreatorGalleryPreloader {
             this.priority = priority;
             this.sequence = sequence;
             this.work = work;
+        }
+
+        synchronized void promote(int requestedPriority) {
+            if (requestedPriority <= priority || !IO.remove(this)) return;
+            priority = requestedPriority;
+            IO.execute(this);
+        }
+
+        synchronized boolean removeIfLowPriority() {
+            return priority < PRIORITY_HIGH && IO.remove(this);
         }
 
         @Override

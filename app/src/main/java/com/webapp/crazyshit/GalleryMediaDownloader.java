@@ -32,6 +32,10 @@ final class GalleryMediaDownloader {
             ResolutionListener listener
     ) {
         if (activity == null || item == null) return;
+        if (WikiFeetRepository.isRetiredItem(item)) {
+            toast(activity, "This saved image source is unavailable.");
+            return;
+        }
         if (item.isVideo()) {
             downloadVideo(activity, item, resolvedUrl, requestReferer);
             return;
@@ -59,7 +63,7 @@ final class GalleryMediaDownloader {
         io.execute(() -> {
             try {
                 CrazyShitRepository.StreamInfo resolved =
-                        PlayableSourceRouter.resolve(activity, item.url);
+                        PlayableSourceRouter.resolve(activity, item);
                 if (resolved == null || value(resolved.mediaUrl).isEmpty()) {
                     throw new IllegalStateException("No resolved image URL");
                 }
@@ -161,10 +165,8 @@ final class GalleryMediaDownloader {
 
     private static String imageReferer(NativeContentItem item) {
         if (item == null) return "";
-        if (WikiFeetRepository.isWikiFeetUrl(item.url)
-                && WikiFeetRepository.isWikiFeetUrl(item.uploader)) {
-            return value(item.uploader);
-        }
+        String wikiFeetReferer = WikiFeetRepository.imageReferer(item);
+        if (!wikiFeetReferer.isEmpty()) return wikiFeetReferer;
         if (!FapelloRepository.isPostUrl(item.url)
                 && FapelloRepository.isModelUrl(item.uploader)) {
             return value(item.uploader);

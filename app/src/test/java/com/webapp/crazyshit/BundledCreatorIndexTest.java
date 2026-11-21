@@ -26,6 +26,16 @@ public class BundledCreatorIndexTest {
         assertEquals("Mía Rose", index.matching("mia rose", 4).get(0).title);
     }
 
+    @Test public void onlyUnambiguousCuratedAliasesReachGallery() throws Exception {
+        BundledCreatorIndex index = index("Creator One\tunique_handle|shared_handle\n"
+                + "Creator Two\tshared_handle\n");
+        NativeContentItem selected = index.matching("unique_handle", 3).get(0);
+        assertEquals("Creator One", selected.title);
+        assertEquals(Collections.singletonList("unique_handle"), selected.creatorAliases);
+        assertEquals("Creator One", selected.searchQuery);
+        assertNull(index.exact("shared_handle"));
+    }
+
     @Test public void largeIndexLimitsResultsAndRepeatedQueries() throws Exception {
         StringBuilder rows = new StringBuilder();
         for (int i = 0; i < 5000; i++) rows.append("Creator ").append(i).append('\n');
@@ -45,7 +55,7 @@ public class BundledCreatorIndexTest {
         assertEquals(2, result.size());
         assertEquals("Mía Rose", result.get(0).title);
         assertEquals(live.imageUrl, result.get(0).imageUrl);
-        assertEquals(OnlyFapCreatorResults.key(saved), OnlyFapCreatorResults.key(result.get(0)));
+        assertEquals(OnlyFapCreatorResults.key(live), OnlyFapCreatorResults.key(result.get(0)));
         assertEquals("Zoe", result.get(1).title);
     }
 
@@ -78,5 +88,38 @@ public class BundledCreatorIndexTest {
                 creator("Profile A", "https://fapello.com/another-person/", "")), null, 20);
         assertEquals(2, result.size());
         assertEquals("art", result.get(0).imageUrl);
+    }
+    @Test public void matchingTitlesAndHandlesDoNotAssertCrossSourceIdentity() {
+        NativeContentItem fapello = creator("ryn! >_<", "https://fapello.com/rynkerbelle/", "art-a")
+                .withCreatorIdentity(Collections.singletonList("rynkerbelle"), Collections.emptyList());
+        NativeContentItem onlyHaven = creator("ryn", "https://cum.st/creators/fansly/23", "art-b")
+                .withCreatorIdentity(Collections.singletonList("rynkerbelle"), Collections.emptyList());
+        List<NativeContentItem> result = OnlyFapCreatorResults.merge(
+                Collections.singletonList(fapello), Collections.singletonList(onlyHaven), 10);
+        assertEquals(2, result.size());
+        assertNotEquals(OnlyFapCreatorResults.key(result.get(0)), OnlyFapCreatorResults.key(result.get(1)));
+        assertEquals("art-a", result.get(0).imageUrl);
+        assertEquals("art-b", result.get(1).imageUrl);
+    }
+
+    @Test public void reviewedCrossSourceIdentityRetainsProfilesAndProviderAliases() {
+        NativeContentItem fapello = creator("Belle Delphine", "https://fapello.com/belledelphine/", "art-a")
+                .withCreatorIdentity(Collections.singletonList("belle-provider-handle"), Collections.emptyList());
+        NativeContentItem onlyHaven = creator("Belle Del", "https://cum.st/creators/onlyfans/24", "art-b")
+                .withCreatorIdentity(Collections.singletonList("alternate_handle"), Collections.emptyList());
+        List<NativeContentItem> result = OnlyFapCreatorResults.merge(
+                Arrays.asList(fapello, onlyHaven), null, 10);
+        assertEquals(1, result.size());
+        assertEquals(fapello.url, result.get(0).url);
+        assertTrue(result.get(0).creatorProfileUrls.containsAll(Arrays.asList(fapello.url, onlyHaven.url)));
+        assertTrue(result.get(0).creatorAliases.containsAll(Arrays.asList(
+                "belle-provider-handle", "alternate_handle")));
+    }
+
+    @Test public void reviewedNameCannotOverrideDifferentIdsFromOneProvider() {
+        List<NativeContentItem> result = OnlyFapCreatorResults.merge(Arrays.asList(
+                creator("Belle Del", "https://fapello.com/profile-one/", ""),
+                creator("Belle Delphine", "https://fapello.com/profile-two/", "")), null, 10);
+        assertEquals(2, result.size());
     }
 }

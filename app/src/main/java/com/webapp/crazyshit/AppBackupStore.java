@@ -53,7 +53,8 @@ final class AppBackupStore {
         for (NativeContentItem item : CreatorCatalog.all(context)) creators.put(CreatorCatalog.key(item), item);
         for (NativeContentItem incoming : ContentItemCodec.decodeList(document.getJSONArray("creators"), BackupDocument.MAX_ITEMS)) {
             NativeContentItem item = new NativeContentItem(NativeContentItem.KIND_CREATOR, incoming.title,
-                    incoming.url, incoming.imageUrl, "", incoming.uploader, "", "", incoming.searchQuery);
+                    incoming.url, incoming.imageUrl, "", incoming.uploader, "", "", incoming.searchQuery)
+                    .withCreatorIdentity(incoming.creatorAliases, incoming.creatorProfileUrls);
             favorites.add(CreatorFavoriteStore.key(item));
             creators.put(CreatorCatalog.key(item), item);
         }
