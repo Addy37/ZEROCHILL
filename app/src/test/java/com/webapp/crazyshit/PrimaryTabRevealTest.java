@@ -1,6 +1,7 @@
 package com.webapp.crazyshit;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -8,6 +9,8 @@ import android.app.Application;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -19,11 +22,14 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
+import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 
+import java.time.Duration;
+
 @RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class, sdk = 35)
+@Config(application = Application.class, sdk = 35, qualifiers = "mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class PrimaryTabRevealTest {
     @Test public void dragTracksAdjacentPagesAcrossSegmentsAndDirections() {
@@ -73,6 +79,44 @@ public class PrimaryTabRevealTest {
         page.setReveal(PrimaryTabReveal.BOTTOM, 1f, 75f, 95f);
         page.draw(canvas);
         assertEquals(Color.BLUE, frame.getPixel(5, 5));
+        frame.recycle();
+    }
+
+    @Test public void refractionDisplacesOnlyTheWaterlineStrip() {
+        TabWaterline water = new TabWaterline(RuntimeEnvironment.getApplication());
+        water.update(PrimaryTabReveal.FROM_RIGHT, .5f, 0f, 0f);
+        Bitmap frame = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(frame);
+        Paint stripe = new Paint();
+        stripe.setColor(Color.GREEN);
+        canvas.drawColor(Color.RED);
+        water.clipPage(canvas, 100, 100);
+        canvas.drawColor(Color.BLUE);
+        canvas.drawRect(37, 0, 39, 100, stripe);
+
+        int refraction = water.clipRefraction(canvas, 100, 100);
+        assertTrue(refraction >= 0);
+        canvas.drawColor(Color.BLUE);
+        canvas.drawRect(37, 0, 39, 100, stripe);
+        canvas.restoreToCount(refraction);
+
+        assertEquals(Color.RED, frame.getPixel(20, 50));
+        assertEquals(Color.BLUE, frame.getPixel(37, 50));
+        assertEquals(Color.GREEN, frame.getPixel(41, 50));
+        assertEquals(Color.BLUE, frame.getPixel(65, 50));
+        frame.recycle();
+    }
+
+    @Test public void holdingTheDragLetsTheWakeExpireWithoutRestartingIt() {
+        TabWaterline water = new TabWaterline(RuntimeEnvironment.getApplication());
+        Bitmap frame = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(frame);
+        assertTrue(water.update(PrimaryTabReveal.FROM_LEFT, .5f, 0f, 0f));
+        water.clipPage(canvas, 100, 100);
+        assertTrue(water.drawHighlight(canvas, 100, 100));
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(180));
+        assertFalse(water.update(PrimaryTabReveal.FROM_LEFT, .5f, 0f, 0f));
+        assertFalse(water.drawHighlight(canvas, 100, 100));
         frame.recycle();
     }
 

@@ -20,8 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '7003003'
-      APP_VERSION_NAME: '7.3.1-test.tab-reveal'
+      APP_VERSION_CODE: '7003004'
+      APP_VERSION_NAME: '7.3.1-test.tab-reveal.water'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       ZEROCHILL_V7_TRAFFIC: 'true'
       SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
@@ -120,7 +120,7 @@ jobs:
           candidate = inspect(os.environ['CANDIDATE_APK'])
           stable = inspect(str(pathlib.Path(os.environ['RUNNER_TEMP'])/'stable/ZeroChill.apk'))
           assert candidate[0] == stable[0] == 'com.addy37.crazyshitunofficial'
-          assert candidate[1] == 7003003 and candidate[1] > max(stable[1], 7003002)
+          assert candidate[1] == 7003004 and candidate[1] > max(stable[1], 7003003)
           assert candidate[2] == stable[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356'
           report = ('Source: '+os.environ['GITHUB_SHA']+'\n'
               +'Branch: '+os.environ['GITHUB_REF_NAME']+'\n'

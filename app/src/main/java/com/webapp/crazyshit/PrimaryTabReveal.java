@@ -5,7 +5,6 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.Path;
 import android.view.View;
 import android.widget.FrameLayout;
 
@@ -156,53 +155,37 @@ final class PrimaryTabReveal implements ViewPager2.PageTransformer {
     private boolean rtl() { return pager.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL; }
 
     static final class Page extends FrameLayout {
-        private final Path clip = new Path();
-        private int shape;
-        private float progress, originX, originY;
+        private TabWaterline waterline;
 
         Page(Context context) { super(context); }
 
         void setReveal(int shape, float progress, float originX, float originY) {
-            if (this.shape == shape && (shape == 0 || (this.progress == progress
-                    && this.originX == originX && this.originY == originY))) return;
-            this.shape = shape;
-            this.progress = progress;
-            this.originX = originX;
-            this.originY = originY;
-            invalidate();
+            if (waterline == null) {
+                if (shape == 0) return;
+                waterline = new TabWaterline(getContext());
+            }
+            if (waterline.update(shape, progress, originX, originY)) invalidate();
         }
 
         @Override public void draw(Canvas canvas) {
-            if (shape == 0 || progress >= 1f) {
+            if (waterline == null || waterline.isFullyOpen() || getWidth() <= 0 || getHeight() <= 0) {
                 super.draw(canvas);
                 return;
             }
-            if (progress <= 0f) return;
-            float w = getWidth();
-            float h = getHeight();
-            clip.rewind();
-            if (shape == BOTTOM) {
-                float stretch = 1.32f;
-                float dx = Math.max(Math.abs(originX), Math.abs(w - originX)) / stretch;
-                float dy = Math.max(Math.abs(originY), Math.abs(h - originY));
-                float radius = (float) Math.hypot(dx, dy) * progress;
-                clip.addOval(originX - radius * stretch, originY - radius,
-                        originX + radius * stretch, originY + radius, Path.Direction.CW);
-            } else {
-                boolean right = shape == FROM_RIGHT;
-                float edge = w * (right ? 1f - progress : progress);
-                float bow = Math.min(Math.min(edge, w - edge), .13f * w) * (right ? 1 : -1);
-                float back = right ? w : 0f;
-                clip.moveTo(edge + bow, 0f);
-                clip.quadTo(edge - 3f * bow, h / 2f, edge + bow, h);
-                clip.lineTo(back, h);
-                clip.lineTo(back, 0f);
-                clip.close();
-            }
+            if (waterline.isClosed()) return;
+            float width = getWidth();
+            float height = getHeight();
             int save = canvas.save();
-            canvas.clipPath(clip);
+            waterline.clipPage(canvas, width, height);
             super.draw(canvas);
+            int refracted = waterline.clipRefraction(canvas, width, height);
+            if (refracted >= 0) {
+                super.draw(canvas);
+                canvas.restoreToCount(refracted);
+            }
+            boolean trailing = waterline.drawHighlight(canvas, width, height);
             canvas.restoreToCount(save);
+            if (trailing) postInvalidateOnAnimation();
         }
     }
 }
