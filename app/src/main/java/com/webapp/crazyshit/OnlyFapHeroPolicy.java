@@ -193,6 +193,16 @@ final class OnlyFapHeroPolicy {
         }
     }
 
+    static void addVideoPosters(List<Artwork> artwork, List<NativeContentItem> media, String referer) {
+        for (NativeContentItem item : media) {
+            if (artwork.size() >= 4) return;
+            if (item == null || !item.isVideo() || !directImage(item.imageUrl)) continue;
+            if (artwork.stream().noneMatch(poster -> poster.url.equals(item.imageUrl))) {
+                artwork.add(new Artwork(item.imageUrl, referer, false));
+            }
+        }
+    }
+
     private static boolean knownPreview(String url) {
         return url.toLowerCase(Locale.US).matches(".*(?:/thumbnail/|/avatar/|/(?:preview|thumb)\\.[^/]+).*");
     }

@@ -1,4 +1,4 @@
-name: ZEROCHILL OnlyFap Creator Accuracy Signed Test APK
+name: ZEROCHILL OnlyFap Home Hero Signed Test APK
 
 on:
   pull_request:
@@ -17,12 +17,12 @@ jobs:
     if: >-
       github.repository == 'Addy37/ZEROCHILL' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.head_ref == 'fix/onlyfap-creator-accuracy'
+      github.head_ref == 'fix/onlyfap-home-hero-loading'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      APP_VERSION_CODE: '7003008'
-      APP_VERSION_NAME: '7.3.1-test.bunkr-maintenance'
+      APP_VERSION_CODE: '7003009'
+      APP_VERSION_NAME: '7.3.1-test.onlyfap-home-hero'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
       ZEROCHILL_SOURCE_BRANCH: ${{ github.head_ref }}
       ZEROCHILL_V7_TRAFFIC: 'true'
@@ -39,9 +39,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify current main and PR #463 lineage
+      - name: Verify current main lineage
         run: |
-          git merge-base --is-ancestor 5b8de025ea4237fb6422c28fb20d9b3e1a35538c HEAD
+          git merge-base --is-ancestor 3cfc83346ba583229c7a4bc180ee0c83fbc83b56 HEAD
           bash tools/verify-android-build-lineage.sh "$RUNNER_TEMP/BUILD_LINEAGE.txt"
       - uses: actions/setup-java@v5
         with:
@@ -152,7 +152,7 @@ jobs:
           stable = inspect(pathlib.Path(os.environ['RUNNER_TEMP']) / 'stable' / 'ZeroChill.apk')
           assert candidate[0] == stable[0] == 'com.addy37.crazyshitunofficial', 'Incorrect app package'
           assert candidate[1] == int(os.environ['APP_VERSION_CODE']), 'Incorrect candidate version'
-          assert candidate[1] > max(stable[1], 7003007), 'Candidate cannot upgrade the installed version'
+          assert candidate[1] > max(stable[1], 7003008), 'Candidate cannot upgrade the installed version'
           assert candidate[2] == stable[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356', 'Incorrect signing identity'
 
           generated = pathlib.Path('app/build/generated/source/buildConfig/release/com/webapp/crazyshit/BuildConfig.java')
@@ -181,7 +181,7 @@ jobs:
       - name: Upload signed APK for phone testing
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-OnlyFap-Creator-Accuracy-Signed-${{ env.ZEROCHILL_SOURCE_SHA }}
+          name: ZeroChill-OnlyFap-Home-Hero-Signed-${{ env.ZEROCHILL_SOURCE_SHA }}
           path: candidate/
           if-no-files-found: error
           retention-days: 14
@@ -189,7 +189,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-OnlyFap-Creator-Accuracy-Tests-${{ env.ZEROCHILL_SOURCE_SHA }}
+          name: ZeroChill-OnlyFap-Home-Hero-Tests-${{ env.ZEROCHILL_SOURCE_SHA }}
           path: |
             app/build/test-results/testReleaseUnitTest/
             feedbackadmin/build/test-results/testReleaseUnitTest/
