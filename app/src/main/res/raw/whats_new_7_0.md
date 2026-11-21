@@ -1,8 +1,10 @@
-# ZEROCHILL 7.3.0
+# ZEROCHILL 7.4.0
 
-- Double-tap either side of a video in Shows or OnlyFap to rewind or skip ahead 10 seconds. Keep tapping to go farther. The feedback follows your selected accent.
-- Bunkr galleries fit thumbnails and embedded media more cleanly, and retry when a full-size photo fails to load.
-- Shows can play older WMV and ASF videos through the built-in player.
-- The ShitTok All / OnlyFap switch follows your accent and stays closer to center when you’re signed out.
-- ShitTok now limits how long it retries when the feed has trouble loading.
-- In-app updates hand the verified APK to Android’s installer for you to confirm.
+- Screen-to-screen navigation now uses smoother fades and subtle depth, without changing the navigation dock.
+- ShitTok video stays visible when switching tabs instead of briefly turning black.
+- OnlyFap featured creator artwork appears sooner, and verified gallery content loads more efficiently.
+- Improved creator matching keeps unrelated profiles and media out of creator galleries.
+- Bunkr videos confirmed to be under maintenance now show a clear notice and Retry option. Some files may remain unavailable until Bunkr restores them. This is outside ZEROCHILL's control.
+- Favorite Creators galleries have smoother opening and closing animations.
+- ShitTok's OnlyFap filter avoids unnecessary BaddieHub requests; BaddieHub remains available in the All feed and supported creator links.
+- Regular WikiFeet is retired. WikiFeet X remains available, and existing saved records are preserved.

@@ -62,6 +62,30 @@ jobs:
           echo "APK_PRIMARY=ZeroChill.apk" >> "$GITHUB_ENV"
           echo "RELEASE_TITLE=ZeroChill v${VERSION}" >> "$GITHUB_ENV"
 
+      - name: Validate release version and update-dialog copy
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib
+          version = os.environ['INPUT_VERSION'].strip()
+          declared = pathlib.Path('RELEASE_VERSION').read_text().strip()
+          release = pathlib.Path('RELEASE_NOTES.md').read_text()
+          bundled = pathlib.Path('app/src/main/res/raw/whats_new_7_0.md').read_text()
+          assert version == declared == '7.4.0', 'Release version differs from approved notes'
+          assert release.startswith('# ZEROCHILL 7.4.0\n'), 'Release title mismatch'
+          assert bundled.startswith('# ZEROCHILL 7.4.0\n'), 'Bundled title mismatch'
+          def bullets(s):
+              return [line[2:].strip() for line in s.splitlines() if line.startswith('- ')]
+          assert len(bullets(release)) == 8, 'Unexpected release highlight count'
+          assert bullets(release) == bullets(bundled), "GitHub / offline What\'s New mismatch"
+          paragraph = release.split('\n\n')[1].strip()
+          assert len(paragraph) <= 180, 'Updater summary will be truncated'
+          assert 'Bunkr' in paragraph and "outside ZEROCHILL's control" in paragraph
+          assert any('Retry' in line and 'maintenance' in line for line in bullets(release))
+          print('Updater summary, bundled What’s New, and Bunkr notice validated')
+          PY
+
       - name: Set up Java toolchains for Android 7 tests
         uses: actions/setup-java@v5
         with:
