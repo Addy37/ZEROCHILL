@@ -53,7 +53,9 @@ public class OnlyFapLibraryPlaybackTest {
         static int calls;
         static String profile;
         @Implementation protected BunkrCreatorGalleryRepository.Batch fetchNext(Context context,
-                String session, String query, String sourceProfile, String name) {
+                String session, String query, String sourceProfile, String name, List<String> seedNames,
+                List<String> seedUrls, List<String> seedImages, List<String> aliases,
+                BunkrCreatorGalleryRepository.ProgressListener listener) {
             calls++;
             profile = sourceProfile;
             return new BunkrCreatorGalleryRepository.Batch(new ArrayList<>(), true);
