@@ -56,7 +56,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceIn
-import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.util.lerp
 import com.webapp.crazyshit.glass.backdrop.Backdrop
 import com.webapp.crazyshit.glass.backdrop.backdrops.layerBackdrop
@@ -70,7 +69,6 @@ import com.webapp.crazyshit.glass.backdrop.shadow.InnerShadow
 import com.webapp.crazyshit.glass.backdrop.shadow.Shadow
 import com.webapp.crazyshit.glass.shapes.ContinuousCapsule
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.sign
@@ -188,28 +186,17 @@ fun LiquidBottomTabs(
                 pressedScale = 78f / 56f,
                 onDragStarted = { accumulatedDrag = 0f; navigationDragStarted = false },
                 onDragCanceled = {
-                    onNavigationDragEnd(true)
+                    if (navigationDragStarted) onNavigationDragEnd(true)
                     navigationDragStarted = false
-                    currentIndex = selectedTabIndex()
-                    animateToValue(currentIndex.toFloat())
                     animationScope.launch { offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f)) }
                 },
                 onDragStopped = {
-                    if (navigationDragStarted) onNavigationDragEnd(false)
+                    if (navigationDragStarted) {
+                        onNavigationDragEnd(false)
+                    } else {
+                        onTabSelected(selectedTabIndex())
+                    }
                     navigationDragStarted = false
-                    val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
-                    // LOCAL CHANGE: report a press that lands on the tab that is
-                    // already selected.
-                    //
-                    // Selection is reported by watching `currentIndex` change,
-                    // so releasing on the current tab reported nothing at all.
-                    // On a screen that is not a tab — a playlist, the settings,
-                    // search — the bar still shows one of them as selected, and
-                    // that is exactly the tab you press to get back to it. The
-                    // press animated and then did nothing.
-                    if (targetIndex == currentIndex) onTabSelected(targetIndex)
-                    currentIndex = targetIndex
-                    animateToValue(targetIndex.toFloat())
                     animationScope.launch {
                         offsetAnimation.animateTo(
                             0f,
@@ -218,45 +205,43 @@ fun LiquidBottomTabs(
                     }
                 },
                 onDrag = { _, dragAmount ->
-                    accumulatedDrag += dragAmount.x
-                    if (!navigationDragStarted && abs(accumulatedDrag) > touchSlop) {
-                        navigationDragStarted = onNavigationDragStart()
-                        if (navigationDragStarted) onNavigationDragBy(accumulatedDrag / tabWidth())
-                    } else if (navigationDragStarted) {
-                        onNavigationDragBy(dragAmount.x / tabWidth())
+                    val width = tabWidth()
+                    if (width > 0f) {
+                        val delta = dragAmount.x * if (isLtr) 1f else -1f
+                        accumulatedDrag += delta
+                        if (!navigationDragStarted && abs(accumulatedDrag) > touchSlop) {
+                            navigationDragStarted = onNavigationDragStart()
+                            if (navigationDragStarted) onNavigationDragBy(accumulatedDrag / width)
+                        } else if (navigationDragStarted) {
+                            onNavigationDragBy(delta / width)
+                        }
                     }
-                    updateValue(
-                        (targetValue + dragAmount.x / tabWidth() * if (isLtr) 1f else -1f)
-                            .fastCoerceIn(0f, (tabsCount - 1).toFloat())
-                    )
                     animationScope.launch {
                         offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x)
                     }
                 }
             )
         }
-        LaunchedEffect(pagerPosition) {
-            if (pagerPosition != null) snapshotFlow { pagerPosition() }.collectLatest { position ->
-                if (!isNavigationDragging() && abs(position - position.fastRoundToInt()) > .001f) {
-                    dampedDragAnimation.snapToValue(position)
-                }
+        LaunchedEffect(pagerPosition, isNavigationDragging) {
+            if (pagerPosition == null) return@LaunchedEffect
+            var wasMoving = false
+            snapshotFlow { pagerPosition() to isNavigationDragging() }.collectLatest { (position, moving) ->
+                val follow = moving || wasMoving
+                wasMoving = moving
+                if (follow) dampedDragAnimation.followPager(position, moving)
             }
         }
         LaunchedEffect(selectedTabIndex) {
-            snapshotFlow { selectedTabIndex() }
-                .collectLatest { index ->
+            snapshotFlow { selectedTabIndex() }.collectLatest { index ->
+                if (index != currentIndex) {
                     currentIndex = index
+                    if (!isNavigationDragging()) dampedDragAnimation.animateToValue(index.toFloat())
                 }
+            }
         }
-        LaunchedEffect(dampedDragAnimation) {
-            snapshotFlow { currentIndex }
-                .drop(1)
-                .collectLatest { index ->
-                    dampedDragAnimation.animateToValue(index.toFloat())
-                    // External pager selection already dispatched navigation. Do not
-                    // feed its visual synchronization back into the activation queue.
-                    if (index != selectedTabIndex()) onTabSelected(index)
-                }
+        val slotPosition = {
+            if (isNavigationDragging() && pagerPosition != null) pagerPosition()
+            else dampedDragAnimation.value
         }
 
         val interactiveHighlight = remember(animationScope) {
@@ -264,8 +249,8 @@ fun LiquidBottomTabs(
                 animationScope = animationScope,
                 position = { size, offset ->
                     Offset(
-                        if (isLtr) (dampedDragAnimation.value + 0.5f) * tabWidth() + panelOffset
-                        else size.width - (dampedDragAnimation.value + 0.5f) * tabWidth() + panelOffset,
+                        if (isLtr) (slotPosition() + 0.5f) * tabWidth() + panelOffset
+                        else size.width - (slotPosition() + 0.5f) * tabWidth() + panelOffset,
                         size.height / 2f
                     )
                 }
@@ -350,8 +335,8 @@ fun LiquidBottomTabs(
             .graphicsLayer {
                 alpha = indicatorAlpha
                 translationX =
-                    if (isLtr) dampedDragAnimation.value * tabWidth() + panelOffset
-                    else size.width - (dampedDragAnimation.value + 1f) * tabWidth() + panelOffset
+                    if (isLtr) slotPosition() * tabWidth() + panelOffset
+                    else -slotPosition() * tabWidth() + panelOffset
             }
         // Grow the sampling surface itself, rather than scaling a capture of
         // the resting slot. Both selector layers keep the same centre and read

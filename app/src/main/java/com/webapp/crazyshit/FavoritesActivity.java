@@ -443,7 +443,7 @@ public class FavoritesActivity extends Activity {
             title.setGravity(Gravity.BOTTOM);
             title.setFocusable(true);
             title.setContentDescription("Open gallery for " + title.getText());
-            title.setOnClickListener(v -> SavedGalleryMedia.openCreator(this, item));
+            title.setOnClickListener(v -> SavedGalleryMedia.openCreator(this, item, v));
         }
         FrameLayout.LayoutParams titleParams =
                 new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
@@ -473,7 +473,7 @@ public class FavoritesActivity extends Activity {
         if (mediaFavorites && item.content != null && item.content.isImage()) {
             Intent gallery = SavedGalleryMedia.creatorGallery(this, item);
             menu.getMenu().add("Open gallery").setEnabled(gallery != null)
-                    .setOnMenuItemClickListener(clicked -> { startActivity(gallery); return true; });
+                    .setOnMenuItemClickListener(clicked -> { CreatorGalleryTransition.start(this, gallery, anchor); return true; });
         }
         menu.getMenu().add(mediaFavorites ? "Remove from favorites" : "Remove from Watch Later");
         menu.setOnMenuItemClickListener(clicked -> {

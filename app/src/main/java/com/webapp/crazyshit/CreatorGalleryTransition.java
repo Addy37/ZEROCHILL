@@ -79,7 +79,11 @@ final class CreatorGalleryTransition {
     }
 
     static void start(Activity activity, Intent intent, View anchor, NativeContentItem creator) {
-        if (activity == null || creator == null) return;
+        if (creator != null) start(activity, intent, anchor);
+    }
+
+    static void start(Activity activity, Intent intent, View anchor) {
+        if (activity == null || intent == null) return;
         long now = android.os.SystemClock.uptimeMillis();
         if (launchActivity.get() == activity && now - lastLaunch < 700L) { clearTap(activity); return; }
         launchActivity = new WeakReference<>(activity);

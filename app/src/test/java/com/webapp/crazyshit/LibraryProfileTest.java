@@ -356,7 +356,7 @@ public class LibraryProfileTest {
         LibraryHubView view = new LibraryHubView(activity, new LibraryHubView.Listener() {
             public void onOpenWatchLater(NativeContentItem item) { opened.add(item); }
             public void onOpenHistory(PlaybackHistoryStore.Item item) { }
-            public void onOpenCreator(NativeContentItem item) { }
+            public void onOpenCreator(CreatorCatalog.FavoriteGroup group, View anchor) { }
         });
         activity.setContentView(view);
         Map<String, Runnable> work = new LinkedHashMap<>(); view.setWorkScheduler(work::put);
