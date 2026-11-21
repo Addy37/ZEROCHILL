@@ -21,8 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '7003011'
-      APP_VERSION_NAME: '7.3.1-test.liquid-navigation.2'
+      APP_VERSION_CODE: '7003012'
+      APP_VERSION_NAME: '7.3.1-test.liquid-navigation.3'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
       ZEROCHILL_SOURCE_BRANCH: ${{ github.head_ref }}
       ZEROCHILL_V7_TRAFFIC: 'true'
@@ -128,7 +128,7 @@ jobs:
           candidate = inspect(os.environ['CANDIDATE_APK'])
           stable = inspect(str(pathlib.Path(os.environ['RUNNER_TEMP'])/'stable/ZeroChill.apk'))
           assert candidate[0] == stable[0] == 'com.addy37.crazyshitunofficial'
-          assert candidate[1] == int(os.environ['APP_VERSION_CODE']) and candidate[1] > max(stable[1], 7003010)
+          assert candidate[1] == int(os.environ['APP_VERSION_CODE']) and candidate[1] > max(stable[1], 7003011)
           assert candidate[2] == stable[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356'
           revision = os.environ['ZEROCHILL_SOURCE_SHA']
           config = pathlib.Path('app/build/generated/source/buildConfig/release/com/webapp/crazyshit/BuildConfig.java')

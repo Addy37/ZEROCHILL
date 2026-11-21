@@ -15,7 +15,7 @@ import androidx.viewpager2.widget.ViewPager2;
 final class PrimaryTabReveal implements ViewPager2.PageTransformer {
     private static final float EDGE_EPSILON = .001f;
     static final int BOTTOM = 1, FROM_LEFT = 2, FROM_RIGHT = 3;
-    private static final long TAP_DURATION_MS = 240L;
+    private static final long TAP_DURATION_MS = 290L;
     private final ViewPager2 pager;
     private final RecyclerView pages;
     private final int[] dockLocation = new int[2];
