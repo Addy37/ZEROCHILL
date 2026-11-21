@@ -719,14 +719,19 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         io.execute(() -> {
             NativeContentItem libraryContent = OnlyFapVideoMetadata.restore(activity, item);
             CrazyShitRepository.StreamInfo stream = null;
+            Exception resolveError = null;
             try {
                 stream = PlayableSourceRouter.resolve(activity, item);
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                resolveError = error;
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            Throwable failure = resolveError;
             activity.runOnUiThread(() -> {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    if (BunkrMaintenanceUi.showIfConfirmed(activity, item.url, failure,
+                            () -> openShowsVideo(item, manualLandscapeFullscreen, sourceView))) return;
                     ZeroChillToast.makeText(
                             activity,
                             "Couldn't resolve this video natively right now.",
@@ -861,14 +866,19 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         io.execute(() -> {
             NativeContentItem libraryContent = OnlyFapVideoMetadata.restore(activity, item);
             CrazyShitRepository.StreamInfo stream = null;
+            Exception resolveError = null;
             try {
                 stream = PlayableSourceRouter.resolve(activity, item);
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                resolveError = error;
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            Throwable failure = resolveError;
             activity.runOnUiThread(() -> {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    if (BunkrMaintenanceUi.showIfConfirmed(activity, item.url, failure,
+                            () -> openShowsResume(history, manualLandscapeFullscreen, sourceView))) return;
                     ZeroChillToast.makeText(
                             activity,
                             "Couldn't resume this video natively right now.",

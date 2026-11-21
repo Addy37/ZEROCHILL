@@ -1122,11 +1122,14 @@ public class VideoDetailActivity extends Activity {
         }
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
+            Exception resolveError = null;
             try {
                 stream = PlayableSourceRouter.resolve(this, requested);
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                resolveError = error;
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            Throwable failure = resolveError;
             runOnUiThread(() -> {
                 if (requestGeneration != deferredShowsResolveGeneration || showsSavedOnExit ||
                         isFinishing() || isDestroyed()) return;
@@ -1136,6 +1139,8 @@ public class VideoDetailActivity extends Activity {
                         startupPoster.setClickable(true);
                         startupPoster.setOnClickListener(v -> resolveDeferredShowsPlayback());
                     }
+                    if (BunkrMaintenanceUi.showIfConfirmed(this, requested.url, failure,
+                            this::resolveDeferredShowsPlayback)) return;
                     ZeroChillToast.makeText(
                             this,
                             "Couldn't resolve this video natively right now. Tap the player to retry.",
@@ -2232,11 +2237,14 @@ public class VideoDetailActivity extends Activity {
         final int requestGeneration = ++relatedPlayGeneration;
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
+            Exception resolveError = null;
             try {
                 stream = PlayableSourceRouter.resolve(this, item.url);
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                resolveError = error;
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            Throwable failure = resolveError;
             runOnUiThread(() -> {
                 if (queued != null) showsNextResolving = false;
                 if (showsSavedOnExit || isFinishing() || isDestroyed() ||
@@ -2250,6 +2258,8 @@ public class VideoDetailActivity extends Activity {
                 if (queued != null && !recoveryResumed) { loading.setVisibility(View.GONE); return; }
                 loading.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    if (BunkrMaintenanceUi.showIfConfirmed(this, item.url, failure,
+                            () -> playRelated(item, queued))) return;
                     ZeroChillToast.makeText(
                             this,
                             "Couldn't resolve that related video natively right now.",
@@ -3034,6 +3044,8 @@ public class VideoDetailActivity extends Activity {
         if (failureShown || showsSavedOnExit || isFinishing()) return;
         failureShown = true;
         dismissShowsLaunchCurtain(true);
+        if (isBunkrStream() && BunkrMaintenanceUi.showIfConfirmed(this, pageUrl, null,
+                () -> recoverPlayback(null))) return;
         RatingFeedbackPrompt.recordPlaybackError(this);
         android.app.AlertDialog.Builder failure = new ZeroChillDialog.Builder(this)
                 .setTitle("Couldn't play this stream")
@@ -3636,6 +3648,7 @@ public class VideoDetailActivity extends Activity {
 
     private boolean recoverPlayback(PlaybackException error) {
         if (showsSavedOnExit) return false;
+        if (error != null && isBunkrStream() && BunkrMaintenance.isKnown(pageUrl)) return false;
         if (error == null) failureShown = false;
         if (player instanceof LegacyWatchPlayer) {
             if (error != null) return false;
@@ -3655,6 +3668,11 @@ public class VideoDetailActivity extends Activity {
             buildPlayer(recovered.position);
             if (player != null) player.setPlayWhenReady(recovered.playWhenReady && recoveryResumed);
         }, this::showPlaybackFailure);
+    }
+
+    private boolean isBunkrStream() {
+        return mediaUrl != null && (mediaUrl.startsWith("https://") || mediaUrl.startsWith("http://"))
+                && BunkrRepository.isBunkrUrl(pageUrl);
     }
 
     private void releasePlayer() {

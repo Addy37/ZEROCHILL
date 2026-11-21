@@ -1200,14 +1200,18 @@ final class SearchPanel {
         }
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
+            Throwable resolveError = null;
             try { stream = PlayableSourceRouter.resolve(activity, item.url); }
-            catch (Exception ignored) { }
+            catch (Exception error) { resolveError = error; }
             CrazyShitRepository.StreamInfo resolved = stream;
+            Throwable failure = resolveError;
             activity.runOnUiThread(() -> {
                 if (destroyed || activity.isFinishing() || requestGeneration != generation
                         || requestedScope != scope) return;
                 progress.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    if (BunkrMaintenanceUi.showIfConfirmed(activity, item.url, failure,
+                            () -> openResult(item))) return;
                     ZeroChillToast.makeText(activity, "Couldn't resolve this video natively right now.",
                             ZeroChillToast.LENGTH_SHORT).show();
                     return;

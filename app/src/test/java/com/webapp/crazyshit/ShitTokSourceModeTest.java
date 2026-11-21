@@ -85,11 +85,11 @@ public class ShitTokSourceModeTest {
         assertEquals(ShitTokSourceMode.ALL, ShitTokSourceMode.get(app));
     }
     @Test public void fullMixtureIsUnchangedAndOnlyFapExplicitlyExcludesBroadProviders() {
-        for (String source : Arrays.asList("crazyshit.com", "kaotic", "efukt", "xmegadrive.com")) {
+        for (String source : Arrays.asList("crazyshit.com", "kaotic", "efukt", "xmegadrive.com", "baddiehub")) {
             assertTrue(ShitTokSourceMode.ALL.allowsSource(source));
             assertFalse(ShitTokSourceMode.ONLY_FAP.allowsSource(source));
         }
-        for (String source : Arrays.asList("baddiehub", "shit-show", "onlyhaven", "fapello", "bunkr"))
+        for (String source : Arrays.asList("shit-show", "onlyhaven", "fapello", "bunkr"))
             assertTrue(ShitTokSourceMode.ONLY_FAP.allowsSource(source));
         assertFalse(ShitTokSourceMode.ALL.creatorInventory(ContentPreference.ALL));
     }
@@ -102,10 +102,7 @@ public class ShitTokSourceModeTest {
             assertTrue(inv.matches(clip, ContentPreference.ALL));
             providers.add(ShitTokAspectPriority.sourceKey(clip));
         }
-        assertTrue(providers.toString(), providers.containsAll(Arrays.asList("onlyhaven", "fapello", "bunkr", "baddiehub", "shit-show")));
-    }
-    private static NativeContentItem baddie(String gender) {
-        return new NativeContentItem("media", gender + "0", "https://baddiehub.com/" + gender + "/", "", "", "BaddieHub", "", "", "", 0, .5f);
+        assertEquals(new HashSet<>(Arrays.asList("onlyhaven", "fapello", "bunkr", "shit-show")), providers);
     }
     private static ShitTokFilteredInventory inventory() {
         return new ShitTokFilteredInventory(new ShitTokFilteredInventoryTest.Direct(), () -> 0L,
@@ -118,35 +115,34 @@ public class ShitTokSourceModeTest {
                                 item.imageUrl, item.views, item.uploader, item.comments, "Fapello",
                                 item.searchQuery, item.publishedAtMillis, item.aspectRatioHint));
                     }
-                    public List<NativeContentItem> baddie(ContentPreference gender, List<OnlyHavenRepository.Creator> verified) {
-                        return Collections.singletonList(ShitTokSourceModeTest.baddie(gender.value));
+                    @Override public boolean available(int source) {
+                        assertTrue("Unexpected filtered provider " + source, source == ShitTokFilteredInventory.HAVEN
+                                || source == ShitTokFilteredInventory.FAPELLO
+                                || source == ShitTokFilteredInventory.BUNKR
+                                || source == ShitTokFilteredInventory.SHOW);
+                        return super.available(source);
                     }
                 });
     }
     @Test public void showEligibilityIsExactAndInventoryIsIsolatedAcrossBothDimensions() {
         ShitTokFilteredInventory inv = inventory();
+        NativeContentItem womenClip = null;
         for (ContentPreference gender : ContentPreference.values()) {
             inv.request(ShitTokSourceMode.ONLY_FAP, gender, true, () -> {});
             List<NativeContentItem> clips = inv.take(gender);
             boolean show = clips.stream().anyMatch(i -> ShitTokAspectPriority.sourceKey(i).equals("shit-show"));
             assertEquals(gender == ContentPreference.ALL || gender == ContentPreference.WOMEN, show);
             for (NativeContentItem clip : clips) assertTrue(inv.matches(clip, gender));
+            if (gender == ContentPreference.WOMEN)
+                womenClip = clips.stream().filter(i -> ShitTokAspectPriority.sourceKey(i).equals("onlyhaven"))
+                        .findFirst().orElseThrow(AssertionError::new);
         }
         inv.request(ShitTokSourceMode.ALL, ContentPreference.WOMEN, false, () -> {});
-        assertFalse(inv.matches(baddie("women"), ContentPreference.WOMEN));
+        assertFalse(inv.matches(womenClip, ContentPreference.WOMEN));
         inv.select(ShitTokSourceMode.ONLY_FAP, ContentPreference.WOMEN);
-        assertTrue(inv.matches(baddie("women"), ContentPreference.WOMEN));
-        assertFalse(inv.matches(baddie("men"), ContentPreference.WOMEN));
-    }
-    @Test public void baddieNeedsAnExistingResolvedIdentityAndUniqueAuthoritativeCreator() {
-        OnlyHavenRepository.Creator women = ShitTokFilteredInventoryTest.creator("Jane");
-        NativeContentItem known = new NativeContentItem("creator", "Jane", women.url, "", "", "", "");
-        assertSame(women, ShitTokFilteredInventory.linkedBaddie(known, Arrays.asList(women)));
-        assertNull(ShitTokFilteredInventory.linkedBaddie(null, Arrays.asList(women)));
-        assertNull(ShitTokFilteredInventory.linkedBaddie(baddie("Jane"), Arrays.asList(women)));
-        assertNull(ShitTokFilteredInventory.linkedBaddie(known, Arrays.asList(ShitTokFilteredInventoryTest.creator("John"))));
-        OnlyHavenRepository.Creator ambiguous = new OnlyHavenRepository.Creator("fansly", "other", "Jane", "https://cum.st/creators/fansly/other", "");
-        assertNull(ShitTokFilteredInventory.linkedBaddie(known, Arrays.asList(women, ambiguous)));
+        assertTrue(inv.matches(womenClip, ContentPreference.WOMEN));
+        inv.select(ShitTokSourceMode.ONLY_FAP, ContentPreference.MEN);
+        assertFalse(inv.matches(womenClip, ContentPreference.MEN));
     }
     @Test public void warmCacheSeparatesBothDimensionsAndCanRestoreEachRecentCombination() {
         ShitTokWarmCategoryCache cache = new ShitTokWarmCategoryCache();

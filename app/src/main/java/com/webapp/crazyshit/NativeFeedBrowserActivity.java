@@ -1903,15 +1903,20 @@ public class NativeFeedBrowserActivity extends Activity {
         final int requestGeneration = generation;
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
+            Exception resolveError = null;
             try {
                 stream = PlayableSourceRouter.resolve(this, item);
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                resolveError = error;
             }
             CrazyShitRepository.StreamInfo resolved = stream;
+            Throwable failure = resolveError;
             runOnUiThread(() -> {
                 if (requestGeneration != generation || isFinishing()) return;
                 progress.setVisibility(View.GONE);
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
+                    if (BunkrMaintenanceUi.showIfConfirmed(this, item.url, failure,
+                            () -> openVideo(item, startPosition, sourceView))) return;
                     ZeroChillToast.makeText(
                             this,
                             "Couldn't resolve this video natively right now.",

@@ -145,6 +145,9 @@ final class PlaybackRecovery {
         int state = currentPlayer == null ? -1 : currentPlayer.getPlaybackState();
         long position = currentPlayer == null ? 0L : currentPlayer.getCurrentPosition();
         String mediaUrl = currentMediaUrl(currentPlayer);
+        if (BunkrMaintenance.isConfirmed(refreshError) || BunkrMaintenance.isConfirmed(playbackError)
+                || ((mediaUrl.startsWith("https://") || mediaUrl.startsWith("http://"))
+                && BunkrMaintenance.isKnown(page))) return;
         BunkrPlaybackDiagnostics.show(
                 activity,
                 BunkrPlaybackDiagnostics.report(

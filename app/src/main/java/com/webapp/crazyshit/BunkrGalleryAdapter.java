@@ -404,6 +404,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         FrameLayout.LayoutParams favoriteParams = new FrameLayout.LayoutParams(dp(parent, 28), dp(parent, 28), Gravity.TOP | Gravity.START);
         favoriteParams.setMargins(dp(parent, 6), dp(parent, 6), 0, 0);
         tile.addView(favorite, favoriteParams);
+        BunkrMaintenanceUi.Badge maintenance = BunkrMaintenanceUi.addBadge(
+                tile, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
 
         FrameLayout play = new FrameLayout(parent.getContext());
         GradientDrawable playBackground = new GradientDrawable();
@@ -445,7 +447,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 fresh,
                 play,
                 morphPulse,
-                unavailable, favorite
+                unavailable, favorite, maintenance
         );
     }
 
@@ -474,6 +476,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.morphPulse.setAlpha(0f);
         NativeContentItem item = items.get(position);
         holder.favorite.setVisibility(favoriteUrls.contains(item.url) ? View.VISIBLE : View.GONE);
+        holder.maintenance.bind(item);
         ViewCompat.setTransitionName(holder.image, GalleryMediaTransition.transitionName(item));
         holder.image.setScaleType(adaptiveAspectRatios && !BunkrRepository.isBunkrUrl(item.url)
                 ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
@@ -593,6 +596,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         int binding = holder.bindGeneration;
         boolean accepted = BunkrArtworkResolver.request(context, item.url, rejected == null ? "" : rejected, image -> {
             if (binding != holder.bindGeneration) return;
+            holder.maintenance.refresh();
             holder.repairPending = false;
             if (!previewVisible(holder)) return;
             holder.needsRepair = false;
@@ -611,11 +615,16 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         if (!BunkrRepository.isBunkrUrl(item.url) || (!item.isImage() && !item.isVideo())) return;
         holder.wantsMediaPreview = true;
         if (!previewVisible(holder) || holder.previewAttempted) return;
+        if (item.isVideo() && BunkrMaintenance.isKnown(item.url)) {
+            holder.maintenance.refresh();
+            return;
+        }
         holder.previewAttempted = true;
         int binding = holder.bindGeneration;
         holder.preview = BunkrMediaPreview.request(context, item, file -> {
             if (binding != holder.bindGeneration || !previewVisible(holder)) return;
             holder.preview = null;
+            holder.maintenance.refresh();
             if (file == null) {
                 holder.unavailable.setVisibility(View.VISIBLE);
                 return;
@@ -669,6 +678,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 cancelPreview(holder);
                 holder.previewAttempted = false;
             } else if (holder.boundItem != null) {
+                holder.maintenance.refresh();
                 if (holder.wantsMediaPreview) requestMediaPreview(holder, holder.boundItem);
                 else if (holder.needsRepair) repairArtwork(holder, holder.boundItem, holder.boundItem.imageUrl);
             }
@@ -727,6 +737,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.favorite.setPivotX(0f); holder.favorite.setPivotY(0f);
         holder.favorite.setScaleX(scale); holder.favorite.setScaleY(scale);
 
+        holder.maintenance.setPivotY(0f);
+        holder.maintenance.setScaleX(scale);
+        holder.maintenance.setScaleY(scale);
+
         holder.play.setPivotX(dp(holder.play, 42));
         holder.play.setPivotY(dp(holder.play, 42));
         holder.play.setScaleX(scale);
@@ -740,6 +754,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.bindGeneration++;
         cancelPreview(holder);
         holder.boundItem = null;
+        holder.maintenance.bind(null);
         holder.needsRepair = false;
         holder.wantsMediaPreview = false;
         GalleryMediaTransition.clearName(holder.image);
@@ -922,6 +937,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final View morphPulse;
         final TextView unavailable;
         final ImageView favorite;
+        final BunkrMaintenanceUi.Badge maintenance;
 
         Holder(
                 AspectRatioFrameLayout itemView,
@@ -932,7 +948,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 ImageView fresh,
                 View play,
                 View morphPulse,
-                TextView unavailable, ImageView favorite
+                TextView unavailable, ImageView favorite, BunkrMaintenanceUi.Badge maintenance
         ) {
             super(itemView);
             this.tile = itemView;
@@ -945,6 +961,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             this.morphPulse = morphPulse;
             this.unavailable = unavailable;
             this.favorite = favorite;
+            this.maintenance = maintenance;
         }
     }
 

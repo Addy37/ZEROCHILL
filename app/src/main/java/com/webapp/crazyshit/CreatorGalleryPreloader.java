@@ -95,8 +95,13 @@ final class CreatorGalleryPreloader {
         if (active != null && BunkrGallerySessionStore.snapshot(active) == null) {
             SESSIONS.remove(taskKey, active);
         }
-        if (SESSIONS.containsKey(taskKey) || WARMING.contains(taskKey)) return;
-        if (!reserve()) return;
+        if (SESSIONS.containsKey(taskKey)) return;
+        WarmTask queued = PENDING.get(taskKey);
+        if (queued != null) {
+            queued.promote(priority);
+            return;
+        }
+        if (WARMING.contains(taskKey) || !reserve()) return;
         if (!WARMING.add(taskKey)) {
             RESERVED.decrementAndGet();
             return;
@@ -279,7 +284,7 @@ final class CreatorGalleryPreloader {
         if (cleanQuery.isEmpty()) return;
         String key = key(cleanQuery);
         WarmTask task = PENDING.get(key);
-        if (task == null || task.priority >= PRIORITY_HIGH || !IO.remove(task)) return;
+        if (task == null || !task.removeIfLowPriority()) return;
         if (PENDING.remove(key, task)) {
             WARMING.remove(key);
             RESERVED.decrementAndGet();
@@ -400,7 +405,7 @@ final class CreatorGalleryPreloader {
 
     private static final class WarmTask implements Runnable, Comparable<WarmTask> {
         private final String key;
-        private final int priority;
+        private volatile int priority;
         private final long sequence;
         private final Runnable work;
 
@@ -409,6 +414,16 @@ final class CreatorGalleryPreloader {
             this.priority = priority;
             this.sequence = sequence;
             this.work = work;
+        }
+
+        synchronized void promote(int requestedPriority) {
+            if (requestedPriority <= priority || !IO.remove(this)) return;
+            priority = requestedPriority;
+            IO.execute(this);
+        }
+
+        synchronized boolean removeIfLowPriority() {
+            return priority < PRIORITY_HIGH && IO.remove(this);
         }
 
         @Override

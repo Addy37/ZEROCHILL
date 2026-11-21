@@ -1,7 +1,9 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
+import android.os.SystemClock;
 import android.util.Log;
+import android.util.LruCache;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
 
@@ -32,6 +34,14 @@ final class FapelloRepository {
     static final String LIST_HOT = "hot";
     static final String LIST_POPULAR = "popular";
     private static final int MODEL_PAGE_SIZE = 30;
+    private static final long GALLERY_CACHE_MS = 60_000L;
+    private static final long PREVIEW_COOLDOWN_MS = 30_000L;
+    private static final LruCache<String, GalleryValue<Model>> VERIFIED_GALLERY_MODELS = new LruCache<>(48);
+    private static final LruCache<String, GalleryValue<MediaPage>> FIRST_GALLERY_PAGES = new LruCache<>(16);
+    private static final Object PREVIEW_FAILURE_LOCK = new Object();
+    private static long previewConfigVersion = Long.MIN_VALUE;
+    private static long previewFailureUntil;
+    private static int previewFailures;
 
     static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
@@ -86,19 +96,33 @@ final class FapelloRepository {
     }
 
     List<Model> searchModels(Context context, String query, int limit) throws IOException {
-        return searchModels(context, query, limit, false);
-    }
-
-    List<Model> searchGalleryModels(Context context, String query, int limit) throws IOException {
-        return searchModels(context, query, limit, true);
-    }
-
-    private List<Model> searchModels(Context context, String query, int limit, boolean gallery)
-            throws IOException {
         requireEnabled();
         return searchModelsWithQueryFallback(query, limit, (name, offset, size) ->
                 fetchBody(context, searchUrl(name, size, offset), baseUrl(), true),
-                model -> fetchDocument(context, model.url, baseUrl()), gallery);
+                model -> fetchDocument(context, model.url, baseUrl()));
+    }
+
+    List<Model> searchGalleryModels(Context context, String query, int limit) throws IOException {
+        requireEnabled();
+        return searchGalleryModelsCached(query, limit, (name, offset, size) ->
+                        fetchBody(context, searchUrl(name, size, offset), baseUrl(), true),
+                model -> fetchDocument(context, model.url, baseUrl()));
+    }
+
+    List<Model> searchGalleryModelsCached(String query, int limit, SearchQueryFetcher fetcher,
+                                         SearchProfileFetcher profiles) throws IOException {
+        String cleanQuery = clean(query);
+        String key = configVersion() + ":" + limit + ":" + cleanQuery;
+        GalleryValue<Model> cached = VERIFIED_GALLERY_MODELS.get(key);
+        if (cached != null && cached.isFresh()) {
+            return new ArrayList<>(java.util.Collections.singletonList(cached.value));
+        }
+        List<Model> result = searchModelsWithQueryFallback(cleanQuery, limit, fetcher, profiles, true);
+        if (result.size() == 1
+                && CreatorGalleryMatch.fapelloRank(result.get(0), cleanQuery) == CreatorGalleryMatch.HANDLE) {
+            VERIFIED_GALLERY_MODELS.put(key, new GalleryValue<>(result.get(0)));
+        }
+        return result;
     }
 
     Model findReplacementProfile(Context context, Model stale) throws IOException {
@@ -437,6 +461,101 @@ final class FapelloRepository {
     List<NativeContentItem> fetchModelMedia(Context context, Model model, int page)
             throws IOException {
         return fetchModelMediaPage(context, model, page).items;
+    }
+
+    MediaPage fetchGalleryModelMediaPage(Context context, Model model, int page) throws IOException {
+        requireEnabled();
+        if (model == null || page != 1) return fetchModelMediaPage(context, model, page);
+        String key = galleryPageKey(configVersion(), model);
+        MediaPage cached = cachedFirstPage(key);
+        if (cached != null) return cached;
+        MediaPage result = fetchModelMediaPage(context, model, page);
+        if (!result.items.isEmpty() && result.items.size() <= 96) {
+            FIRST_GALLERY_PAGES.put(key, new GalleryValue<>(copyPage(result)));
+        }
+        return result;
+    }
+
+    List<NativeContentItem> fetchCreatorPreview(Context context, Model model, boolean hasAlternative)
+            throws IOException {
+        requireEnabled();
+        long version = configVersion();
+        MediaPage cached = cachedFirstPage(galleryPageKey(version, model));
+        if (cached != null) return cached.items;
+        synchronized (PREVIEW_FAILURE_LOCK) {
+            updatePreviewConfig(version);
+            if (hasAlternative && SystemClock.elapsedRealtime() < previewFailureUntil) {
+                return java.util.Collections.emptyList();
+            }
+        }
+        try {
+            MediaPage page = fetchGalleryModelMediaPage(context, model, 1);
+            synchronized (PREVIEW_FAILURE_LOCK) {
+                if (version == previewConfigVersion) {
+                    previewFailures = 0;
+                    previewFailureUntil = 0L;
+                }
+            }
+            return page.items;
+        } catch (FapelloSourceException error) {
+            if (isTransientPreviewFailure(error) && !Thread.currentThread().isInterrupted()) {
+                synchronized (PREVIEW_FAILURE_LOCK) {
+                    if (version == previewConfigVersion && ++previewFailures >= 2) {
+                        previewFailures = 0;
+                        long now = SystemClock.elapsedRealtime();
+                        if (now >= previewFailureUntil) previewFailureUntil = now + PREVIEW_COOLDOWN_MS;
+                    }
+                }
+            }
+            throw error;
+        }
+    }
+
+    private static boolean isTransientPreviewFailure(FapelloSourceException error) {
+        return error.reason == FapelloSourceException.Reason.BLOCKED
+                || error.reason == FapelloSourceException.Reason.RATE_LIMITED
+                || error.reason == FapelloSourceException.Reason.NETWORK
+                || error.reason == FapelloSourceException.Reason.HTTP
+                    && (error.statusCode == 403 || error.statusCode >= 500);
+    }
+
+    private static void updatePreviewConfig(long version) {
+        if (version != previewConfigVersion) {
+            previewConfigVersion = version;
+            previewFailures = 0;
+            previewFailureUntil = 0L;
+        }
+    }
+
+    private static String galleryPageKey(long version, Model model) {
+        return version + ":" + model.url + "\n" + model.name;
+    }
+
+    private static MediaPage cachedFirstPage(String key) {
+        GalleryValue<MediaPage> cached = FIRST_GALLERY_PAGES.get(key);
+        return cached != null && cached.isFresh() ? copyPage(cached.value) : null;
+    }
+
+    private static MediaPage copyPage(MediaPage page) {
+        return new MediaPage(page.items, page.hasNext, page.nextPageUrl);
+    }
+
+    private static long configVersion() {
+        SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
+        return current == null ? Long.MIN_VALUE : current.configVersion;
+    }
+
+    private static final class GalleryValue<T> {
+        final long expiresAt = SystemClock.elapsedRealtime() + GALLERY_CACHE_MS;
+        final T value;
+
+        GalleryValue(T value) {
+            this.value = value;
+        }
+
+        boolean isFresh() {
+            return SystemClock.elapsedRealtime() < expiresAt;
+        }
     }
 
     MediaPage fetchModelMediaPage(Context context, Model model, int page) throws IOException {

@@ -417,15 +417,16 @@ final class FapzoneCreatorRepository {
         } catch (Exception ignored) {
         }
 
+        String bunkrPreview = album == null ? "" : clean(album.imageUrl);
         String fapelloPreview = model == null ? "" : clean(model.imageUrl);
         if (model != null && fapelloPreview.isEmpty()) {
             try {
-                fapelloPreview = chooseFapelloPreview(fapello.fetchModelMedia(context, model, 1));
+                fapelloPreview = chooseFapelloPreview(fapello.fetchCreatorPreview(context, model,
+                        thumbnailScore(bunkrPreview, false) > 0));
             } catch (Exception ignored) {
             }
         }
 
-        String bunkrPreview = album == null ? "" : clean(album.imageUrl);
         String imageUrl = chooseThumbnail(fapelloPreview, bunkrPreview);
         String cardUrl;
         String imageReferer;
@@ -519,10 +520,12 @@ final class FapzoneCreatorRepository {
         } catch (Exception ignored) {
         }
 
+        String bunkrPreview = album == null ? "" : clean(album.imageUrl);
         String fapelloPreview = clean(model.imageUrl);
         if (fapelloPreview.isEmpty()) {
             try {
-                fapelloPreview = chooseFapelloPreview(fapello.fetchModelMedia(context, model, 1));
+                fapelloPreview = chooseFapelloPreview(fapello.fetchCreatorPreview(context, model,
+                        thumbnailScore(bunkrPreview, false) > 0));
             } catch (Exception ignored) {
             }
         }
@@ -530,7 +533,6 @@ final class FapzoneCreatorRepository {
         // Keep the exact Fapello profile on the card. The creator gallery uses it directly
         // instead of having to rediscover or guess the profile slug from the display name.
         String cardUrl = model.url;
-        String bunkrPreview = album == null ? "" : clean(album.imageUrl);
         String imageUrl = chooseThumbnail(fapelloPreview, bunkrPreview);
         String imageReferer = imageUrl.equals(fapelloPreview)
                 ? model.url
