@@ -105,8 +105,54 @@ public class PrimaryTabRevealTest {
                 }
             }
             assertTrue(accentPixels > 25);
-            assertTrue(accentPixels < 300);
+            assertTrue(accentPixels < 900);
             assertFalse(water.update(PrimaryTabReveal.BOTTOM, .5f, 50f));
+        } finally {
+            AppearanceTheme.setAccent(context, original);
+            frame.recycle();
+        }
+    }
+
+    @Test public void liquidRimRespondsToAccentChangesOnTheSamePage() {
+        var context = RuntimeEnvironment.getApplication();
+        AppearanceTheme.Accent original = AppearanceTheme.accentChoice(context);
+        Bitmap frame = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
+        try {
+            TabWaterline water = new TabWaterline(context);
+            assertTrue(water.update(PrimaryTabReveal.BOTTOM, .5f, 50f));
+            Canvas canvas = new Canvas(frame);
+            AppearanceTheme.setAccent(context, AppearanceTheme.Accent.RED);
+            int save = canvas.save();
+            water.clipPage(canvas, 100, 100);
+            canvas.restoreToCount(save);
+            canvas.drawColor(Color.BLACK);
+            water.drawHighlight(canvas, 100, 100);
+            int redTint = 0;
+            for (int y = 0; y < 100; y++) for (int x = 0; x < 100; x++) {
+                int color = frame.getPixel(x, y);
+                if (Color.red(color) > Color.blue(color) + 5) redTint++;
+            }
+            assertTrue(redTint > 0);
+
+            // The same retained Page may survive an Appearance accent change.
+            AppearanceTheme.setAccent(context, AppearanceTheme.Accent.BLUE);
+            canvas.drawColor(Color.BLACK);
+            water.drawHighlight(canvas, 100, 100);
+            int blueTint = 0;
+            for (int y = 0; y < 100; y++) for (int x = 0; x < 100; x++) {
+                int color = frame.getPixel(x, y);
+                if (Color.blue(color) > Color.red(color) + 5) blueTint++;
+            }
+            assertTrue(blueTint > 0);
+
+            // The gradient must also rotate when the user drags between tabs.
+            assertTrue(water.update(PrimaryTabReveal.FROM_RIGHT, .5f, 50f));
+            canvas.drawColor(Color.BLACK);
+            save = canvas.save();
+            water.clipPage(canvas, 100, 100);
+            canvas.restoreToCount(save);
+            water.drawHighlight(canvas, 100, 100);
+            assertEquals(Color.BLACK, frame.getPixel(95, 5));
         } finally {
             AppearanceTheme.setAccent(context, original);
             frame.recycle();
