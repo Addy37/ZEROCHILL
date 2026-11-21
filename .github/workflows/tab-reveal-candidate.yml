@@ -1,14 +1,12 @@
 name: ZEROCHILL Tab Reveal Signed Test APK
 
-# One authorized candidate build on the final feature-branch push. No publication.
 on:
-  push:
-    branches: [feature/zerochill-tab-reveal]
-    paths: [.github/workflows/tab-reveal-candidate.yml]
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 concurrency:
-  group: tab-reveal-candidate-${{ github.ref }}
+  group: tab-reveal-candidate-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
@@ -16,13 +14,17 @@ permissions:
 
 jobs:
   candidate:
-    if: github.ref_name == 'feature/zerochill-tab-reveal'
+    if: >-
+      github.repository == 'Addy37/ZEROCHILL' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'fix/liquid-navigation-shittok-frame'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '7003004'
-      APP_VERSION_NAME: '7.3.1-test.tab-reveal.water'
-      ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
+      APP_VERSION_CODE: '7003010'
+      APP_VERSION_NAME: '7.3.1-test.liquid-navigation'
+      ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+      ZEROCHILL_SOURCE_BRANCH: ${{ github.head_ref }}
       ZEROCHILL_V7_TRAFFIC: 'true'
       SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
       SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
@@ -34,6 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - name: Verify current main and record source lineage
         run: bash tools/verify-android-build-lineage.sh "$RUNNER_TEMP/BUILD_LINEAGE.txt"
@@ -93,6 +96,11 @@ jobs:
           --tests '*PrimaryTabLibraryTest'
           --tests '*PrimaryTabNavigationTest'
           --tests '*PrimaryTabRevealTest'
+          --tests '*ShitTokLoadingStateTest'
+          --tests '*ShitTokStartupPreparationTest'
+          --tests '*ShitTokSelectedPreparationTest'
+          --tests '*ShitTokAudioOwnershipTest'
+          --tests '*ShitTokSwipeStartTest'
           --tests '*PrimaryTabWorkQueueTest'
           :app:assembleDebug :app:assembleRelease
       - name: Verify install upgrade identity and checksum
@@ -102,8 +110,8 @@ jobs:
           set -euo pipefail
           mkdir -p candidate "$RUNNER_TEMP/stable"
           gh release download --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir "$RUNNER_TEMP/stable"
-          SAFE_REF="${GITHUB_REF_NAME//\//-}"
-          APK="candidate/ZeroChill-${APP_VERSION_NAME}-${SAFE_REF}-${GITHUB_SHA:0:7}.apk"
+          SAFE_REF="${ZEROCHILL_SOURCE_BRANCH//\//-}"
+          APK="candidate/ZeroChill-${APP_VERSION_NAME}-${SAFE_REF}-${ZEROCHILL_SOURCE_SHA:0:7}.apk"
           cp app/build/outputs/apk/release/app-release.apk "$APK"
           export CANDIDATE_APK="$APK"
           python3 - <<'PY'
@@ -120,10 +128,13 @@ jobs:
           candidate = inspect(os.environ['CANDIDATE_APK'])
           stable = inspect(str(pathlib.Path(os.environ['RUNNER_TEMP'])/'stable/ZeroChill.apk'))
           assert candidate[0] == stable[0] == 'com.addy37.crazyshitunofficial'
-          assert candidate[1] == 7003004 and candidate[1] > max(stable[1], 7003003)
+          assert candidate[1] == int(os.environ['APP_VERSION_CODE']) and candidate[1] > max(stable[1], 7003009)
           assert candidate[2] == stable[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356'
-          report = ('Source: '+os.environ['GITHUB_SHA']+'\n'
-              +'Branch: '+os.environ['GITHUB_REF_NAME']+'\n'
+          revision = os.environ['ZEROCHILL_SOURCE_SHA']
+          config = pathlib.Path('app/build/generated/source/buildConfig/release/com/webapp/crazyshit/BuildConfig.java')
+          assert f'SOURCE_REVISION = "{revision}";' in config.read_text(), 'Incorrect APK source revision'
+          report = ('Source: '+os.environ['ZEROCHILL_SOURCE_SHA']+'\n'
+              +'Branch: '+os.environ['ZEROCHILL_SOURCE_BRANCH']+'\n'
               +'Application ID: '+candidate[0]+'\n'
               +'Version code: '+str(candidate[1])+'\n'
               +'Certificate SHA-256: '+candidate[2]+'\n'
@@ -136,7 +147,15 @@ jobs:
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Tab-Reveal-signed-${{ github.sha }}
+          name: ZeroChill-Tab-Reveal-signed-${{ env.ZEROCHILL_SOURCE_SHA }}
           path: candidate/
           if-no-files-found: error
+          retention-days: 14
+      - name: Upload tab and playback test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-Tab-Reveal-tests-${{ env.ZEROCHILL_SOURCE_SHA }}
+          path: app/build/test-results/testReleaseUnitTest/
+          if-no-files-found: warn
           retention-days: 14

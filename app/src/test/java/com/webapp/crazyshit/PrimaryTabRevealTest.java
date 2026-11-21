@@ -9,8 +9,6 @@ import android.app.Application;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Paint;
-import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -22,11 +20,8 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
-import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
-
-import java.time.Duration;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35, qualifiers = "mdpi")
@@ -47,76 +42,92 @@ public class PrimaryTabRevealTest {
         Bitmap frame = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(frame);
         canvas.drawColor(Color.RED);
-        page.setReveal(PrimaryTabReveal.FROM_RIGHT, .5f, 0f, 0f);
+        page.setReveal(PrimaryTabReveal.FROM_RIGHT, .5f, 0f);
         page.draw(canvas);
         assertEquals(Color.RED, frame.getPixel(10, 50));
         assertEquals(Color.BLUE, frame.getPixel(90, 50));
-        assertEquals(Color.BLUE, frame.getPixel(49, 50));
-        assertEquals(Color.RED, frame.getPixel(49, 5));
+        assertEquals(Color.BLUE, frame.getPixel(47, 50));
+        assertEquals(Color.RED, frame.getPixel(47, 5));
 
         canvas.drawColor(Color.RED);
-        page.setReveal(PrimaryTabReveal.FROM_LEFT, .5f, 0f, 0f);
+        page.setReveal(PrimaryTabReveal.FROM_LEFT, .5f, 0f);
         page.draw(canvas);
         assertEquals(Color.BLUE, frame.getPixel(10, 50));
         assertEquals(Color.RED, frame.getPixel(90, 50));
 
-        page.setReveal(0, 0f, 0f, 0f);
+        page.setReveal(0, 0f, 0f);
         page.draw(canvas);
         assertEquals(Color.BLUE, frame.getPixel(90, 50));
         frame.recycle();
     }
 
-    @Test public void tapMaskOpensFromSelectedDockSlot() {
+    @Test public void tapRevealSweepsUpFromTheWholeBottomEdgeWithADockCrest() {
         PrimaryTabReveal.Page page = page();
         Bitmap frame = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(frame);
         canvas.drawColor(Color.RED);
-        page.setReveal(PrimaryTabReveal.BOTTOM, .24f, 75f, 95f);
+        page.setReveal(PrimaryTabReveal.BOTTOM, .24f, 75f);
         page.draw(canvas);
         assertEquals(Color.BLUE, frame.getPixel(75, 94));
         assertEquals(Color.RED, frame.getPixel(75, 25));
-        assertEquals(Color.RED, frame.getPixel(5, 94));
-        page.setReveal(PrimaryTabReveal.BOTTOM, 1f, 75f, 95f);
+        assertEquals(Color.BLUE, frame.getPixel(5, 94));
+        assertEquals(Color.BLUE, frame.getPixel(74, 74));
+        assertEquals(Color.RED, frame.getPixel(5, 74));
+        page.setReveal(PrimaryTabReveal.BOTTOM, 1f, 75f);
         page.draw(canvas);
         assertEquals(Color.BLUE, frame.getPixel(5, 5));
         frame.recycle();
     }
 
-    @Test public void refractionDisplacesOnlyTheWaterlineStrip() {
-        TabWaterline water = new TabWaterline(RuntimeEnvironment.getApplication());
-        water.update(PrimaryTabReveal.FROM_RIGHT, .5f, 0f, 0f);
+    @Test public void highlightUsesTheAccentInANarrowBand() {
+        var context = RuntimeEnvironment.getApplication();
+        AppearanceTheme.Accent original = AppearanceTheme.accentChoice(context);
         Bitmap frame = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(frame);
-        Paint stripe = new Paint();
-        stripe.setColor(Color.GREEN);
-        canvas.drawColor(Color.RED);
-        water.clipPage(canvas, 100, 100);
-        canvas.drawColor(Color.BLUE);
-        canvas.drawRect(37, 0, 39, 100, stripe);
+        try {
+            AppearanceTheme.setAccent(context, AppearanceTheme.Accent.RED);
+            TabWaterline water = new TabWaterline(context);
+            assertTrue(water.update(PrimaryTabReveal.BOTTOM, .5f, 50f));
+            Canvas canvas = new Canvas(frame);
+            canvas.drawColor(Color.BLACK);
+            int save = canvas.save();
+            water.clipPage(canvas, 100, 100);
+            canvas.restoreToCount(save);
+            water.drawHighlight(canvas, 100, 100);
 
-        int refraction = water.clipRefraction(canvas, 100, 100);
-        assertTrue(refraction >= 0);
-        canvas.drawColor(Color.BLUE);
-        canvas.drawRect(37, 0, 39, 100, stripe);
-        canvas.restoreToCount(refraction);
-
-        assertEquals(Color.RED, frame.getPixel(20, 50));
-        assertEquals(Color.BLUE, frame.getPixel(37, 50));
-        assertEquals(Color.GREEN, frame.getPixel(41, 50));
-        assertEquals(Color.BLUE, frame.getPixel(65, 50));
-        frame.recycle();
+            int accentPixels = 0;
+            for (int y = 0; y < 100; y++) {
+                for (int x = 0; x < 100; x++) {
+                    int pixel = frame.getPixel(x, y);
+                    if (pixel != Color.BLACK) {
+                        assertTrue(Color.red(pixel) >= Color.blue(pixel));
+                        accentPixels++;
+                    }
+                }
+            }
+            assertTrue(accentPixels > 25);
+            assertTrue(accentPixels < 300);
+            assertFalse(water.update(PrimaryTabReveal.BOTTOM, .5f, 50f));
+        } finally {
+            AppearanceTheme.setAccent(context, original);
+            frame.recycle();
+        }
     }
 
-    @Test public void holdingTheDragLetsTheWakeExpireWithoutRestartingIt() {
-        TabWaterline water = new TabWaterline(RuntimeEnvironment.getApplication());
+    @Test public void partialRevealDrawsIncomingContentOnce() {
+        PrimaryTabReveal.Page page = page();
+        int[] draws = {0};
+        page.addView(new View(page.getContext()) {
+            @Override protected void onDraw(Canvas canvas) {
+                draws[0]++;
+            }
+        }, new ViewGroup.LayoutParams(100, 100));
+        page.measure(View.MeasureSpec.makeMeasureSpec(100, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(100, View.MeasureSpec.EXACTLY));
+        page.layout(0, 0, 100, 100);
         Bitmap frame = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(frame);
-        assertTrue(water.update(PrimaryTabReveal.FROM_LEFT, .5f, 0f, 0f));
-        water.clipPage(canvas, 100, 100);
-        assertTrue(water.drawHighlight(canvas, 100, 100));
-        Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(180));
-        assertFalse(water.update(PrimaryTabReveal.FROM_LEFT, .5f, 0f, 0f));
-        assertFalse(water.drawHighlight(canvas, 100, 100));
+        page.setReveal(PrimaryTabReveal.BOTTOM, .5f, 75f);
+        page.draw(new Canvas(frame));
+        assertEquals(1, draws[0]);
         frame.recycle();
     }
 

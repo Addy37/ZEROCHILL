@@ -103,7 +103,8 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     private var planCount = 0
     private var testFactory: PlayerFactory? = null
     private data class Lease(val player: ExoPlayer, val token: Int,
-        var stream: CrazyShitRepository.StreamInfo? = null, var view: PlayerView? = null)
+        var stream: CrazyShitRepository.StreamInfo? = null, var view: PlayerView? = null,
+        var renderedFrame: Boolean = false)
 
     // Called only before any engine is acquired, by decoder-free integration fixtures.
     fun setPlayerFactoryForTest(factory: PlayerFactory) { check(pool == null); testFactory = factory }
@@ -198,7 +199,9 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
                             }
                         }
                         override fun onRenderedFirstFrame() {
-                            if (owns(url, player, generation)) {
+                            val lease = leases[url]
+                            if (lease != null && lease.player === player && lease.token == generation) {
+                                lease.renderedFrame = lease.view != null
                                 ShitTokPoolDiagnostics.record("firstFrame", url)
                                 if (url == selected && !firstFrame) {
                                     firstFrame = true
@@ -254,6 +257,8 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     fun player(url: String): ExoPlayer? = leases[url]?.player
     fun stream(url: String): CrazyShitRepository.StreamInfo? = leases[url]?.stream
     fun isAttached(url: String, view: PlayerView): Boolean = leases[url]?.view === view
+    fun hasRenderedFrame(url: String, view: PlayerView): Boolean =
+        leases[url]?.let { it.view === view && it.renderedFrame } == true
     fun isUserPaused(url: String): Boolean = url in paused
     fun setUserPaused(url: String, value: Boolean) { if (value) paused.add(url) else paused.remove(url); syncAudio() }
 
@@ -357,6 +362,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
             Trace.beginSection("zc.shittok.surface_handoff")
             try { PlayerView.switchTargetView(lease.player, lease.view, view) } finally { Trace.endSection() }
             lease.view = view
+            lease.renderedFrame = false
             ShitTokPoolDiagnostics.record("surface", url)
         }
         lease.player.volume = if (canPlay(url) && !muted) 1f else 0f
@@ -368,6 +374,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         silence(lease.player)
         view.player = null
         lease.view = null
+        lease.renderedFrame = false
     }
     fun source(url: String, stream: CrazyShitRepository.StreamInfo, token: Int): Boolean {
         if (searchCovered) return leases[url]?.stream?.mediaUrl == stream.mediaUrl
@@ -389,6 +396,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         val mediaSource = ShitTokMediaSources.create(app, url, stream)
         sources[url] = mediaSource
         lease.stream = stream
+        lease.renderedFrame = false
         if (url == selected) AppPerformance.startupItem("owner_source", url, "")
         lease.player.setMediaSource(mediaSource, positions[url] ?: 0L)
         ShitTokPoolDiagnostics.record("prepare", "url=$url role=${if(url==selected) "current" else "neighbor"}")
@@ -413,6 +421,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     fun invalidateSource(url: String) {
         leases[url]?.let {
             runCatching { remember(url, if (it.player.playbackState == Player.STATE_ENDED) 0L else it.player.currentPosition) }
+            it.renderedFrame = false
             silence(it.player); it.player.stop(); it.player.clearMediaItems(); it.stream = null
         }
         removeSource(url)

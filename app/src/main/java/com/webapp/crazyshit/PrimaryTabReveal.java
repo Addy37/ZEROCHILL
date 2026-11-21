@@ -22,7 +22,7 @@ final class PrimaryTabReveal implements ViewPager2.PageTransformer {
     private final int[] pagerLocation = new int[2];
     private ValueAnimator tap;
     private int tapFrom, tapTo;
-    private float tapX, tapY, tapProgress;
+    private float tapX, tapProgress;
     private int dragStart = RecyclerView.NO_POSITION;
     private float dragPosition;
 
@@ -49,7 +49,6 @@ final class PrimaryTabReveal implements ViewPager2.PageTransformer {
             float inset = 4f * dock.getResources().getDisplayMetrics().density;
             tapX = dockLocation[0] - pagerLocation[0] + inset
                     + (slot + .5f) * (dock.getWidth() - 2f * inset) / MainPagerAdapter.PAGE_COUNT;
-            tapY = dockLocation[1] - pagerLocation[1] + dock.getHeight() / 2f;
             tapFrom = from;
             tapTo = target;
         }
@@ -139,11 +138,11 @@ final class PrimaryTabReveal implements ViewPager2.PageTransformer {
             page.setAlpha(1f);
             page.setScaleX(1f);
             page.setScaleY(1f);
-            page.setReveal(incoming ? shape : 0, progress, tapX, tapY);
+            page.setReveal(incoming ? shape : 0, progress, tapX);
         } else {
             page.setTranslationX(0f);
             page.setTranslationZ(0f);
-            page.setReveal(0, 0f, 0f, 0f);
+            page.setReveal(0, 0f, 0f);
             float distance = ZeroChillMotion.animationsEnabled(pager.getContext())
                     ? Math.min(1f, Math.abs(position)) : 0f;
             page.setAlpha(1f - distance * .10f);
@@ -159,12 +158,12 @@ final class PrimaryTabReveal implements ViewPager2.PageTransformer {
 
         Page(Context context) { super(context); }
 
-        void setReveal(int shape, float progress, float originX, float originY) {
+        void setReveal(int shape, float progress, float originX) {
             if (waterline == null) {
                 if (shape == 0) return;
                 waterline = new TabWaterline(getContext());
             }
-            if (waterline.update(shape, progress, originX, originY)) invalidate();
+            if (waterline.update(shape, progress, originX)) invalidate();
         }
 
         @Override public void draw(Canvas canvas) {
@@ -178,14 +177,8 @@ final class PrimaryTabReveal implements ViewPager2.PageTransformer {
             int save = canvas.save();
             waterline.clipPage(canvas, width, height);
             super.draw(canvas);
-            int refracted = waterline.clipRefraction(canvas, width, height);
-            if (refracted >= 0) {
-                super.draw(canvas);
-                canvas.restoreToCount(refracted);
-            }
-            boolean trailing = waterline.drawHighlight(canvas, width, height);
             canvas.restoreToCount(save);
-            if (trailing) postInvalidateOnAnimation();
+            waterline.drawHighlight(canvas, width, height);
         }
     }
 }
