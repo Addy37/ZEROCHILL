@@ -107,7 +107,7 @@
       ]
     },
     "wikifeet": {
-      "enabled": true,
+      "enabled": false,
       "baseUrl": "https://wikifeet.com/",
       "fallbackDomains": [],
       "pictureHost": "pics.wikifeet.com",

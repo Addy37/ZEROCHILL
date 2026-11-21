@@ -1571,9 +1571,8 @@ public class VideoDetailActivity extends Activity {
         View.OnClickListener open = view -> {
             savePlaybackState(false);
             if (player != null) player.pause();
-            startActivity(NativeFeedBrowserActivity.createCreatorGallery(this, creator.title,
-                    creator.searchQuery.isEmpty() ? creator.title : creator.searchQuery,
-                    NativeFeedBrowserActivity.creatorProfileHint(creator), onlyFapSession));
+            startActivity(NativeFeedBrowserActivity.createCreatorGallery(
+                    this, CreatorGallerySpec.from(creator), onlyFapSession));
         };
         gallery.setOnClickListener(open);
         avatarFrame.setContentDescription("Open " + creator.title + " gallery");
@@ -1627,21 +1626,19 @@ public class VideoDetailActivity extends Activity {
             String session = "";
             if (generation != relatedLoadGeneration || Thread.currentThread().isInterrupted()) return;
             if (creator != null) {
-                String query = creator.searchQuery.isEmpty() ? creator.title : creator.searchQuery;
-                String profile = NativeFeedBrowserActivity.creatorProfileHint(creator);
-                session = CreatorGalleryPreloader.sessionId(this, creator);
+                CreatorGallerySpec spec = CreatorGallerySpec.from(creator);
+                session = CreatorGalleryPreloader.sessionId(this, spec.sessionKey);
                 BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(session);
-                boolean exact = snapshot != null && snapshot.items.stream().anyMatch(item ->
-                        profile.equals(ShitTokCreatorMetadata.knownProfileUrl(item)));
-                if (!exact) {
+                if (snapshot == null && !session.isEmpty()) {
+                    snapshot = BunkrGallerySessionStore.restoreRecentCreator(this, spec.sessionKey);
+                }
+                if (snapshot == null || snapshot.items.isEmpty()) {
                     session = BunkrGallerySessionStore.createCreator(creator.title,
-                            BunkrRepository.searchUrl(query), query);
+                            BunkrRepository.searchUrl(spec.query), spec.sessionKey);
                     try {
                         BunkrCreatorGalleryRepository repository = new BunkrCreatorGalleryRepository();
-                        repository.reset(session, query, profile, creator.title);
-                        BunkrCreatorGalleryRepository.Batch batch = repository.fetchNext(this, session,
-                                query, profile, creator.title);
-                        BunkrGallerySessionStore.appendPreview(session, batch.items);
+                        repository.fetchNext(this, session, spec.query, spec.profileHint, creator.title,
+                                spec.seedNames, spec.seedUrls, spec.seedImages, spec.aliases, null);
                     } catch (Exception ignored) { }
                     snapshot = BunkrGallerySessionStore.snapshot(session);
                 }

@@ -72,6 +72,9 @@ final class CreatorListAdapter extends RecyclerView.Adapter<CreatorListAdapter.H
                 public boolean areContentsTheSame(int a, int b) {
                     NativeContentItem x = old.get(a), y = incoming.get(b);
                     return x.title.equals(y.title) && x.imageUrl.equals(y.imageUrl)
+                            && x.url.equals(y.url) && x.searchQuery.equals(y.searchQuery)
+                            && x.creatorAliases.equals(y.creatorAliases)
+                            && x.creatorProfileUrls.equals(y.creatorProfileUrls)
                             && (oldFavorites.contains(CreatorFavoriteStore.key(x))
                             || CreatorIdentity.hasStoredAlias(oldFavorites, x.title))
                             == (nextFavorites.contains(CreatorFavoriteStore.key(y))

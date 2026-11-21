@@ -78,7 +78,9 @@ final class OnlyFapCreatorSearchAdapter
                 return a.title.equals(b.title) && a.url.equals(b.url) &&
                         a.imageUrl.equals(b.imageUrl) &&
                         a.description.equals(b.description) &&
-                        a.views.equals(b.views) && a.searchQuery.equals(b.searchQuery);
+                        a.views.equals(b.views) && a.searchQuery.equals(b.searchQuery)
+                        && a.creatorAliases.equals(b.creatorAliases)
+                        && a.creatorProfileUrls.equals(b.creatorProfileUrls);
             }
         });
         items = replacement;

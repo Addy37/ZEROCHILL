@@ -22,12 +22,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/** Creator search and image galleries shared by WikiFeet and WikiFeet X. */
+/** WikiFeet X creator profiles and galleries. Regular WikiFeet metadata is read for legacy records. */
 final class WikiFeetRepository {
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36";
     private static final int MAX_BODY = 12 * 1024 * 1024;
+    private static final int MAX_REDIRECTS = 5;
 
     enum Site {
         WIKIFEET("wikifeet", "WikiFeet", "https://wikifeet.com/",
@@ -56,53 +57,112 @@ final class WikiFeetRepository {
         final String url;
         final String imageUrl;
         final int photoCount;
+        final long profileId;
+        final String profileHandle;
 
         Creator(Site site, String name, String url, String imageUrl, int photoCount) {
+            this(site, name, url, imageUrl, photoCount, 0L);
+        }
+
+        Creator(Site site, String name, String url, String imageUrl, int photoCount, long profileId) {
             this.site = site;
             this.name = clean(name);
             this.url = normalizeProfileUrl(site, url);
             this.imageUrl = normalizeMediaUrl(site, imageUrl);
             this.photoCount = Math.max(0, photoCount);
+            this.profileId = Math.max(0L, profileId);
+            this.profileHandle = profileHandle(this.url);
         }
 
         NativeContentItem asItem() {
             String detail = site.label + (photoCount > 0 ? " · " + photoCount + " photos" : "");
             return new NativeContentItem(NativeContentItem.KIND_CREATOR, name, url,
-                    imageUrl, "", url, "", detail, name);
+                    imageUrl, "", url, "", detail, name).withCreatorIdentity(
+                    java.util.Collections.singletonList(profileHandle),
+                    java.util.Collections.singletonList(url));
         }
     }
 
     List<Creator> searchCreators(Context context, Site site, String query, int limit)
+            throws IOException {
+        return searchCreators(site, query, limit, false);
+    }
+
+    List<Creator> searchConfirmedCreators(Context context, String query, int limit) throws IOException {
+        return searchCreators(Site.WIKIFEET_X, query, limit, true);
+    }
+
+    private List<Creator> searchCreators(Site site, String query, int limit, boolean confirmed)
             throws IOException {
         requireEnabled(site);
         String cleanQuery = clean(query);
         if (cleanQuery.length() < 2) return new ArrayList<>();
         int safeLimit = Math.max(1, Math.min(20, limit));
         String endpoint = searchUrl(site, cleanQuery);
-        String body = fetchBody(context, endpoint, baseUrl(site), true);
-        List<Creator> parsed = matching(parseSearch(body, site, endpoint, 100), cleanQuery, safeLimit);
-        if (!parsed.isEmpty()) return parsed;
+        Connection.Response response = fetchPage(site, endpoint, true);
+        List<Creator> candidates = parseSearch(response.readBody(), site, response.url().toString(), 100);
+        List<Creator> parsed = confirmed ? confirmedMatches(candidates, cleanQuery)
+                : matching(candidates, cleanQuery, safeLimit);
+        if (!parsed.isEmpty() || (confirmed && hasExactCandidate(candidates, cleanQuery))) return parsed;
 
-        // The search service can occasionally return an empty body for an exact name. Confirm the
-        // corresponding profile before exposing it so predictive results never contain dead links.
+        // Search can return an empty result for an exact handle. A redirect is only evidence
+        // if the resulting profile still matches the requested identity.
         String guessed = baseUrl(site) + profileSlug(cleanQuery);
         try {
-            Creator exact = parseProfile(fetchBody(context, guessed, baseUrl(site), false), site, guessed);
-            if (!exact.name.isEmpty()) parsed.add(exact);
-        } catch (Exception ignored) { }
+            Connection.Response profile = fetchPage(site, guessed, false);
+            Creator exact = parseProfile(profile.readBody(), site, profile.url().toString());
+            if (matchesIdentity(exact, cleanQuery)) parsed.add(exact);
+        } catch (IOException ignored) { }
         return parsed;
+    }
+
+    static List<Creator> confirmedMatches(List<Creator> candidates, String query) {
+        Creator match = null;
+        int best = Integer.MAX_VALUE;
+        boolean ambiguous = false;
+        for (Creator candidate : candidates) {
+            int rank = identityRank(candidate, query);
+            if (rank < best) {
+                match = candidate;
+                best = rank;
+                ambiguous = false;
+            } else if (match != null && rank == best && !match.url.equals(candidate.url)
+                    && (match.profileId == 0L || match.profileId != candidate.profileId)) {
+                ambiguous = true;
+            }
+        }
+        return match == null || ambiguous ? new ArrayList<>()
+                : new ArrayList<>(java.util.Collections.singletonList(match));
+    }
+
+    private static boolean hasExactCandidate(List<Creator> candidates, String query) {
+        for (Creator candidate : candidates) if (matchesIdentity(candidate, query)) return true;
+        return false;
+    }
+
+    private static boolean matchesIdentity(Creator creator, String query) {
+        return identityRank(creator, query) != Integer.MAX_VALUE;
+    }
+
+    private static int identityRank(Creator creator, String query) {
+        if (creator == null || query.isEmpty() || !isXProfileUrl(creator.url)) return Integer.MAX_VALUE;
+        if (query.equalsIgnoreCase(creator.profileHandle)) return 0;
+        return ShitTokFilteredIdentity.strong(creator.name, query) ? 1 : Integer.MAX_VALUE;
     }
 
     private List<Creator> matching(List<Creator> creators, String query, int limit) {
         ArrayList<Creator> result = new ArrayList<>();
-        if (creators != null) for (Creator creator : creators) {
-            if (creator != null && CreatorNameMatcher.rank(creator.name, query) != Integer.MAX_VALUE) {
-                result.add(creator);
-            }
+        for (Creator creator : creators) {
+            if (searchRank(creator, query) != Integer.MAX_VALUE) result.add(creator);
         }
-        result.sort(java.util.Comparator.comparingInt(
-                creator -> CreatorNameMatcher.rank(creator.name, query)));
+        result.sort(java.util.Comparator.comparingInt(creator -> searchRank(creator, query)));
         return result.size() > limit ? new ArrayList<>(result.subList(0, limit)) : result;
+    }
+
+    private int searchRank(Creator creator, String query) {
+        if (query.equalsIgnoreCase(creator.profileHandle)) return 0;
+        return Math.min(CreatorNameMatcher.rank(creator.name, query),
+                CreatorNameMatcher.rank(creator.profileHandle, query));
     }
 
     List<NativeContentItem> fetchCreatorMedia(
@@ -117,7 +177,15 @@ final class WikiFeetRepository {
         }
         int safePage = Math.max(1, page);
         int safeSize = Math.max(1, Math.min(120, pageSize));
-        String body = fetchBody(context, creator.url, baseUrl(creator.site), false);
+        Connection.Response profile = fetchPage(creator.site, creator.url, false);
+        String body = profile.readBody();
+        if (creator.profileId == 0L && !creator.profileHandle.equalsIgnoreCase(
+                profileHandle(profile.url().toString()))) {
+            Creator redirected = parseProfile(body, creator.site, profile.url().toString());
+            if (!ShitTokFilteredIdentity.strong(creator.name, redirected.name)) {
+                throw new IOException("WikiFeet X profile redirected to a different creator");
+            }
+        }
         return parseMedia(body, creator, safePage, safeSize);
     }
 
@@ -130,6 +198,9 @@ final class WikiFeetRepository {
         int safePage = Math.max(1, page);
         int safeSize = Math.max(1, Math.min(120, pageSize));
         JSONObject data = profileData(body);
+        if (creator.profileId > 0L && data.optLong("cid", 0L) != creator.profileId) {
+            throw new IOException("WikiFeet X profile ID did not match");
+        }
         String name = clean(data.optString("cname", creator.name));
         JSONArray gallery = data.optJSONArray("gallery");
         ArrayList<NativeContentItem> result = new ArrayList<>();
@@ -163,15 +234,17 @@ final class WikiFeetRepository {
         requireEnabled(site);
         String canonical = normalizeProfileUrl(site, profileUrl);
         if (!isProfileUrl(canonical, site)) throw new IOException("Invalid WikiFeet profile URL");
-        return parseProfile(fetchBody(context, canonical, baseUrl(site), false), site, canonical);
+        Connection.Response profile = fetchPage(site, canonical, false);
+        return parseProfile(profile.readBody(), site, profile.url().toString());
     }
 
-    CrazyShitRepository.StreamInfo resolvePlayable(String value) throws IOException {
-        Site site = siteFor(value);
+    CrazyShitRepository.StreamInfo resolvePlayable(String value, String profileUrl) throws IOException {
+        Site site = Site.WIKIFEET_X;
         requireEnabled(site);
-        String url = normalizeMediaUrl(site, value);
-        if (!isOriginalImageUrl(url)) throw new IOException("Not a WikiFeet image URL");
-        return new CrazyShitRepository.StreamInfo(url, url, fileTitle(url), refererFor(url));
+        String url = clean(value);
+        if (!isOriginalImageUrl(url)) throw new IOException("Not a WikiFeet X image URL");
+        String origin = isXProfileUrl(profileUrl) ? profileUrl : baseUrl(site);
+        return new CrazyShitRepository.StreamInfo(url, url, fileTitle(url), referer(site, origin));
     }
 
     static List<Creator> parseSearch(String body, Site site, String endpoint, int limit) {
@@ -219,7 +292,7 @@ final class WikiFeetRepository {
                 }
             }
         }
-        return new Creator(site, name, profileUrl, image, count);
+        return new Creator(site, name, profileUrl, image, count, creatorId);
     }
 
     static JSONObject profileData(String body) throws IOException {
@@ -275,28 +348,76 @@ final class WikiFeetRepository {
     }
 
     static boolean isWikiFeetUrl(String value) {
-        return siteFor(value) != null;
+        return pageSite(value) != null || matchesMediaHost(value, Site.WIKIFEET_X)
+                || matchesMediaHost(value, Site.WIKIFEET);
+    }
+
+    static boolean isRetiredPageUrl(String value) {
+        return pageSite(value) == Site.WIKIFEET;
+    }
+
+    static boolean isXPageUrl(String value) {
+        return pageSite(value) == Site.WIKIFEET_X;
+    }
+
+    static boolean isXProfileUrl(String value) {
+        return isProfileUrl(value, Site.WIKIFEET_X);
+    }
+
+    static boolean isXMediaUrl(String value) {
+        return !isRetiredPageUrl(value) && matchesMediaHost(value, Site.WIKIFEET_X);
+    }
+
+    static boolean isXItem(NativeContentItem item) {
+        return itemSite(item) == Site.WIKIFEET_X;
+    }
+
+    static String imageReferer(NativeContentItem item) {
+        if (!isXItem(item)) return "";
+        Site site = Site.WIKIFEET_X;
+        String origin = isXProfileUrl(item.uploader) ? item.uploader
+                : isXProfileUrl(item.url) ? item.url : baseUrl(site);
+        return referer(site, origin);
+    }
+
+    static boolean isRetiredItem(NativeContentItem item) {
+        return itemSite(item) == Site.WIKIFEET;
+    }
+
+    private static Site itemSite(NativeContentItem item) {
+        if (item == null) return null;
+        Site page = pageSite(item.url);
+        if (page != null) return page;
+        Site origin = pageSite(item.uploader);
+        if (origin != null) return origin;
+        if (matchesMediaHost(item.url, Site.WIKIFEET_X) && hasSourceLabel(item, Site.WIKIFEET_X)) {
+            return Site.WIKIFEET_X;
+        }
+        if ((matchesMediaHost(item.url, Site.WIKIFEET) || (item.isCreator() && item.url.isEmpty()))
+                && hasSourceLabel(item, Site.WIKIFEET)) return Site.WIKIFEET;
+        return null;
+    }
+
+    private static boolean hasSourceLabel(NativeContentItem item, Site site) {
+        return site.label.equalsIgnoreCase(item.views) || site.label.equalsIgnoreCase(item.description)
+                || item.description.regionMatches(true, 0, site.label + " · ", 0, site.label.length() + 3);
     }
 
     static boolean isOriginalImageUrl(String value) {
-        Site site = siteFor(value);
-        if (site == null) return false;
+        if (!isXMediaUrl(value)) return false;
+        Site site = Site.WIKIFEET_X;
         String host = host(value);
-        return host.equals(pictureHost(site)) && value.toLowerCase(Locale.US).matches(
-                ".*\\.(?:jpe?g|png|webp)(?:[?#].*)?$");
+        return (host.equals(pictureHost(site)) || host.equals(site.pictureHost))
+                && "https".equalsIgnoreCase(scheme(value))
+                && value.toLowerCase(Locale.US).matches(".*\\.(?:jpe?g|png|webp)(?:[?#].*)?$");
     }
 
     static boolean isProfileUrl(String value, Site site) {
-        if (site == null || !profileHost(value).equals(host(baseUrl(site)))) return false;
-        try {
-            String path = new URI(value).getPath();
-            if (path == null) return false;
-            String cleanPath = path.replaceAll("^/+|/+$", "");
-            return !cleanPath.isEmpty() && !cleanPath.contains("/") &&
-                    !cleanPath.equalsIgnoreCase("search") &&
-                    !cleanPath.equalsIgnoreCase("photos") &&
-                    !cleanPath.equalsIgnoreCase("videos");
-        } catch (Exception ignored) { return false; }
+        if (site == null || !"https".equalsIgnoreCase(scheme(value))) return false;
+        if (site == Site.WIKIFEET_X ? !isXPageUrl(value) : !isRetiredPageUrl(value)) return false;
+        String path = profileHandle(value);
+        return !path.isEmpty() && !path.contains("/") && !path.equalsIgnoreCase("search")
+                && !path.equalsIgnoreCase("photos") && !path.equalsIgnoreCase("videos");
     }
 
     static String originalUrl(Site site, String creatorName, long id) {
@@ -309,50 +430,67 @@ final class WikiFeetRepository {
         return id <= 0L ? "" : "https://" + thumbnailHost(site) + "/" + id + ".jpg";
     }
 
-    private String fetchBody(Context context, String url, String referer, boolean ajax)
-            throws IOException {
-        Site site = siteFor(url);
-        if (site == null) throw new IOException("Invalid WikiFeet URL");
+    private Connection.Response fetchPage(Site site, String url, boolean ajax) throws IOException {
+        requireEnabled(site);
         IOException last = null;
         for (String candidate : requestCandidates(site, url)) {
-            for (int attempt = 0; attempt < retryCount(site) + 1; attempt++) {
-                Connection connection = Jsoup.connect(candidate)
-                        .userAgent(userAgent(site))
-                        .referrer(referer(site, clean(referer).isEmpty() ? refererFor(candidate) : referer))
-                        .timeout(ajax ? ajaxTimeoutMs(site) : requestTimeoutMs(site))
-                        .maxBodySize(MAX_BODY)
-                        .followRedirects(true)
-                        .ignoreContentType(true)
-                        .ignoreHttpErrors(true);
-                SourceConfig.WikiFeet config = config(site);
-                if (config == null) {
-                    connection.header("Accept-Encoding", "identity")
-                            .header("Accept", ajax
-                                    ? "application/json,text/html,*/*;q=0.8"
-                                    : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-                    if (ajax) connection.header("X-Requested-With", "XMLHttpRequest");
-                } else {
-                    applyHeaders(connection, config.requestHeaders);
-                    if (ajax) applyHeaders(connection, config.ajaxHeaders);
-                }
+            if (!isXPageUrl(candidate)) continue;
+            for (int attempt = 0; attempt <= retryCount(site); attempt++) {
                 try {
-                    String cookies = CookieManager.getInstance().getCookie(candidate);
-                    if (cookies != null && !cookies.trim().isEmpty()) connection.header("Cookie", cookies);
-                } catch (Exception ignored) { }
-                try {
-                    Connection.Response response = connection.execute();
-                    if (response.statusCode() >= 400) {
-                        throw new IOException(site.label + " returned HTTP " + response.statusCode());
-                    }
-                    String finalUrl = response.url().toString();
-                    if (siteFor(finalUrl) != site) throw new IOException("WikiFeet redirected outside its source");
-                    return response.body();
+                    return requestPage(site, candidate, ajax);
                 } catch (IOException error) {
+                    if (Thread.currentThread().isInterrupted()) throw error;
                     last = error;
                 }
             }
         }
-        throw last == null ? new IOException(site.label + " request failed") : last;
+        throw last == null ? new IOException("Invalid WikiFeet X URL") : last;
+    }
+
+    private Connection.Response requestPage(Site site, String candidate, boolean ajax) throws IOException {
+        SourceConfig.WikiFeet config = config(site);
+        String url = candidate;
+        for (int redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
+            if (Thread.currentThread().isInterrupted()) throw new IOException("WikiFeet X request canceled");
+            if (!isXPageUrl(url) || !"https".equalsIgnoreCase(scheme(url))) {
+                throw new IOException("WikiFeet X redirected outside its source");
+            }
+            Connection connection = Jsoup.connect(url)
+                    .userAgent(userAgent(site))
+                    .referrer(referer(site, baseUrl(site)))
+                    .timeout(ajax ? ajaxTimeoutMs(site) : requestTimeoutMs(site))
+                    .maxBodySize(MAX_BODY)
+                    .followRedirects(false)
+                    .ignoreContentType(true)
+                    .ignoreHttpErrors(true);
+            if (config == null) {
+                connection.header("Accept-Encoding", "identity")
+                        .header("Accept", ajax
+                                ? "application/json,text/html,*/*;q=0.8"
+                                : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+                if (ajax) connection.header("X-Requested-With", "XMLHttpRequest");
+            } else {
+                applyHeaders(connection, config.requestHeaders);
+                if (ajax) applyHeaders(connection, config.ajaxHeaders);
+            }
+            try {
+                String cookies = CookieManager.getInstance().getCookie(url);
+                if (cookies != null && !cookies.trim().isEmpty()) connection.header("Cookie", cookies);
+            } catch (Exception ignored) { }
+            Connection.Response response = connection.execute();
+            int code = response.statusCode();
+            if (code >= 200 && code < 300) return response;
+            String location = response.header("Location");
+            if (code < 300 || code >= 400 || location == null || location.trim().isEmpty()) {
+                throw new IOException("WikiFeet X returned HTTP " + code);
+            }
+            try {
+                url = URI.create(url).resolve(location).toString();
+            } catch (IllegalArgumentException invalid) {
+                throw new IOException("Invalid WikiFeet X redirect", invalid);
+            }
+        }
+        throw new IOException("Too many WikiFeet X redirects");
     }
 
     private static void collectJson(
@@ -387,7 +525,7 @@ final class WikiFeetRepository {
             }
             if (image.isEmpty() && pid > 0L) image = thumbnailUrl(site, pid);
             int count = (int) firstLong(object, "photos", "count", "photo_count", "pictures");
-            put(output, new Creator(site, name, url, image, count));
+            put(output, new Creator(site, name, url, image, count, firstLong(object, "cid")));
         }
         java.util.Iterator<String> keys = object.keys();
         while (keys.hasNext() && output.size() < limit) collectJson(object.opt(keys.next()), site, output, limit);
@@ -451,9 +589,10 @@ final class WikiFeetRepository {
         else if (!cleanValue.startsWith("http://") && !cleanValue.startsWith("https://")) cleanValue = configuredBase + cleanValue;
         try {
             URI uri = new URI(cleanValue);
-            if (!"https".equalsIgnoreCase(uri.getScheme()) || siteFor(cleanValue) != site) return "";
+            if (!isProfileUrl(cleanValue, site)) return "";
             URI base = new URI(configuredBase);
-            return new URI("https", base.getAuthority(), uri.getPath(), null, null).toASCIIString();
+            String canonical = new URI("https", base.getAuthority(), uri.getPath(), null, null).toASCIIString();
+            return isProfileUrl(canonical, site) ? canonical : "";
         } catch (Exception ignored) { return ""; }
     }
 
@@ -463,25 +602,37 @@ final class WikiFeetRepository {
         try {
             URI uri = new URI(cleanValue);
             if (!"https".equalsIgnoreCase(uri.getScheme())) return "";
-            String host = host(cleanValue);
-            if (site != null && !host.equals(pictureHost(site)) && !host.equals(thumbnailHost(site))) return "";
+            if (site != null && !matchesMediaHost(cleanValue, site)) return "";
             return uri.toASCIIString();
         } catch (Exception ignored) { return ""; }
     }
 
-    private static Site siteFor(String value) {
-        String host = host(value);
-        for (Site site : Site.values()) {
-            String configuredBaseHost = host(baseUrl(site));
-            if (host.equals(configuredBaseHost) || host.equals("www." + configuredBaseHost) ||
-                    host.equals(pictureHost(site)) || host.equals(thumbnailHost(site))) return site;
-            SourceConfig.WikiFeet config = config(site);
-            if (config != null) for (String fallback : config.fallbackDomains) {
-                String fallbackHost = host(fallback);
-                if (host.equals(fallbackHost) || host.equals("www." + fallbackHost)) return site;
-            }
+    private static Site pageSite(String value) {
+        String host = profileHost(value);
+        if (host.isEmpty()) return null;
+        if (host.equals(profileHost(Site.WIKIFEET.baseUrl))) return Site.WIKIFEET;
+        if (matchesPageHost(host, Site.WIKIFEET_X)) return Site.WIKIFEET_X;
+        return matchesPageHost(host, Site.WIKIFEET) ? Site.WIKIFEET : null;
+    }
+
+    private static boolean matchesPageHost(String host, Site site) {
+        if (host.equals(profileHost(site.baseUrl)) || host.equals(profileHost(baseUrl(site)))) return true;
+        SourceConfig.WikiFeet config = config(site);
+        if (config != null) for (String fallback : config.fallbackDomains) {
+            if (host.equals(profileHost(fallback))) return true;
         }
-        return null;
+        return false;
+    }
+
+    private static boolean matchesMediaHost(String value, Site site) {
+        String host = host(value);
+        return !host.isEmpty() && (host.equals(pictureHost(site)) || host.equals(thumbnailHost(site))
+                || host.equals(site.pictureHost) || host.equals(site.thumbnailHost));
+    }
+
+    private static String scheme(String value) {
+        try { return new URI(clean(value)).getScheme(); }
+        catch (Exception ignored) { return null; }
     }
 
     private static String profileHost(String value) {
@@ -496,16 +647,17 @@ final class WikiFeetRepository {
         } catch (Exception ignored) { return ""; }
     }
 
-    private static String refererFor(String value) {
-        Site site = siteFor(value);
-        return site == null ? "https://wikifeet.com/" : baseUrl(site);
+    private static String humanizeProfile(String value) {
+        return clean(profileHandle(value).replace('_', ' ').replace('-', ' ').replaceAll("\\([0-9]+\\)$", ""));
     }
 
-    private static String humanizeProfile(String value) {
+    private static String profileHandle(String value) {
         try {
-            String path = new URI(value).getPath().replaceAll("^/+|/+$", "");
-            return clean(path.replace('_', ' ').replace('-', ' ').replaceAll("\\([0-9]+\\)$", ""));
-        } catch (Exception ignored) { return ""; }
+            String path = new URI(value).getPath();
+            return path == null ? "" : path.replaceAll("^/+|/+$", "");
+        } catch (Exception ignored) {
+            return "";
+        }
     }
 
     private static String profileSlug(String value) {
@@ -527,7 +679,7 @@ final class WikiFeetRepository {
     }
 
     private static void requireEnabled(Site site) throws IOException {
-        if (site == null) throw new IOException("WikiFeet source was invalid");
+        if (site != Site.WIKIFEET_X) throw new IOException("WikiFeet source is unavailable");
         SourceConfig current = RemoteSourceConfigManager.snapshotOrNull();
         SourceConfig.WikiFeet config = config(site);
         if (current != null && current.sourceKillSwitchesEnabled && config != null && !config.enabled) {

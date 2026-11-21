@@ -161,6 +161,48 @@ public final class FapelloRepositoryTest {
         assertFalse(FapelloRepository.profileConfirmsAlias(unrelated, model, "sofiavictoria_iris"));
         assertFalse(FapelloRepository.profileConfirmsAlias(aliasProfile(model.url, model.name,
                 "sofiavictoria_iris"), model, "sofia"));
+        assertFalse(FapelloRepository.profileConfirmsAlias(aliasProfile(model.url, model.name,
+                "sofiavictoria_iris"), model, "sofiavictoria.iris"));
+    }
+
+    @Test public void galleryMatchesUsernameEvenWhenTheDisplayNameDiffers() throws Exception {
+        String body = "{\"results\":["
+                + "{\"name\":\"Rynkerbelle Archive\",\"url\":\"https://fapello.com/rynkerbelle-archive/\"},"
+                + "{\"displayName\":\"ryn! >_<\",\"username\":\"rynkerbelle\","
+                + "\"url\":\"https://fapello.com/profile-123/\"}]}";
+        List<FapelloRepository.Model> found = repository.searchModelsWithQueryFallback("rynkerbelle", 4,
+                (query, offset, size) -> body, model -> {
+                    fail("An explicit username needs no profile lookup");
+                    return null;
+                }, true);
+        assertEquals(1, found.size());
+        assertEquals("ryn! >_<", found.get(0).name);
+        assertEquals("https://fapello.com/profile-123/", found.get(0).url);
+    }
+
+    @Test public void galleryPreservesVerifiedProfileAliasInPresenceOfPartialSearchHit() throws Exception {
+        String body = "{\"results\":["
+                + "{\"name\":\"Rynkerbelle Archive\",\"url\":\"https://fapello.com/rynkerbelle-archive/\"},"
+                + "{\"name\":\"ryn! >_<\",\"url\":\"https://fapello.com/profile-123/\"}],\"has_more\":false}";
+        List<FapelloRepository.Model> found = repository.searchModelsWithQueryFallback("rynkerbelle", 4,
+                (query, offset, size) -> body,
+                model -> {
+                    if (model.url.contains("-archive")) throw new IOException("Unrelated profile unavailable");
+                    return aliasProfile(model.url, model.name, "rynkerbelle");
+                }, true);
+        assertEquals(1, found.size());
+        assertEquals("rynkerbelle", found.get(0).verifiedAlias);
+        assertTrue(CreatorGalleryMatch.fapelloMatches(found.get(0), "rynkerbelle"));
+        assertTrue(repository.searchModelsWithQueryFallback("rynkerbelle", 4,
+                (query, offset, size) -> body, null, true).isEmpty());
+    }
+
+    @Test public void sameDisplayNameOnDifferentUrlsIsAmbiguousEvenWithOneRequestedResult() throws Exception {
+        String body = "{\"results\":["
+                + "{\"name\":\"Shared Name\",\"url\":\"https://fapello.com/first-profile/\"},"
+                + "{\"name\":\"Shared Name\",\"url\":\"https://fapello.com/second-profile/\"}]}";
+        assertTrue(repository.searchModelsWithQueryFallback("Shared Name", 1,
+                (query, offset, size) -> body, null, true).isEmpty());
     }
 
     @Test public void namedSearchAndBroadFuzzyResultsNeverFetchAliasProfiles() throws Exception {

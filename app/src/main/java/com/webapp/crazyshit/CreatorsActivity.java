@@ -287,21 +287,12 @@ public final class CreatorsActivity extends Activity {
         if (group == null || group.item == null) return;
         BrowseUi.hideKeyboard(this, input);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
-        String sessionId = CreatorGalleryPreloader.sessionId(this, spec.cacheKey);
+        String sessionId = CreatorGalleryPreloader.sessionId(this, spec.sessionKey);
         if (sessionId.isEmpty() && spec.grouped) {
             sessionId = CreatorGalleryPreloader.composeInMemoryMergedSession(this, spec);
         }
-        CreatorGalleryTransition.start(this, NativeFeedBrowserActivity.createCreatorGallery(
-                this,
-                spec.item.title,
-                spec.query,
-                spec.profileHint,
-                sessionId,
-                spec.cacheKey,
-                spec.seedNames,
-                spec.seedUrls,
-                spec.seedImages
-        ), anchor, group.item);
+        CreatorGalleryTransition.start(this,
+                NativeFeedBrowserActivity.createCreatorGallery(this, spec, sessionId), anchor, group.item);
     }
 
     private void confirmMerge(CreatorCatalog.FavoriteGroup source, CreatorCatalog.FavoriteGroup target) {
@@ -369,21 +360,12 @@ public final class CreatorsActivity extends Activity {
         BrowseUi.hideKeyboard(this, input);
         pendingAvatarKeys = new ArrayList<>(group.relationshipKeys);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
-        String sessionId = CreatorGalleryPreloader.sessionId(this, spec.cacheKey);
+        String sessionId = CreatorGalleryPreloader.sessionId(this, spec.sessionKey);
         if (sessionId.isEmpty() && spec.grouped) {
             sessionId = CreatorGalleryPreloader.composeInMemoryMergedSession(this, spec);
         }
-        Intent intent = NativeFeedBrowserActivity.createCreatorAvatarPicker(
-                this,
-                spec.item.title,
-                spec.query,
-                spec.profileHint,
-                sessionId,
-                spec.cacheKey,
-                spec.seedNames,
-                spec.seedUrls,
-                spec.seedImages
-        );
+        Intent intent = NativeFeedBrowserActivity.createCreatorGallery(this, spec, sessionId)
+                .putExtra(NativeFeedBrowserActivity.EXTRA_CREATOR_AVATAR_PICKER, true);
         startActivityForResult(intent, REQUEST_PICK_AVATAR);
     }
 
@@ -435,7 +417,8 @@ public final class CreatorsActivity extends Activity {
                 // Retain the full aspect ratio for focus/zoom. Decode only the pixels the crop needs.
                 decodeSide = Math.round(avatarSide * (avatarOverride == null ? 1f : avatarOverride.zoom));
                 NativeContentItem item = group.item;
-                avatarUrl = item.imageUrl.isEmpty() ? null : new GlideUrl(item.imageUrl,
+                avatarUrl = item.imageUrl.isEmpty() || (avatarOverride == null && WikiFeetRepository.isRetiredItem(item))
+                        ? null : new GlideUrl(item.imageUrl,
                         new LazyHeaders.Builder()
                                 .addHeader("Referer", item.uploader.isEmpty() ? item.url : item.uploader)
                                 .addHeader("User-Agent",

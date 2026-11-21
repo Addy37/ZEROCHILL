@@ -604,16 +604,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private void openBrowseItem(NativeContentItem item, View anchor) {
         if (item == null) return;
         if (item.isCreator()) {
-            String query = item.searchQuery == null || item.searchQuery.trim().isEmpty()
-                    ? item.title
-                    : item.searchQuery.trim();
-            CreatorGalleryTransition.start(activity, NativeFeedBrowserActivity.createCreatorGallery(
-                    activity,
-                    item.title,
-                    query,
-                    NativeFeedBrowserActivity.creatorProfileHint(item),
-                    CreatorGalleryPreloader.sessionId(activity, item)
-            ), anchor, item);
+            CreatorGalleryTransition.start(activity,
+                    NativeFeedBrowserActivity.createCreatorGallery(activity, item), anchor, item);
             return;
         }
         if (item.url == null || item.url.isEmpty()) return;
@@ -641,21 +633,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 spec,
                 CreatorGalleryPreloader.PRIORITY_HIGH
         );
-        String sessionId = CreatorGalleryPreloader.sessionId(activity, spec.cacheKey);
+        String sessionId = CreatorGalleryPreloader.sessionId(activity, spec.sessionKey);
         if (sessionId.isEmpty() && spec.grouped) {
             sessionId = CreatorGalleryPreloader.composeInMemoryMergedSession(activity, spec);
         }
-        CreatorGalleryTransition.start(activity, NativeFeedBrowserActivity.createCreatorGallery(
-                activity,
-                spec.item.title,
-                spec.query,
-                spec.profileHint,
-                sessionId,
-                spec.cacheKey,
-                spec.seedNames,
-                spec.seedUrls,
-                spec.seedImages
-        ), anchor, group.item);
+        CreatorGalleryTransition.start(activity,
+                NativeFeedBrowserActivity.createCreatorGallery(activity, spec, sessionId), anchor, group.item);
     }
 
     private void openShowDetails(NativeContentItem item) {

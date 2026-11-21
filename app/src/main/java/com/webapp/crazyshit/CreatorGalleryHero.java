@@ -238,7 +238,8 @@ final class CreatorGalleryHero {
     }
 
     private static String photoReferer(NativeContentItem item) {
-        if (WikiFeetRepository.isWikiFeetUrl(item.url) && WikiFeetRepository.isWikiFeetUrl(item.uploader)) return item.uploader;
+        String wikiFeetReferer = WikiFeetRepository.imageReferer(item);
+        if (!wikiFeetReferer.isEmpty()) return wikiFeetReferer;
         if (!FapelloRepository.isPostUrl(item.url) && FapelloRepository.isModelUrl(item.uploader)) return item.uploader;
         if (OnlyHavenRepository.isOnlyHavenUrl(item.uploader)) return item.uploader;
         return item.url;

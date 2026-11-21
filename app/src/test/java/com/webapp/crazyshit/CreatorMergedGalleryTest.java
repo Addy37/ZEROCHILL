@@ -4,7 +4,7 @@ import org.junit.After;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
-import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -151,8 +151,8 @@ public class CreatorMergedGalleryTest {
         Field discoveryField = state.getClass().getDeclaredField("discoveryQueries");
         discoveryField.setAccessible(true);
 
-        assertEquals(2, ((ArrayDeque<?>) fapelloField.get(state)).size());
-        assertEquals(1, ((ArrayDeque<?>) onlyHavenField.get(state)).size());
+        assertEquals(2, ((Deque<?>) fapelloField.get(state)).size());
+        assertEquals(1, ((Deque<?>) onlyHavenField.get(state)).size());
         assertEquals(3, ((java.util.Set<?>) discoveryField.get(state)).size());
     }
 }

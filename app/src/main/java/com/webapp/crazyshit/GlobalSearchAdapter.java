@@ -382,7 +382,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     private void requestRenderedThumbnail(NativeContentItem item, String rejectedUrl) {
-        if (item == null || item.isSection()) return;
+        if (item == null || item.isSection() || WikiFeetRepository.isRetiredItem(item)) return;
         if ((item.isSeries() || item.isCategory()) && !BunkrRepository.isAlbumUrl(item.url)) return;
         if (item.url == null || item.url.isEmpty()) return;
         if ((rejectedUrl == null || rejectedUrl.isEmpty()) &&
@@ -430,6 +430,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     private void loadImage(ImageView image, NativeContentItem item) {
         Glide.with(image).clear(image);
         image.setImageDrawable(new ColorDrawable(Color.rgb(31, 31, 36)));
+        if (WikiFeetRepository.isRetiredItem(item) && !item.imageUrl.startsWith("file://")) return;
 
         byte[] embedded = null;
         if (item.isSeries() || item.isCategory()) {
@@ -522,6 +523,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             if (entry.section || entry.item == null) continue;
             NativeContentItem item = entry.item;
             if (item.imageUrl == null || item.imageUrl.trim().isEmpty()) continue;
+            if (!item.imageUrl.startsWith("file://") && WikiFeetRepository.isRetiredItem(item)) continue;
             Object source = item.imageUrl.startsWith("file://")
                     ? item.imageUrl
                     : withSiteHeaders(item.imageUrl, imageReferer(item));
@@ -556,8 +558,8 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     private String imageReferer(NativeContentItem item) {
-        if (item != null && WikiFeetRepository.isWikiFeetUrl(item.url) &&
-                WikiFeetRepository.isWikiFeetUrl(item.uploader)) return item.uploader;
+        String wikiFeetReferer = WikiFeetRepository.imageReferer(item);
+        if (!wikiFeetReferer.isEmpty()) return wikiFeetReferer;
         return item == null ? null : item.url;
     }
 

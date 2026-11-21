@@ -428,8 +428,6 @@ public class SettingsActivity extends ComponentActivity {
                 + onOff(config.fapello.enabled)
                 + "\nBunkr: "
                 + onOff(config.bunkr.enabled)
-                + "\nWikiFeet: "
-                + onOff(config.wikiFeet.enabled)
                 + "\nWikiFeet X: "
                 + onOff(config.wikiFeetX.enabled)
                 + "\n\nStatus: "

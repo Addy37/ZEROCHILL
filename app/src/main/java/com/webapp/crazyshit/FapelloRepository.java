@@ -86,23 +86,41 @@ final class FapelloRepository {
     }
 
     List<Model> searchModels(Context context, String query, int limit) throws IOException {
+        return searchModels(context, query, limit, false);
+    }
+
+    List<Model> searchGalleryModels(Context context, String query, int limit) throws IOException {
+        return searchModels(context, query, limit, true);
+    }
+
+    private List<Model> searchModels(Context context, String query, int limit, boolean gallery)
+            throws IOException {
         requireEnabled();
         return searchModelsWithQueryFallback(query, limit, (name, offset, size) ->
                 fetchBody(context, searchUrl(name, size, offset), baseUrl(), true),
-                model -> fetchDocument(context, model.url, baseUrl()));
+                model -> fetchDocument(context, model.url, baseUrl()), gallery);
     }
 
     List<Model> searchModelsWithQueryFallback(String query, int limit, SearchQueryFetcher fetcher,
                                              SearchProfileFetcher profiles) throws IOException {
+        return searchModelsWithQueryFallback(query, limit, fetcher, profiles, false);
+    }
+
+    List<Model> searchModelsWithQueryFallback(String query, int limit, SearchQueryFetcher fetcher,
+                                             SearchProfileFetcher profiles, boolean gallery) throws IOException {
         String name = clean(query);
         List<Model> found = searchMatchingModels(name, limit,
-                (offset, size) -> fetcher.fetch(name, offset, size), profiles);
+                (offset, size) -> fetcher.fetch(name, offset, size), profiles, gallery);
         String compact = name.replaceAll("\\s+", "");
-        if (!found.isEmpty() || compact.equals(name)) return found;
-        // Fapello can return unrelated fuzzy results for spaced handles such as Carrot Soki.
-        // Keep the original matching/alias rules while retrying the compact handle once.
-        return searchMatchingModels(name, limit,
-                (offset, size) -> fetcher.fetch(compact, offset, size), profiles);
+        if (found.isEmpty() && !compact.equals(name)) {
+            // Retry the compact source query while keeping the original identity for verification.
+            found = searchMatchingModels(name, limit,
+                    (offset, size) -> fetcher.fetch(compact, offset, size), profiles, gallery);
+        }
+        if (!gallery || found.size() < 2) return found;
+        int best = CreatorGalleryMatch.fapelloRank(found.get(0), name);
+        return CreatorGalleryMatch.fapelloRank(found.get(1), name) == best
+                ? new ArrayList<>() : new ArrayList<>(found.subList(0, 1));
     }
 
     List<Model> searchMatchingModels(String query, int limit, SearchPageFetcher fetcher) throws IOException {
@@ -111,6 +129,11 @@ final class FapelloRepository {
 
     List<Model> searchMatchingModels(String query, int limit, SearchPageFetcher fetcher,
                                     SearchProfileFetcher profiles) throws IOException {
+        return searchMatchingModels(query, limit, fetcher, profiles, false);
+    }
+
+    private List<Model> searchMatchingModels(String query, int limit, SearchPageFetcher fetcher,
+                                            SearchProfileFetcher profiles, boolean gallery) throws IOException {
         String cleanQuery = clean(query);
         if (cleanQuery.isEmpty()) return new ArrayList<>();
         int safeLimit = Math.max(1, Math.min(8, limit));
@@ -133,12 +156,12 @@ final class FapelloRepository {
             }
             boolean exact = false;
             for (Model model : models) {
-                int rank = CreatorNameMatcher.rank(model.name, cleanQuery);
+                int rank = creatorRank(model, cleanQuery, gallery);
                 if (rank == Integer.MAX_VALUE) continue;
                 matches.putIfAbsent(canonicalKey(model.url), model);
                 if (rank == 0) exact = true;
             }
-            if (exact || matches.size() >= safeLimit) break;
+            if (exact || (!gallery && matches.size() >= safeLimit)) break;
             int count = models.size();
             more = false;
             try {
@@ -152,13 +175,21 @@ final class FapelloRepository {
             } catch (Exception ignored) { }
             // The API matches aliases but omits them from its JSON. Verify only a narrow,
             // complete result set against the creator header, never arbitrary page text.
-            if (matches.isEmpty() && !more && offset == 0 && models.size() <= 3 && profiles != null) {
+            if (!more && offset == 0 && models.size() <= 3 && profiles != null
+                    && (matches.isEmpty() || (gallery && !CreatorGalleryMatch.handle(cleanQuery).isEmpty()))) {
+                IOException aliasFailure = null;
                 for (Model model : models) {
                     if (Thread.currentThread().isInterrupted()) throw new IOException("Creator search interrupted");
-                    if (profileConfirmsAlias(profiles.fetch(model), model, cleanQuery)) {
-                        matches.putIfAbsent(canonicalKey(model.url), model);
+                    try {
+                        if (profileConfirmsAlias(profiles.fetch(model), model, cleanQuery)) {
+                            matches.put(canonicalKey(model.url), new Model(
+                                    model.name, model.url, model.imageUrl, model.username, cleanQuery));
+                        }
+                    } catch (IOException failure) {
+                        aliasFailure = failure;
                     }
                 }
+                if (matches.isEmpty() && aliasFailure != null) throw aliasFailure;
             }
             if (!more || count == 0) break;
             offset += count;
@@ -167,8 +198,15 @@ final class FapelloRepository {
             throw new IOException("Fapello search result window was incomplete; retry a more specific name");
         }
         ArrayList<Model> output = new ArrayList<>(matches.values());
-        output.sort(java.util.Comparator.comparingInt(model -> CreatorNameMatcher.rank(model.name, cleanQuery)));
-        return limitModels(output, safeLimit);
+        output.sort(java.util.Comparator.comparingInt(model -> creatorRank(model, cleanQuery, gallery)));
+        // Keep a second candidate for the caller's ambiguity check even when it requests one.
+        return limitModels(output, gallery ? Math.max(2, safeLimit) : safeLimit);
+    }
+
+    private static int creatorRank(Model model, String query, boolean gallery) {
+        int strongRank = CreatorGalleryMatch.fapelloRank(model, query);
+        if (gallery || strongRank == CreatorGalleryMatch.HANDLE) return strongRank;
+        return CreatorNameMatcher.rank(model.name, query);
     }
 
     static boolean profileConfirmsAlias(Document document, Model model, String query) {
@@ -180,10 +218,8 @@ final class FapelloRepository {
             if (CreatorNameMatcher.rank(heading.text(), model.name) != 0) continue;
             Element aliases = heading.nextElementSibling();
             if (aliases == null || !aliases.tagName().equals("p") || !aliases.hasClass("font-semibold")) continue;
-            String wanted = CreatorNameMatcher.normalized(query).replace(" ", "");
-            if (wanted.isEmpty()) return false;
             for (String alias : aliases.text().split(",")) {
-                if (CreatorNameMatcher.normalized(alias).replace(" ", "").equals(wanted)) return true;
+                if (CreatorGalleryMatch.exactName(query, alias)) return true;
             }
         }
         return false;
@@ -263,9 +299,10 @@ final class FapelloRepository {
         if (!(value instanceof JSONObject)) return;
         JSONObject object = (JSONObject) value;
         String url = normalizeUrl(first(object, "url", "profile_url", "profileUrl", "href"), baseUrl());
-        String name = clean(first(object, "name", "title", "username", "model"));
+        String name = clean(first(object, "displayName", "display_name", "name", "title", "username", "model"));
         if (isModelUrl(url) && !name.isEmpty()) {
-            models.putIfAbsent(canonicalKey(url), new Model(name, canonicalModelUrl(url), firstJsonImage(object)));
+            models.putIfAbsent(canonicalKey(url), new Model(name, canonicalModelUrl(url),
+                    firstJsonImage(object), first(object, "username", "handle"), ""));
         }
         for (String key : new String[]{"results", "models", "items", "data", "suggestions"}) {
             collectSearchModels(object.opt(key), models, depth + 1);
@@ -1656,11 +1693,21 @@ final class FapelloRepository {
         final String name;
         final String url;
         final String imageUrl;
+        final String username;
+        final String verifiedAlias;
 
         Model(String name, String url, String imageUrl) {
+            this(name, url, imageUrl, "", "");
+        }
+
+        Model(String name, String url, String imageUrl, String username, String verifiedAlias) {
             this.name = name == null ? "" : name.trim();
             this.url = url == null ? "" : url.trim();
             this.imageUrl = imageUrl == null ? "" : imageUrl.trim();
+            String explicitHandle = CreatorGalleryMatch.handle(username);
+            this.username = explicitHandle.isEmpty() ? CreatorGalleryMatch.handle(modelSlug(this.url))
+                    : explicitHandle;
+            this.verifiedAlias = cleanStatic(verifiedAlias);
         }
     }
 }

@@ -422,9 +422,13 @@ public class FavoritesActivity extends Activity {
 
         FrameLayout media = new FrameLayout(this);
         card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
-        if (item.content != null && !item.content.imageUrl.isEmpty())
+        boolean retired = WikiFeetRepository.isRetiredItem(item.content)
+                || WikiFeetRepository.isRetiredPageUrl(item.url);
+        if (!retired && item.content != null && !item.content.imageUrl.isEmpty()) {
             resolvedThumbnails.put(item.url, item.content.imageUrl);
-        FrameLayout thumbnail = makeThumbnail(item.url);
+        }
+        FrameLayout thumbnail = makeThumbnail(retired ? "" : item.url,
+                WikiFeetRepository.imageReferer(item.content));
         if (item.content != null && item.content.isImage() && thumbnail.getChildCount() > 1)
             thumbnail.getChildAt(1).setVisibility(View.GONE);
         media.addView(thumbnail, new FrameLayout.LayoutParams(-1, -1));
@@ -532,6 +536,10 @@ public class FavoritesActivity extends Activity {
     }
 
     private FrameLayout makeThumbnail(String pageUrl) {
+        return makeThumbnail(pageUrl, "");
+    }
+
+    private FrameLayout makeThumbnail(String pageUrl, String referer) {
         FrameLayout media = new FrameLayout(this);
         media.setBackgroundColor(UiPalette.SURFACE);
 
@@ -547,10 +555,11 @@ public class FavoritesActivity extends Activity {
         playParams.gravity = Gravity.CENTER;
         media.addView(play, playParams);
 
+        if (pageUrl.isEmpty() || WikiFeetRepository.isRetiredPageUrl(pageUrl)) return media;
         thumbnailTargets.computeIfAbsent(pageUrl, key -> new ArrayList<>()).add(image);
         String resolved = resolvedThumbnails.get(pageUrl);
         if (resolved != null && !resolved.isEmpty()) {
-            loadThumbnail(image, resolved, pageUrl);
+            loadThumbnail(image, resolved, pageUrl, referer);
         } else {
             requestThumbnail(pageUrl);
         }
@@ -571,13 +580,14 @@ public class FavoritesActivity extends Activity {
         List<ImageView> targets = thumbnailTargets.get(pageUrl);
         if (targets == null) return;
         for (ImageView target : new ArrayList<>(targets)) {
-            loadThumbnail(target, thumbnailUrl, pageUrl);
+            loadThumbnail(target, thumbnailUrl, pageUrl, "");
         }
     }
 
-    private void loadThumbnail(ImageView image, String imageUrl, String pageUrl) {
+    private void loadThumbnail(ImageView image, String imageUrl, String pageUrl, String referer) {
         if (isFinishing() || image == null || imageUrl == null || imageUrl.isEmpty()) return;
-        Object source = imageUrl.startsWith("file://") ? imageUrl : withSiteHeaders(imageUrl, pageUrl);
+        Object source = imageUrl.startsWith("file://") ? imageUrl
+                : withSiteHeaders(imageUrl, referer.isEmpty() ? pageUrl : referer);
         try {
             Glide.with(image)
                     .load(source)

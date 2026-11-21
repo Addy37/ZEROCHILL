@@ -236,7 +236,7 @@ public final class FapzoneCreatorSearchRepositoryTest {
         ContentPreference.set(context, ContentPreference.MEN);
         String profile = "https://cum.st/creators/onlyfans/nolan-1";
         OnlyHavenRepository.Creator creator = new OnlyHavenRepository.Creator("onlyfans", "nolan-1",
-                "Nolan", profile, "", 17, 0, "", "nolantwink");
+                "Nolan", profile, "", 17, 0, "", "nolantwink", "nolantwink");
         CreatorCategoryIndex.remember(context, ContentPreference.MEN, Collections.singletonList(creator));
         FapzoneCreatorSearchRepository repository = new FapzoneCreatorSearchRepository(executor,
                 Collections.singletonList((ignored, query, limit) -> {
@@ -253,6 +253,8 @@ public final class FapzoneCreatorSearchRepositoryTest {
             assertEquals(profile, found.get(0).url);
             assertEquals("Nolan", found.get(0).title);
             assertEquals("nolantwink", found.get(0).searchQuery);
+            assertTrue(found.get(0).creatorAliases.contains("nolantwink"));
+            assertEquals(Collections.singletonList(profile), found.get(0).creatorProfileUrls);
         } finally {
             ContentPreference.set(context, ContentPreference.ALL);
             executor.shutdownNow();
@@ -272,6 +274,42 @@ public final class FapzoneCreatorSearchRepositoryTest {
             List<NativeContentItem> found = repository.search(context, "Carrot Soki", 10);
             assertEquals(1, found.size());
             assertEquals(known.url, found.get(0).url);
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test public void completeSearchPreservesTwoProfilesWithIdenticalTitles() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        OnlyHavenRepository.Creator first = new OnlyHavenRepository.Creator("fansly", "42",
+                "ryn! >_<", "https://cum.st/creators/fansly/42", "", 7, 0, "", "rynkerbelle", "rynkerbelle");
+        OnlyHavenRepository.Creator second = new OnlyHavenRepository.Creator("onlyfans", "43",
+                "ryn! >_<", "https://cum.st/creators/onlyfans/43", "", 3, 0, "", "ryl-other", "ryl-other");
+        FapzoneCreatorSearchRepository repository = new FapzoneCreatorSearchRepository(executor,
+                Collections.singletonList((ignored, query, limit) -> Arrays.asList(
+                        FapzoneCreatorSearchRepository.onlyHavenItem(first, query),
+                        FapzoneCreatorSearchRepository.onlyHavenItem(second, query))));
+        try {
+            List<NativeContentItem> results = repository.search(context, "ryn", 10);
+            assertEquals(2, results.size());
+            assertEquals("rynkerbelle", results.get(0).searchQuery);
+            assertEquals("ryl-other", results.get(1).searchQuery);
+            assertEquals(first.url, results.get(0).url);
+            assertEquals(second.url, results.get(1).url);
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test public void handlePunctuationKeepsSearchCacheEntriesIndependent() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        AtomicInteger calls = new AtomicInteger();
+        FapzoneCreatorSearchRepository repository = new FapzoneCreatorSearchRepository(executor,
+                Collections.singletonList((ignored, query, limit) -> {
+                    calls.incrementAndGet();
+                    return Collections.singletonList(creator(query, "Fapello"));
+                }));
+        try {
+            assertEquals("example.handle", repository.search(null, "example.handle", 10).get(0).title);
+            assertEquals("example_handle", repository.search(null, "example_handle", 10).get(0).title);
+            assertEquals(2, calls.get());
         } finally { executor.shutdownNow(); }
     }
 

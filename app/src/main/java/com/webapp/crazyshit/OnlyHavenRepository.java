@@ -33,6 +33,7 @@ final class OnlyHavenRepository {
         final String imageUrl;
         final String headerImageUrl;
         final String searchAlias;
+        final String username;
         final int postCount;
         final int dmCount;
 
@@ -59,8 +60,14 @@ final class OnlyHavenRepository {
 
         Creator(String service, String id, String name, String url, String imageUrl,
                 int postCount, int dmCount, String headerImageUrl, String searchAlias) {
+            this(service, id, name, url, imageUrl, postCount, dmCount, headerImageUrl, searchAlias, "");
+        }
+
+        Creator(String service, String id, String name, String url, String imageUrl,
+                int postCount, int dmCount, String headerImageUrl, String searchAlias, String username) {
             this.headerImageUrl = cleanStatic(headerImageUrl);
             this.searchAlias = cleanStatic(searchAlias);
+            this.username = CreatorGalleryMatch.handle(username);
             this.service = cleanStatic(service);
             this.id = cleanStatic(id);
             this.name = cleanStatic(name);
@@ -76,22 +83,32 @@ final class OnlyHavenRepository {
     }
 
     List<Creator> searchCreators(Context context, String query, int limit) throws IOException {
+        return searchCreators(context, query, limit, false);
+    }
+
+    List<Creator> searchGalleryCreators(Context context, String query, int limit) throws IOException {
+        return searchCreators(context, query, limit, true);
+    }
+
+    private List<Creator> searchCreators(Context context, String query, int limit, boolean gallery)
+            throws IOException {
         SourceConfig.OnlyHaven config = config();
         if (!config.enabled) throw new IOException("OnlyHaven is temporarily unavailable");
         String value = query == null ? "" : query.trim();
         if (value.length() < 2) return new ArrayList<>();
         String encoded = URLEncoder.encode(value, "UTF-8").replace("+", "%20");
+        // A few broad provider hits should not consume the gallery candidate window.
+        int searchLimit = Math.max(gallery ? 20 : 1, Math.min(50, limit));
 
         IOException apiError = null;
         try {
             String apiRoute = config.creatorSearchApiRoute
                     .replace("{query}", encoded)
-                    .replace("{limit}", String.valueOf(Math.max(1, Math.min(50, limit))))
+                    .replace("{limit}", String.valueOf(searchLimit))
                     .replace("{offset}", "0");
             String body = fetchConfiguredText(context, config, config.baseUrl + apiRoute);
-            List<Creator> apiCreators =
-                    parseCreatorSearchJson(body, config, value, Math.max(1, limit));
-            if (!apiCreators.isEmpty()) return apiCreators;
+            List<Creator> apiCreators = parseCreatorSearchJson(body, config, value, searchLimit);
+            if (!apiCreators.isEmpty()) return gallery ? verifiedGalleryCreators(apiCreators, value) : apiCreators;
         } catch (IOException error) {
             apiError = error;
         }
@@ -104,7 +121,7 @@ final class OnlyHavenRepository {
         for (String route : routes) {
             try {
                 Document document = fetchConfigured(context, config, config.baseUrl + route);
-                parseCreators(document, config, creators, Math.max(1, limit));
+                parseCreators(document, config, creators, searchLimit);
                 creators.values().removeIf(creator -> !matchesCreatorQuery(value, creator.name,
                         creator.id, creator.searchAlias));
                 if (!creators.isEmpty()) break;
@@ -124,7 +141,7 @@ final class OnlyHavenRepository {
                             config.refererOverride.isEmpty() ? config.baseUrl : config.refererOverride,
                             "/creators/"
                     );
-                    parseCreators(rendered, config, creators, Math.max(1, limit));
+                    parseCreators(rendered, config, creators, searchLimit);
                     creators.values().removeIf(creator -> !matchesCreatorQuery(value, creator.name,
                             creator.id, creator.searchAlias));
                     if (!creators.isEmpty()) break;
@@ -135,7 +152,28 @@ final class OnlyHavenRepository {
         }
 
         if (creators.isEmpty() && lastError != null) throw lastError;
-        return new ArrayList<>(creators.values());
+        List<Creator> result = new ArrayList<>(creators.values());
+        return gallery ? verifiedGalleryCreators(result, value) : result;
+    }
+
+    static List<Creator> verifiedGalleryCreators(List<Creator> candidates, String query) {
+        Creator best = null;
+        int rank = CreatorGalleryMatch.NO_MATCH;
+        boolean ambiguous = false;
+        for (Creator candidate : candidates) {
+            int candidateRank = CreatorGalleryMatch.onlyHavenRank(candidate, query);
+            if (candidateRank == CreatorGalleryMatch.NO_MATCH) continue;
+            if (candidateRank < rank) {
+                best = candidate;
+                rank = candidateRank;
+                ambiguous = false;
+            } else if (candidateRank == rank && (!best.service.equalsIgnoreCase(candidate.service)
+                    || !best.id.equalsIgnoreCase(candidate.id))) {
+                ambiguous = true;
+            }
+        }
+        return best == null || ambiguous ? java.util.Collections.emptyList()
+                : java.util.Collections.singletonList(best);
     }
 
     /** The category filter is supplied by OnlyHaven itself, never inferred from a name. */
@@ -306,7 +344,9 @@ final class OnlyHavenRepository {
 
     static NativeContentItem creatorItem(Creator creator) {
         return new NativeContentItem(NativeContentItem.KIND_CREATOR, creator.name, creator.url,
-                creator.imageUrl, "", creator.url, "", "OnlyHaven", creator.searchAlias);
+                creator.imageUrl, "", creator.url, "", "OnlyHaven", creator.searchAlias)
+                .withCreatorIdentity(java.util.Collections.singletonList(creator.username),
+                        java.util.Collections.singletonList(creator.url));
     }
 
     List<Creator> parseCreatorSearchJson(
@@ -335,8 +375,11 @@ final class OnlyHavenRepository {
                 if (row == null) continue;
                 String service = firstJsonText(row, "service");
                 String id = firstJsonText(row, "id", "creatorId", "creator_id", "user");
-                String name = firstJsonText(row, "displayName", "display_name", "name", "username");
-                String alias = firstJsonText(row, "username", "user", "handle", "name");
+                String display = firstJsonText(row, "displayName", "display_name");
+                String name = display.isEmpty() ? firstJsonText(row, "name", "username") : display;
+                String username = firstJsonText(row, "username", "handle");
+                if (username.isEmpty() && !display.isEmpty()) username = firstJsonText(row, "name");
+                String alias = username.isEmpty() ? firstJsonText(row, "user", "name") : username;
                 // Only accept the provider's canonical service/id path segments.
                 if (!service.matches("[A-Za-z0-9_-]+") || !id.matches("[A-Za-z0-9_-]+")) continue;
                 if (name.isEmpty()) name = id;
@@ -365,7 +408,7 @@ final class OnlyHavenRepository {
                         key,
                         new Creator(service, id, name, url, image, postCount, dmCount,
                                 creatorHeaderImage(config, row, service, id),
-                                alias.isEmpty() ? name : alias)
+                                alias.isEmpty() ? name : alias, username)
                 );
             }
             return new ArrayList<>(result.values());
@@ -567,10 +610,7 @@ final class OnlyHavenRepository {
     }
 
     static boolean matchesHeaderCreator(String query, Creator creator) {
-        String wanted = CreatorNameMatcher.normalized(query);
-        return !wanted.isEmpty() && creator != null
-                && (wanted.equals(CreatorNameMatcher.normalized(creator.name))
-                || wanted.equals(CreatorNameMatcher.normalized(creator.id)));
+        return CreatorGalleryMatch.onlyHavenMatches(creator, query);
     }
 
     private String imageBase(SourceConfig.OnlyHaven config) {

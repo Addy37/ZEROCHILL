@@ -5,7 +5,9 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 /** Launch metadata for one Favorite Creator card, including manually grouped source profiles. */
@@ -15,7 +17,10 @@ final class CreatorGallerySpec {
     final NativeContentItem item;
     final String query;
     final String profileHint;
-    final String cacheKey;
+    final String cacheKey; // Persisted favorite and manual-group reference.
+    final String sessionKey;
+    final ArrayList<String> aliases;
+    final ArrayList<String> memberSessionKeys;
     final boolean grouped;
     final ArrayList<String> seedNames;
     final ArrayList<String> seedUrls;
@@ -29,16 +34,26 @@ final class CreatorGallerySpec {
             boolean grouped,
             ArrayList<String> seedNames,
             ArrayList<String> seedUrls,
-            ArrayList<String> seedImages
+            ArrayList<String> seedImages,
+            ArrayList<String> aliases,
+            ArrayList<String> memberSessionKeys
     ) {
         this.item = item;
         this.query = query;
         this.profileHint = profileHint;
         this.cacheKey = cacheKey;
+        this.sessionKey = sessionKey(query, profileHint, cacheKey, seedNames, seedUrls, aliases);
+        this.aliases = aliases;
+        this.memberSessionKeys = memberSessionKeys;
         this.grouped = grouped;
         this.seedNames = seedNames;
         this.seedUrls = seedUrls;
         this.seedImages = seedImages;
+    }
+
+    static CreatorGallerySpec from(NativeContentItem item) {
+        return from(new CreatorCatalog.FavoriteGroup(item, new java.util.LinkedHashMap<>(),
+                Collections.emptySet(), false));
     }
 
     static CreatorGallerySpec from(CreatorCatalog.FavoriteGroup group) {
@@ -61,11 +76,16 @@ final class CreatorGallerySpec {
         ArrayList<String> names = new ArrayList<>();
         ArrayList<String> urls = new ArrayList<>();
         ArrayList<String> images = new ArrayList<>();
+        LinkedHashSet<String> aliases = new LinkedHashSet<>(item.creatorAliases);
+        ArrayList<String> memberSessionKeys = new ArrayList<>();
+        Set<String> seenUrls = new HashSet<>();
         if (grouped) {
             Set<String> seenNames = new HashSet<>();
-            Set<String> seenUrls = new HashSet<>();
             for (NativeContentItem member : group.members.values()) {
-                if (member == null || names.size() >= MAX_SEEDS) break;
+                if (names.size() >= MAX_SEEDS) break;
+                if (member == null || WikiFeetRepository.isRetiredItem(member)) continue;
+                aliases.addAll(member.creatorAliases);
+                memberSessionKeys.add(from(member).sessionKey);
                 String name = clean(member.searchQuery);
                 if (name.isEmpty()) name = clean(member.title);
                 String normalizedName = CreatorNameMatcher.normalized(name);
@@ -84,7 +104,23 @@ final class CreatorGallerySpec {
                 images.add(clean(member.imageUrl));
             }
         }
+        List<NativeContentItem> members = new ArrayList<>();
+        members.add(item);
+        if (grouped) members.addAll(group.members.values());
+        for (NativeContentItem member : members) {
+            if (member == null || WikiFeetRepository.isRetiredItem(member)) continue;
+            for (String url : member.creatorProfileUrls) {
+                if (names.size() >= MAX_SEEDS) break;
+                if (!knownGallerySource(url)
+                        || !seenUrls.add(url.replaceAll("/+$", "").toLowerCase(Locale.US))) continue;
+                names.add("");
+                urls.add(url);
+                images.add("");
+            }
+        }
         String cacheKey = grouped ? groupedCacheKey(group, query) : query;
+        ArrayList<String> verifiedAliases = new ArrayList<>(aliases);
+        if (verifiedAliases.size() > MAX_SEEDS) verifiedAliases.subList(MAX_SEEDS, verifiedAliases.size()).clear();
         return new CreatorGallerySpec(
                 item,
                 query,
@@ -93,7 +129,9 @@ final class CreatorGallerySpec {
                 grouped,
                 names,
                 urls,
-                images
+                images,
+                verifiedAliases,
+                memberSessionKeys
         );
     }
 
@@ -104,8 +142,27 @@ final class CreatorGallerySpec {
                 || BunkrRepository.isAlbumUrl(url)) {
             return true;
         }
-        return WikiFeetRepository.isProfileUrl(url, WikiFeetRepository.Site.WIKIFEET)
-                || WikiFeetRepository.isProfileUrl(url, WikiFeetRepository.Site.WIKIFEET_X);
+        return WikiFeetRepository.isXProfileUrl(url);
+    }
+
+    static String sessionKey(String query, String profile, String favoriteKey,
+                             List<String> names, List<String> urls, List<String> aliases) {
+        ArrayList<String> evidence = new ArrayList<>();
+        addEvidence(evidence, "name:", names);
+        addEvidence(evidence, "profile:", urls);
+        addEvidence(evidence, "alias:", aliases);
+        Collections.sort(evidence);
+        return "creator-gallery:v3:" + digest(clean(query).toLowerCase(Locale.ROOT) + "\n"
+                + clean(profile) + "\n" + clean(favoriteKey).toLowerCase(Locale.ROOT)
+                + "\n" + String.join("\n", evidence));
+    }
+
+    private static void addEvidence(List<String> output, String type, List<String> values) {
+        if (values == null) return;
+        for (String value : values) {
+            String cleaned = clean(value);
+            if (!cleaned.isEmpty()) output.add(type + cleaned);
+        }
     }
 
     private static String groupedCacheKey(
@@ -126,7 +183,8 @@ final class CreatorGallerySpec {
                     .digest(value.getBytes(StandardCharsets.UTF_8));
             StringBuilder out = new StringBuilder();
             for (int i = 0; i < Math.min(12, bytes.length); i++) {
-                out.append(String.format(Locale.US, "%02x", bytes[i] & 0xff));
+                out.append(Character.forDigit((bytes[i] >> 4) & 0xf, 16));
+                out.append(Character.forDigit(bytes[i] & 0xf, 16));
             }
             return out.toString();
         } catch (Exception ignored) {

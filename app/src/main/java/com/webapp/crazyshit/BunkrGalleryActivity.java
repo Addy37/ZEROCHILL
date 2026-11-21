@@ -80,6 +80,11 @@ public final class BunkrGalleryActivity extends Activity {
     private GalleryContextMenu mediaContextMenu;
     private String albumTitle;
     private String albumUrl;
+    private ArrayList<String> creatorSeedNames;
+    private ArrayList<String> creatorSeedUrls;
+    private ArrayList<String> creatorSeedImages;
+    private ArrayList<String> creatorAliases;
+    private String creatorSessionKey;
     private String creatorQuery;
     private String fapelloProfileUrl;
     private String mediaFilter;
@@ -142,6 +147,15 @@ public final class BunkrGalleryActivity extends Activity {
         albumUrl = value(getIntent().getStringExtra(EXTRA_ALBUM_URL));
         creatorQuery = value(getIntent().getStringExtra(EXTRA_CREATOR_QUERY));
         fapelloProfileUrl = value(getIntent().getStringExtra(EXTRA_FAPELLO_PROFILE_URL));
+        creatorSeedNames = getIntent().getStringArrayListExtra(NativeFeedBrowserActivity.EXTRA_CREATOR_SEED_NAMES);
+        creatorSeedUrls = getIntent().getStringArrayListExtra(NativeFeedBrowserActivity.EXTRA_CREATOR_SEED_URLS);
+        creatorSeedImages = getIntent().getStringArrayListExtra(NativeFeedBrowserActivity.EXTRA_CREATOR_SEED_IMAGES);
+        creatorAliases = getIntent().getStringArrayListExtra(NativeFeedBrowserActivity.EXTRA_CREATOR_ALIASES);
+        String favoriteKey = value(getIntent().getStringExtra(
+                NativeFeedBrowserActivity.EXTRA_CREATOR_GALLERY_CACHE_KEY));
+        creatorSessionKey = CreatorGallerySpec.sessionKey(creatorQuery, fapelloProfileUrl,
+                favoriteKey.isEmpty() ? creatorQuery : favoriteKey,
+                creatorSeedNames, creatorSeedUrls, creatorAliases);
         mediaFilter = value(getIntent().getStringExtra(EXTRA_MEDIA_FILTER));
         if (!FILTER_PICTURES.equals(mediaFilter) && !FILTER_VIDEOS.equals(mediaFilter)) {
             mediaFilter = FILTER_ALL;
@@ -178,18 +192,21 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void initializeGallery(BunkrGallerySessionStore.Snapshot snapshot) {
+        if (isCreatorGallery() && snapshot != null && !creatorSessionKey.equals(snapshot.creatorQuery)) {
+            snapshot = null;
+        }
         if (snapshot == null) {
             sessionId = isCreatorGallery()
-                    ? BunkrGallerySessionStore.createCreator(albumTitle, albumUrl, creatorQuery)
+                    ? BunkrGallerySessionStore.createCreator(albumTitle, albumUrl, creatorSessionKey)
                     : BunkrGallerySessionStore.create(albumTitle, albumUrl);
             if (isCreatorGallery()) {
                 creatorGalleryRepository.reset(
-                        sessionId, creatorQuery, fapelloProfileUrl, albumTitle);
+                        sessionId, creatorQuery, fapelloProfileUrl, albumTitle,
+                        creatorSeedNames, creatorSeedUrls, creatorSeedImages, creatorAliases);
             }
         } else {
             albumTitle = snapshot.title;
             albumUrl = snapshot.albumUrl;
-            if (!snapshot.creatorQuery.isEmpty()) creatorQuery = snapshot.creatorQuery;
             currentPage = snapshot.currentPage;
             endReached = snapshot.endReached;
         }
@@ -359,7 +376,8 @@ public final class BunkrGalleryActivity extends Activity {
             try {
                 BunkrCreatorGalleryRepository.Batch creatorBatch = isCreatorGallery()
                         ? creatorGalleryRepository.fetchNext(
-                                this, sessionId, creatorQuery, fapelloProfileUrl, albumTitle)
+                                this, sessionId, creatorQuery, fapelloProfileUrl, albumTitle,
+                                creatorSeedNames, creatorSeedUrls, creatorSeedImages, creatorAliases, null)
                         : null;
                 List<NativeContentItem> result = creatorBatch == null
                         ? repository.fetchAlbum(this, albumUrl, 1)
@@ -423,7 +441,8 @@ public final class BunkrGalleryActivity extends Activity {
             try {
                 BunkrCreatorGalleryRepository.Batch creatorBatch = isCreatorGallery()
                         ? creatorGalleryRepository.fetchNext(
-                                this, sessionId, creatorQuery, fapelloProfileUrl, albumTitle)
+                                this, sessionId, creatorQuery, fapelloProfileUrl, albumTitle,
+                                creatorSeedNames, creatorSeedUrls, creatorSeedImages, creatorAliases, null)
                         : null;
                 List<NativeContentItem> result = creatorBatch == null
                         ? repository.fetchAlbum(this, albumUrl, requestPage)
@@ -740,10 +759,7 @@ public final class BunkrGalleryActivity extends Activity {
                 return;
             }
             try {
-                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(
-                        this,
-                        item.url
-                );
+                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(this, item);
                 if (!hasPlayableStream(resolved)) throw new IOException("Media source returned no playable URL");
                 runOnUiThread(() -> {
                     if (!canApplyMediaResult(requestGeneration)) return;
@@ -810,7 +826,7 @@ public final class BunkrGalleryActivity extends Activity {
                 return;
             }
             try {
-                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(this, item.url);
+                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(this, item);
                 if (!hasPlayableStream(resolved)) throw new IOException("Media source returned no playable URL");
                 runOnUiThread(() -> {
                     if (!canApplyMediaResult(requestGeneration)) return;
@@ -883,10 +899,7 @@ public final class BunkrGalleryActivity extends Activity {
         int requestGeneration = generation;
         mediaIo.execute(() -> {
             try {
-                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(
-                        this,
-                        item.url
-                );
+                CrazyShitRepository.StreamInfo resolved = PlayableSourceRouter.resolve(this, item);
                 if (!hasPlayableStream(resolved)) throw new IOException("Media source returned no playable URL");
                 runOnUiThread(() -> {
                     if (!canApplyMediaResult(requestGeneration) ||
@@ -1438,7 +1451,7 @@ public final class BunkrGalleryActivity extends Activity {
         ArrayList<NativeContentItem> filtered = new ArrayList<>();
         if (items == null) return filtered;
         for (NativeContentItem item : items) {
-            if (item == null) continue;
+            if (item == null || WikiFeetRepository.isRetiredItem(item)) continue;
             if (FILTER_PICTURES.equals(mediaFilter) && !item.isImage()) continue;
             if (FILTER_VIDEOS.equals(mediaFilter) && !item.isVideo()) continue;
             filtered.add(item);

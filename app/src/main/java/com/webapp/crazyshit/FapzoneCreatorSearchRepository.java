@@ -6,10 +6,8 @@ import android.os.SystemClock;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -46,7 +44,7 @@ final class FapzoneCreatorSearchRepository {
         List<NativeContentItem> search(Context context, String query, int limit) throws IOException;
     }
 
-    /** Implementations verify names or profile aliases before returning creator results. */
+    /** Source validates its own suggestion matches, including verified profile aliases. */
     interface ConfirmedSourceSearch extends SourceSearch { }
 
     interface CategorySourceSearch {
@@ -63,10 +61,7 @@ final class FapzoneCreatorSearchRepository {
         searchIo = SEARCH_IO;
         sources = new ArrayList<>();
         sources.add((ConfirmedSourceSearch) this::fromFapello);
-        sources.add((context, query, limit) -> fromWikiFeet(
-                context, WikiFeetRepository.Site.WIKIFEET, query, limit));
-        sources.add((context, query, limit) -> fromWikiFeet(
-                context, WikiFeetRepository.Site.WIKIFEET_X, query, limit));
+        sources.add(this::fromWikiFeetX);
         sources.add(this::fromOnlyHaven);
         categorySource = this::fromOnlyHaven;
         cache = SHARED_CACHE;
@@ -99,7 +94,9 @@ final class FapzoneCreatorSearchRepository {
             ResultListener listener
     ) throws IOException {
         String cleanQuery = query == null ? "" : query.trim();
-        if (cleanQuery.length() < 2) return new ArrayList<>();
+        if (cleanQuery.length() < 2 || CreatorNameMatcher.normalized(cleanQuery).isEmpty()) {
+            return new ArrayList<>();
+        }
         int safeLimit = Math.max(1, Math.min(20, limit));
         ContentPreference preference = context == null ? ContentPreference.ALL : ContentPreference.get(context);
         ArrayList<NativeContentItem> learned = new ArrayList<>();
@@ -132,6 +129,7 @@ final class FapzoneCreatorSearchRepository {
                 ArrayList<NativeContentItem> confirmed = new ArrayList<>();
                 for (NativeContentItem item : items) {
                     if (hasUsableDisplayName(item) && item.isCreator()
+                            && !WikiFeetRepository.isRetiredItem(item)
                             && (source instanceof ConfirmedSourceSearch || matchesQuery(item, cleanQuery))) {
                         confirmed.add(item);
                     }
@@ -140,7 +138,7 @@ final class FapzoneCreatorSearchRepository {
             }));
         }
 
-        LinkedHashMap<String, CreatorGroup> groups = new LinkedHashMap<>();
+        ArrayList<NativeContentItem> network = new ArrayList<>();
         int replies = 0;
         int successes = 0;
         long deadline = SystemClock.elapsedRealtime() + SEARCH_BUDGET_MS;
@@ -154,14 +152,9 @@ final class FapzoneCreatorSearchRepository {
                 List<NativeContentItem> items = reply.get();
                 if (items == null) throw new IOException("Creator source returned no response");
                 successes++;
-                if (items != null) {
-                    for (NativeContentItem item : items) {
-                        add(groups, item);
-                    }
-                }
-                if (listener != null && replies < requests.size() && !groups.isEmpty()) {
-                    publish(listener, OnlyFapCreatorResults.merge(
-                            learned, snapshot(groups, safeLimit), safeLimit), false);
+                network.addAll(items);
+                if (listener != null && replies < requests.size() && !network.isEmpty()) {
+                    publish(listener, OnlyFapCreatorResults.merge(learned, network, safeLimit), false);
                 }
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
@@ -179,7 +172,8 @@ final class FapzoneCreatorSearchRepository {
             throw new IOException("OnlyFap creator search could not be reached");
         }
 
-        List<NativeContentItem> networkItems = snapshot(groups, 20);
+        network.sort(java.util.Comparator.comparingInt(item -> relevance(item, cleanQuery)));
+        List<NativeContentItem> networkItems = OnlyFapCreatorResults.merge(null, network, 20);
         ArrayList<NativeContentItem> output = new ArrayList<>(
                 OnlyFapCreatorResults.merge(learned, networkItems, safeLimit));
         if (output.isEmpty() && successes < requests.size()) {
@@ -195,20 +189,9 @@ final class FapzoneCreatorSearchRepository {
 
     private String cacheKey(String query, ContentPreference preference) {
         SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
-        return CreatorNameMatcher.normalized(query) + "|" + preference.name() + "|"
+        // Preserve handle punctuation: different accounts can share a fuzzy search key.
+        return query.toLowerCase(java.util.Locale.ROOT) + "|" + preference.name() + "|"
                 + (config == null ? "unset" : config.schemaVersion + ":" + config.configVersion);
-    }
-
-    private ArrayList<NativeContentItem> snapshot(
-            LinkedHashMap<String, CreatorGroup> groups,
-            int limit
-    ) {
-        ArrayList<NativeContentItem> output = new ArrayList<>();
-        for (CreatorGroup group : groups.values()) {
-            output.add(group.item());
-            if (output.size() >= limit) break;
-        }
-        return output;
     }
 
     private void publish(
@@ -227,22 +210,17 @@ final class FapzoneCreatorSearchRepository {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         for (FapelloRepository.Model model :
                 new FapelloRepository().searchConfirmedModels(context, query, limit)) {
-            NativeContentItem item = CreatorCatalog.fromModel(model);
-            result.add(new NativeContentItem(item.kind, item.title, item.url, item.imageUrl,
-                    item.views, item.uploader, item.comments, "Fapello", item.searchQuery));
+            result.add(CreatorCatalog.fromModel(model));
         }
         return result;
     }
 
-    private List<NativeContentItem> fromWikiFeet(
-            Context context,
-            WikiFeetRepository.Site site,
-            String query,
-            int limit
-    ) throws IOException {
+    private List<NativeContentItem> fromWikiFeetX(Context context, String query, int limit)
+            throws IOException {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         for (WikiFeetRepository.Creator creator :
-                new WikiFeetRepository().searchCreators(context, site, query, limit)) {
+                new WikiFeetRepository().searchCreators(
+                        context, WikiFeetRepository.Site.WIKIFEET_X, query, limit)) {
             result.add(creator.asItem());
         }
         return result;
@@ -287,13 +265,20 @@ final class FapzoneCreatorSearchRepository {
                 CreatorNameMatcher.rank(creator.searchAlias, query) != Integer.MAX_VALUE
                         || CreatorNameMatcher.rank(creator.name, query) != Integer.MAX_VALUE
                         ? creator.searchAlias : creator.id
-        );
+        ).withCreatorIdentity(java.util.Collections.singletonList(creator.username),
+                java.util.Collections.singletonList(creator.url));
+    }
+
+    private int relevance(NativeContentItem item, String query) {
+        for (String alias : item.creatorAliases) {
+            if (CreatorGalleryMatch.exactHandle(query, alias)) return -1;
+        }
+        return OnlyFapCreatorResults.rank(item, query);
     }
 
     private boolean matchesQuery(NativeContentItem item, String query) {
         if (item == null || !item.isCreator()) return false;
-        return CreatorNameMatcher.rank(item.title, query) != Integer.MAX_VALUE
-                || CreatorNameMatcher.rank(item.searchQuery, query) != Integer.MAX_VALUE;
+        return OnlyFapCreatorResults.rank(item, query) != Integer.MAX_VALUE;
     }
 
     private boolean hasUsableDisplayName(NativeContentItem item) {
@@ -310,62 +295,6 @@ final class FapzoneCreatorSearchRepository {
             if (!Character.isDigit(compact.charAt(i))) return true;
         }
         return false;
-    }
-
-    private void add(Map<String, CreatorGroup> groups, NativeContentItem item) {
-        if (item == null || !item.isCreator() || item.title.trim().isEmpty()) return;
-        String key = CreatorNameMatcher.normalized(item.title);
-        CreatorGroup group = groups.get(key);
-        if (group == null) groups.put(key, new CreatorGroup(item));
-        else group.add(item);
-    }
-
-    private static final class CreatorGroup {
-        private NativeContentItem preferred;
-        private String fapelloProfileUrl = "";
-        private String onlyHavenDetails = "";
-        private String postCount = "";
-        private final Set<String> sources = new LinkedHashSet<>();
-
-        CreatorGroup(NativeContentItem first) { add(first); }
-
-        void add(NativeContentItem item) {
-            if (FapelloRepository.isModelUrl(item.url)) fapelloProfileUrl = item.url;
-            if (preferred == null || (preferred.imageUrl.isEmpty() && !item.imageUrl.isEmpty())) {
-                preferred = item;
-            } else {
-                preferred = preferred.merge(item);
-            }
-            String description = item.description == null ? "" : item.description.trim();
-            String label = description.split(" ·", 2)[0].trim();
-            if (!label.isEmpty()) sources.add(label);
-            if (description.startsWith("OnlyHaven")) onlyHavenDetails = description;
-            if (item.views != null && !item.views.trim().isEmpty()) postCount = item.views.trim();
-        }
-
-        NativeContentItem item() {
-            return new NativeContentItem(NativeContentItem.KIND_CREATOR, preferred.title,
-                    fapelloProfileUrl.isEmpty() ? preferred.url : fapelloProfileUrl,
-                    preferred.imageUrl, postCount, preferred.uploader, "",
-                    sourceDetails(), preferred.searchQuery);
-        }
-
-        private String sourceLabel() {
-            ArrayList<String> ordered = new ArrayList<>();
-            for (String label : new String[]{"Fapello", "OnlyHaven", "WikiFeet", "WikiFeet X"}) {
-                if (sources.contains(label)) ordered.add(label);
-            }
-            for (String label : sources) if (!ordered.contains(label)) ordered.add(label);
-            return String.join(" + ", ordered);
-        }
-
-        private String sourceDetails() {
-            String sourcesText = sourceLabel();
-            if (onlyHavenDetails.isEmpty()) return sourcesText;
-            int separator = onlyHavenDetails.indexOf(" · ");
-            if (separator < 0) return sourcesText;
-            return sourcesText + onlyHavenDetails.substring(separator);
-        }
     }
 
     private static String serviceLabel(String service) {

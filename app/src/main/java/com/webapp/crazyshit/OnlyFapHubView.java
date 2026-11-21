@@ -1492,17 +1492,13 @@ final class OnlyFapHubView extends FrameLayout {
                             creator.imageUrl
                     );
                 } else {
-                    String query = clean(creator.searchQuery).isEmpty()
-                            ? creator.title
-                            : creator.searchQuery;
-                    model = chooseFapelloMatch(
-                            query,
-                            fapello.searchConfirmedModels(
-                                    getContext().getApplicationContext(),
-                                    query,
-                                    6
-                            )
-                    );
+                    String query = heroIdentityQuery(creator);
+                    List<FapelloRepository.Model> matches = fapello.searchGalleryModels(
+                            getContext().getApplicationContext(), query, 6);
+                    if (!matches.isEmpty() && (!heroHasVerifiedHandle(creator, query)
+                            || CreatorGalleryMatch.fapelloRank(matches.get(0), query) == CreatorGalleryMatch.HANDLE)) {
+                        model = matches.get(0);
+                    }
                 }
 
                 if (model != null) {
@@ -1563,20 +1559,22 @@ final class OnlyFapHubView extends FrameLayout {
             if (active && !closed && generation == heroGeneration && portraitArtwork.size() < 2) {
                 try {
                     OnlyHavenRepository repository = new OnlyHavenRepository();
-                    String query = clean(creator.searchQuery).isEmpty()
-                            ? creator.title
-                            : creator.searchQuery;
-                    OnlyHavenRepository.Creator best;
-                    if (mode != ContentPreference.ALL) {
-                        // Resolve the exact category profile, never a name-based substitute.
+                    String query = heroIdentityQuery(creator);
+                    OnlyHavenRepository.Creator best = null;
+                    if (mode != ContentPreference.ALL || OnlyHavenRepository.isOnlyHavenUrl(creator.url)) {
+                        // Use the selected source profile when the card supplies one.
                         java.util.regex.Matcher profile = RemoteSourceConfigManager.snapshot()
                                 .onlyHaven.creatorUrlPattern.matcher(creator.url);
                         best = profile.find() && profile.groupCount() >= 2
                                 ? new OnlyHavenRepository.Creator(profile.group(1), profile.group(2),
                                         creator.title, creator.url, creator.imageUrl) : null;
                     } else {
-                        best = chooseOnlyHavenMatch(query, repository.searchCreators(
-                                getContext().getApplicationContext(), query, 6));
+                        List<OnlyHavenRepository.Creator> matches = repository.searchGalleryCreators(
+                                getContext().getApplicationContext(), query, 6);
+                        if (!matches.isEmpty() && (!heroHasVerifiedHandle(creator, query)
+                                || CreatorGalleryMatch.onlyHavenRank(matches.get(0), query) == CreatorGalleryMatch.HANDLE)) {
+                            best = matches.get(0);
+                        }
                     }
                     if (best != null) {
                         // Filtered mode needs creator diversity before alternatives for one creator.
@@ -1695,40 +1693,13 @@ final class OnlyFapHubView extends FrameLayout {
         finally { if (!handedOff) releaseQualification(target); }
     }
 
-    private FapelloRepository.Model chooseFapelloMatch(
-            String query,
-            List<FapelloRepository.Model> matches
-    ) {
-        if (matches == null || matches.isEmpty()) return null;
-        FapelloRepository.Model best = null;
-        int bestRank = Integer.MAX_VALUE;
-        for (FapelloRepository.Model candidate : matches) {
-            if (candidate == null) continue;
-            int rank = CreatorNameMatcher.rank(candidate.name, query);
-            if (rank < bestRank) {
-                best = candidate;
-                bestRank = rank;
-            }
-        }
-        return bestRank == Integer.MAX_VALUE ? null : best;
+    private String heroIdentityQuery(NativeContentItem creator) {
+        if (!creator.creatorAliases.isEmpty()) return creator.creatorAliases.get(0);
+        return clean(creator.searchQuery).isEmpty() ? creator.title : creator.searchQuery;
     }
 
-    private OnlyHavenRepository.Creator chooseOnlyHavenMatch(
-            String query,
-            List<OnlyHavenRepository.Creator> matches
-    ) {
-        if (matches == null || matches.isEmpty()) return null;
-        OnlyHavenRepository.Creator best = null;
-        int bestRank = Integer.MAX_VALUE;
-        for (OnlyHavenRepository.Creator candidate : matches) {
-            if (candidate == null) continue;
-            int rank = CreatorNameMatcher.rank(candidate.name, query);
-            if (rank < bestRank) {
-                best = candidate;
-                bestRank = rank;
-            }
-        }
-        return bestRank == Integer.MAX_VALUE ? null : best;
+    private boolean heroHasVerifiedHandle(NativeContentItem creator, String query) {
+        return !creator.creatorAliases.isEmpty() && !CreatorGalleryMatch.handle(query).isEmpty();
     }
 
     private void addHeroCandidate(HeroCandidate candidate) {

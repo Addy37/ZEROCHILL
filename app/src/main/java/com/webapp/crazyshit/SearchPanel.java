@@ -708,10 +708,7 @@ final class SearchPanel {
     private void openCreator(NativeContentItem item) {
         RecentSearchStore.remember(activity, input.getText().toString());
         BrowseUi.hideKeyboard(activity, input);
-        activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(activity, item.title,
-                item.searchQuery.isEmpty() ? item.title : item.searchQuery,
-                NativeFeedBrowserActivity.creatorProfileHint(item),
-                CreatorGalleryPreloader.sessionId(activity, item)));
+        activity.startActivity(NativeFeedBrowserActivity.createCreatorGallery(activity, item));
     }
 
     private void publishCreators(List<NativeContentItem> next) {

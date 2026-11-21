@@ -12,11 +12,20 @@ final class SavedGalleryMedia {
     static final String EXTRA_CREATOR_GALLERY = "saved_media_creator_gallery";
 
     static void open(Activity activity, NativeContentItem item) {
+        if (item == null) return;
+        if (WikiFeetRepository.isRetiredItem(item)) {
+            showUnavailable(activity);
+            return;
+        }
         activity.startActivity(viewer(activity, item));
     }
 
     static void open(Activity activity, FavoriteStore.Item saved) {
         if (saved == null || saved.content == null) return;
+        if (WikiFeetRepository.isRetiredItem(saved.content)) {
+            showUnavailable(activity);
+            return;
+        }
         Intent intent = viewer(activity, saved.content);
         if (saved.mediaFavorite && saved.content.isImage()) {
             intent.putExtra(EXTRA_FAVORITE, true);
@@ -24,6 +33,11 @@ final class SavedGalleryMedia {
             if (gallery != null) intent.putExtra(EXTRA_CREATOR_GALLERY, gallery);
         }
         activity.startActivity(intent);
+    }
+
+    private static void showUnavailable(Activity activity) {
+        ZeroChillToast.makeText(activity, "This saved image source is unavailable.",
+                ZeroChillToast.LENGTH_SHORT).show();
     }
 
     private static Intent viewer(Activity activity, NativeContentItem item) {
@@ -40,19 +54,23 @@ final class SavedGalleryMedia {
     static Intent creatorGallery(Activity activity, FavoriteStore.Item saved) {
         if (saved == null || saved.content == null) return null;
         String key = saved.galleryKey.trim();
+        boolean retired = WikiFeetRepository.isRetiredItem(saved.content);
         if (!key.isEmpty()) {
             for (CreatorCatalog.FavoriteGroup group : CreatorCatalog.favoriteGroups(activity)) {
                 CreatorGallerySpec spec = CreatorGallerySpec.from(group);
-                if (key.equalsIgnoreCase(spec.cacheKey)) return galleryIntent(activity, spec);
+                if (key.equalsIgnoreCase(spec.cacheKey) && (!retired || !spec.profileHint.isEmpty()
+                        || spec.seedUrls.stream().anyMatch(url -> !url.isEmpty()))) {
+                    return galleryIntent(activity, spec);
+                }
             }
         }
+        if (retired) return null;
         NativeContentItem creator = OnlyFapVideoMetadata.creator(saved.content);
         if (creator == null) creator = ShitTokCreatorMetadata.creatorIdentity(null, saved.content);
-        if (creator == null && (WikiFeetRepository.isProfileUrl(saved.content.uploader, WikiFeetRepository.Site.WIKIFEET)
-                || WikiFeetRepository.isProfileUrl(saved.content.uploader, WikiFeetRepository.Site.WIKIFEET_X))) {
+        if (WikiFeetRepository.isXProfileUrl(saved.content.uploader)) {
             String name = saved.content.title.replaceFirst("\\s+#\\d+$", "").trim();
             if (!name.isEmpty()) creator = new NativeContentItem(NativeContentItem.KIND_CREATOR,
-                    name, saved.content.uploader, "", "", "", "", "WikiFeet", name);
+                    name, saved.content.uploader, "", "", "", "", "WikiFeet X", name);
         }
         // Existing single-creator gallery keys are saved search queries. Merged hashes
         // cannot be used as a creator name if the original group is no longer present.
@@ -73,11 +91,9 @@ final class SavedGalleryMedia {
     }
 
     private static Intent galleryIntent(Activity activity, CreatorGallerySpec spec) {
-        String session = CreatorGalleryPreloader.sessionId(activity, spec.cacheKey);
+        String session = CreatorGalleryPreloader.sessionId(activity, spec.sessionKey);
         if (session.isEmpty() && spec.grouped)
             session = CreatorGalleryPreloader.composeInMemoryMergedSession(activity, spec);
-        return NativeFeedBrowserActivity.createCreatorGallery(activity, spec.item.title,
-                spec.query, spec.profileHint, session, spec.cacheKey,
-                spec.seedNames, spec.seedUrls, spec.seedImages);
+        return NativeFeedBrowserActivity.createCreatorGallery(activity, spec, session);
     }
 }

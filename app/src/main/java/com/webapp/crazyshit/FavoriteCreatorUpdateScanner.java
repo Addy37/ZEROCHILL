@@ -60,11 +60,12 @@ final class FavoriteCreatorUpdateScanner {
                 }
                 if (album.isEmpty()) throw new IOException("Favorite creator album not found");
                 result = repository.fetchAlbum(context, album, 1);
-            } else {
-                WikiFeetRepository.Site site = "wikifeetx".equals(source)
-                        ? WikiFeetRepository.Site.WIKIFEET_X : WikiFeetRepository.Site.WIKIFEET;
+            } else if ("wikifeetx".equals(source)) {
                 result = new WikiFeetRepository().fetchCreatorMedia(context,
-                        new WikiFeetRepository.Creator(site, name, item.url, item.imageUrl, 0), 1, MAX_MEDIA_PER_PROFILE);
+                        new WikiFeetRepository.Creator(WikiFeetRepository.Site.WIKIFEET_X,
+                                name, item.url, item.imageUrl, 0), 1, MAX_MEDIA_PER_PROFILE);
+            } else {
+                return java.util.Collections.emptyList();
             }
             ArrayList<NativeContentItem> media = new ArrayList<>();
             for (NativeContentItem content : result) {
@@ -97,13 +98,12 @@ final class FavoriteCreatorUpdateScanner {
         return selected;
     }
 
-    private static String profileSource(NativeContentItem item) {
+    static String profileSource(NativeContentItem item) {
+        if (WikiFeetRepository.isRetiredItem(item)) return "";
         if (FapelloRepository.isModelUrl(item.url) || item.url.isEmpty()) return "fapello";
         if (OnlyHavenRepository.isOnlyHavenUrl(item.url)) return "onlyhaven";
         if (BunkrRepository.isBunkrUrl(item.url) || BunkrRepository.isBalbumsUrl(item.url)) return "bunkr";
-        for (WikiFeetRepository.Site site : WikiFeetRepository.Site.values())
-            if (WikiFeetRepository.isProfileUrl(item.url, site)) return site.id;
-        return "";
+        return WikiFeetRepository.isXProfileUrl(item.url) ? "wikifeetx" : "";
     }
 
     static NotificationCoordinator.SourceAlert detect(SharedPreferences state, Profile profile,

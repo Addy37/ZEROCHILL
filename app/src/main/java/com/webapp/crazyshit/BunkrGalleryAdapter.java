@@ -844,8 +844,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private String imageReferer(NativeContentItem item) {
-        if (item != null && WikiFeetRepository.isWikiFeetUrl(item.url) &&
-                WikiFeetRepository.isWikiFeetUrl(item.uploader)) return item.uploader;
+        String wikiFeetReferer = WikiFeetRepository.imageReferer(item);
+        if (!wikiFeetReferer.isEmpty()) return wikiFeetReferer;
         if (item != null && !FapelloRepository.isPostUrl(item.url) &&
                 FapelloRepository.isModelUrl(item.uploader)) return item.uploader;
         if (item != null && OnlyHavenRepository.isOnlyHavenUrl(item.uploader)) {
@@ -865,14 +865,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 containsIgnoreCase(item.description, "OnlyHaven")) {
             return new SourceBadge(R.drawable.ic_source_onlyhaven, "OnlyHaven", false);
         }
-        if (WikiFeetRepository.isWikiFeetUrl(item.url) ||
-                WikiFeetRepository.isWikiFeetUrl(item.uploader)) {
-            if (containsIgnoreCase(item.uploader, "wikifeetx") ||
-                    containsIgnoreCase(item.views, "wikifeet x") ||
-                    containsIgnoreCase(item.description, "wikifeet x")) {
-                return new SourceBadge(R.drawable.ic_source_wikifeet, "WikiFeet X", true);
-            }
-            return new SourceBadge(R.drawable.ic_source_wikifeet, "WikiFeet", false);
+        if (WikiFeetRepository.isXItem(item)) {
+            return new SourceBadge(R.drawable.ic_source_wikifeet, "WikiFeet X", true);
         }
         if (BunkrRepository.isBunkrUrl(item.url)) {
             return new SourceBadge(R.drawable.ic_source_bunkr, "Bunkr", false);

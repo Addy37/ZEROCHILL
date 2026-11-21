@@ -50,6 +50,11 @@ final class CreatorProfileHeader extends LinearLayout {
             String url,
             String galleryCacheKey
     ) {
+        this(context, title, query, url, galleryCacheKey, java.util.Collections.emptyList());
+    }
+
+    CreatorProfileHeader(Context context, String title, String query, String url,
+                         String galleryCacheKey, java.util.List<String> aliases) {
         super(context);
         setOrientation(VERTICAL);
         setBackgroundColor(Color.BLACK);
@@ -65,13 +70,25 @@ final class CreatorProfileHeader extends LinearLayout {
                 "",
                 query
         );
+        String profileKey = OnlyFapCreatorResults.profileKey(url);
+        NativeContentItem matching = null;
         for (NativeContentItem item : CreatorCatalog.all(context)) {
-            if (CreatorFavoriteStore.key(item).equals(CreatorFavoriteStore.key(found))) {
-                found = item;
-                break;
+            if (WikiFeetRepository.isRetiredItem(item)) continue;
+            if (!profileKey.isEmpty()) {
+                if (profileKey.equals(OnlyFapCreatorResults.profileKey(item.url))) {
+                    matching = item;
+                    break;
+                }
+            } else if (CreatorFavoriteStore.key(item).equals(CreatorFavoriteStore.key(found))) {
+                if (matching != null && !OnlyFapCreatorResults.key(matching)
+                        .equals(OnlyFapCreatorResults.key(item))) {
+                    matching = null;
+                    break;
+                }
+                matching = item;
             }
         }
-        creator = found;
+        creator = matching == null ? found : matching;
         CreatorCatalog.FavoriteGroup mergedGroup =
                 CreatorMergeUi.findManualGroup(context, galleryCacheKey);
 
@@ -175,22 +192,31 @@ final class CreatorProfileHeader extends LinearLayout {
         loadAvatar(avatar);
         showHero(creator.imageUrl, creator.url);
 
-        loadOnlyHavenHero(query);
+        loadOnlyHavenHero(query, url, aliases);
         refresh();
     }
 
-    private void loadOnlyHavenHero(String query) {
-        String cleanQuery = query == null ? "" : query.trim();
+    private void loadOnlyHavenHero(String query, String selectedUrl, java.util.List<String> aliases) {
+        boolean verifiedTerm = aliases != null && !aliases.isEmpty();
+        String cleanQuery = verifiedTerm ? aliases.get(0) : query == null ? "" : query.trim();
+        String selectedOnlyHaven = OnlyHavenRepository.isOnlyHavenUrl(selectedUrl)
+                ? OnlyFapCreatorResults.profileKey(selectedUrl) : "";
         if (cleanQuery.length() < 2) return;
         Context appContext = getContext().getApplicationContext();
         heroIo.execute(() -> {
             try {
                 OnlyHavenRepository repository = new OnlyHavenRepository();
                 List<OnlyHavenRepository.Creator> matches =
-                        repository.searchCreators(appContext, cleanQuery, 6);
+                        repository.searchGalleryCreators(appContext, cleanQuery, 6);
                 if (matches == null) return;
                 for (OnlyHavenRepository.Creator match : matches) {
-                    if (!OnlyHavenRepository.matchesHeaderCreator(cleanQuery, match)) continue;
+                    if (!selectedOnlyHaven.isEmpty() && !selectedOnlyHaven.equals(
+                            OnlyFapCreatorResults.profileKey(match.url))) continue;
+                    if (selectedOnlyHaven.isEmpty() && verifiedTerm
+                            && !CreatorGalleryMatch.handle(cleanQuery).isEmpty()
+                            && CreatorGalleryMatch.onlyHavenRank(match, cleanQuery) != CreatorGalleryMatch.HANDLE) {
+                        continue;
+                    }
                     if (creator.imageUrl.isEmpty()) post(() -> showHero(match.imageUrl, match.url));
                     String heroUrl = repository.creatorHeaderUrl(match);
                     if (heroUrl.isEmpty()) return;

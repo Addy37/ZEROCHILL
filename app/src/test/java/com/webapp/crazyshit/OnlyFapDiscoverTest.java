@@ -47,7 +47,7 @@ public class OnlyFapDiscoverTest {
 
         assertEquals(16, selected.size());
         assertFalse(containsTitle(selected, "Creator 2"));
-        assertFalse(containsTitle(selected, "Creator 4"));
+        assertTrue(containsTitle(selected, "Creator 4"));
         assertFalse(containsTitle(selected, "Creator 6"));
         assertTrue(containsTitle(selected, "Creator 1"));
     }
@@ -126,7 +126,7 @@ public class OnlyFapDiscoverTest {
     }
 
     @Test
-    public void aliasNamesAndCanonicalUrlsCannotDuplicateInsideDiscover() {
+    public void sameNameCanRepresentDistinctProfilesButCanonicalUrlsDeduplicate() {
         List<NativeContentItem> candidates = creators(100, 20);
         candidates.add(0, creator("Same Name", "https://fapello.com/first/"));
         candidates.add(1, creator("same_name", "https://fapello.com/alias/"));
@@ -134,7 +134,7 @@ public class OnlyFapDiscoverTest {
         List<NativeContentItem> selected = FapzoneCreatorRepository.selectDiscoverItems(
                 candidates, Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
         assertEquals(16, selected.size());
-        assertFalse(containsTitle(selected, "same_name"));
+        assertTrue(containsTitle(selected, "same_name"));
         assertFalse(containsTitle(selected, "Different Name"));
     }
 

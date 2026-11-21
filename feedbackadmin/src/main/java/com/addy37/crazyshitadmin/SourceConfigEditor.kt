@@ -36,7 +36,7 @@ import org.json.JSONObject
     val actionBusy = "configAction" in state.busy
     val document = remember(draft?.text) { draft?.let {JSONObject(it.text)} }
     val sources = document?.optJSONObject("sources")
-    val keys = remember(draft?.text) {sources?.keysList().orEmpty()}
+    val keys = remember(draft?.text) {sources?.keysList().orEmpty().filter {it != "wikifeet"}}
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val sourceColumns = if(maxWidth>680.dp) 2 else 1
     Column(Modifier.fillMaxSize()) {
@@ -117,7 +117,7 @@ import org.json.JSONObject
         confirmButton={TextButton(onClick={discard=false;state.discardConfig()}){Text("Discard",color=Danger)}},dismissButton={TextButton(onClick={discard=false}){Text("Keep editing")}})
     if(history) HistoryDialog(state) {history=false}
 }
-internal fun sourceName(key: String) = when(key) {"wikifeet"->"WikiFeet";"wikifeetx"->"WikiFeet X";"theync"->"TheYNC";"itemfix"->"ItemFix";"onlyhaven"->"OnlyHaven";"baddiehub"->"BaddieHub";else->friendly(key)}
+internal fun sourceName(key: String) = when(key) {"wikifeetx"->"WikiFeet X";"theync"->"TheYNC";"itemfix"->"ItemFix";"onlyhaven"->"OnlyHaven";"baddiehub"->"BaddieHub";else->friendly(key)}
 @Composable private fun SourceCard(key: String, source: JSONObject, enabled: Boolean, onEdit: () -> Unit, toggle: (Boolean) -> Unit) {
     val on = source.optBoolean("enabled",true)
     val endpoint = source.optString("baseUrl", source.optString("indexUrl", ""))

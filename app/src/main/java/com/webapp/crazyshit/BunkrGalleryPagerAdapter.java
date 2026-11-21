@@ -716,8 +716,8 @@ final class BunkrGalleryPagerAdapter
     }
 
     private String imageReferer(NativeContentItem item) {
-        if (item != null && WikiFeetRepository.isWikiFeetUrl(item.url) &&
-                WikiFeetRepository.isWikiFeetUrl(item.uploader)) return item.uploader;
+        String wikiFeetReferer = WikiFeetRepository.imageReferer(item);
+        if (!wikiFeetReferer.isEmpty()) return wikiFeetReferer;
         if (item != null && !FapelloRepository.isPostUrl(item.url) &&
                 FapelloRepository.isModelUrl(item.uploader)) return item.uploader;
         return item == null ? null : item.url;

@@ -71,7 +71,7 @@ public class CreatorMergedGalleryHotPathTest {
         NativeContentItem ana = creator("Ana", "https://fapello.com/ana/");
 
         String annaSession = BunkrGallerySessionStore.createCreator(
-                "Anna", BunkrRepository.searchUrl("Anna"), "Anna");
+                "Anna", BunkrRepository.searchUrl("Anna"), CreatorGallerySpec.from(anna).sessionKey);
         NativeContentItem annaMedia = media("Anna 1", "https://cdn.example.com/anna-1.jpg");
         BunkrGallerySessionStore.appendPreview(annaSession, Arrays.asList(annaMedia));
         BunkrGallerySessionStore.recordCreatorBatch(
@@ -83,7 +83,7 @@ public class CreatorMergedGalleryHotPathTest {
         );
 
         String anaSession = BunkrGallerySessionStore.createCreator(
-                "Ana", BunkrRepository.searchUrl("Ana"), "Ana");
+                "Ana", BunkrRepository.searchUrl("Ana"), CreatorGallerySpec.from(ana).sessionKey);
         NativeContentItem anaMedia = media("Ana 1", "https://cdn.example.com/ana-1.jpg");
         BunkrGallerySessionStore.appendPreview(anaSession, Arrays.asList(anaMedia));
         BunkrGallerySessionStore.recordCreatorBatch(
@@ -127,7 +127,7 @@ public class CreatorMergedGalleryHotPathTest {
         );
         assertEquals(
                 mergedSession,
-                CreatorGalleryPreloader.sessionId(context, spec.cacheKey)
+                CreatorGalleryPreloader.sessionId(context, spec.sessionKey)
         );
     }
 }

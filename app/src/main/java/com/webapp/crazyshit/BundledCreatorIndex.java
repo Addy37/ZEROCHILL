@@ -15,10 +15,14 @@ final class BundledCreatorIndex {
     private static volatile BundledCreatorIndex cached;
     private final List<Entry> entries;
     private final Map<String, Entry> byName = new HashMap<>();
+    private final Map<String, Integer> exactCounts = new HashMap<>();
 
     private BundledCreatorIndex(List<Entry> entries) {
         this.entries = entries;
-        for (Entry entry : entries) byName.put(entry.searchable.get(0), entry);
+        for (Entry entry : entries) {
+            byName.put(entry.searchable.get(0), entry);
+            for (String term : entry.searchable) exactCounts.merge(term, 1, Integer::sum);
+        }
     }
 
     static BundledCreatorIndex get(Context context) {
@@ -51,12 +55,15 @@ final class BundledCreatorIndex {
             if (normalized.isEmpty()) continue;
             String[] aliases = columns.length > 1 ? columns[1].split("\\|", -1) : new String[0];
             ArrayList<String> searchable = new ArrayList<>();
+            ArrayList<String> reviewedAliases = new ArrayList<>();
             searchable.add(normalized);
             for (String alias : aliases) {
                 String key = CreatorNameMatcher.normalized(alias);
-                if (!key.isEmpty() && !searchable.contains(key)) searchable.add(key);
+                if (key.isEmpty()) continue;
+                if (!searchable.contains(key)) searchable.add(key);
+                reviewedAliases.add(alias.trim());
             }
-            rows.add(new Entry(name, searchable));
+            rows.add(new Entry(name, searchable, reviewedAliases));
         }
         return new BundledCreatorIndex(rows);
     }
@@ -72,21 +79,16 @@ final class BundledCreatorIndex {
             if (found != null && found != entry) return null;
             found = entry;
         }
-        return found == null ? null : new NativeContentItem(NativeContentItem.KIND_CREATOR,
-                found.name, "", "", "", "", "", "", found.name);
+        return found == null ? null : item(found);
     }
 
     boolean ambiguous(String query) {
-        String wanted = CreatorNameMatcher.normalized(query);
-        int count = 0;
-        for (Entry entry : entries) if (entry.searchable.contains(wanted) && ++count > 1) return true;
-        return false;
+        return exactCounts.getOrDefault(CreatorNameMatcher.normalized(query), 0) > 1;
     }
 
     int rank(NativeContentItem item, String query) {
         Entry entry = byName.get(CreatorNameMatcher.normalized(item.title));
-        int score = Math.min(CreatorNameMatcher.rank(item.title, query),
-                CreatorNameMatcher.rank(item.searchQuery, query));
+        int score = OnlyFapCreatorResults.rank(item, query);
         if (entry != null) for (String alias : entry.searchable) {
             score = Math.min(score, CreatorNameMatcher.rank(alias, query));
         }
@@ -106,19 +108,28 @@ final class BundledCreatorIndex {
                 .thenComparing(match -> match.entry.searchable.get(0)));
         ArrayList<NativeContentItem> out = new ArrayList<>();
         for (int i = 0; i < Math.min(limit, matches.size()); i++) {
-            String name = matches.get(i).entry.name;
-            out.add(new NativeContentItem(NativeContentItem.KIND_CREATOR, name,
-                    "", "", "", "", "", "", name));
+            out.add(item(matches.get(i).entry));
         }
         return out;
+    }
+
+    private NativeContentItem item(Entry entry) {
+        ArrayList<String> aliases = new ArrayList<>();
+        for (String alias : entry.aliases) if (!ambiguous(alias)) aliases.add(alias);
+        return new NativeContentItem(NativeContentItem.KIND_CREATOR, entry.name,
+                "", "", "", "", "", "", entry.name)
+                .withCreatorIdentity(aliases, java.util.Collections.emptyList());
     }
 
     private static final class Entry {
         final String name;
         final List<String> searchable;
-        Entry(String name, List<String> searchable) {
+        final List<String> aliases;
+
+        Entry(String name, List<String> searchable, List<String> aliases) {
             this.name = name;
             this.searchable = searchable;
+            this.aliases = aliases;
         }
     }
     private static final class Match {

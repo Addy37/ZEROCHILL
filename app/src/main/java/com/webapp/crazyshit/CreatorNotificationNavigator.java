@@ -14,9 +14,8 @@ final class CreatorNotificationNavigator {
         Intent fallback;
         if (group != null) {
             CreatorGallerySpec spec = CreatorGallerySpec.from(group);
-            fallback = NativeFeedBrowserActivity.createCreatorGallery(activity, spec.item.title, spec.query,
-                    spec.profileHint, CreatorGalleryPreloader.sessionId(activity, spec.cacheKey),
-                    spec.cacheKey, spec.seedNames, spec.seedUrls, spec.seedImages);
+            fallback = NativeFeedBrowserActivity.createCreatorGallery(activity, spec,
+                    CreatorGalleryPreloader.sessionId(activity, spec.sessionKey));
         } else {
             fallback = NativeFeedBrowserActivity.createCreatorGallery(activity,
                     entry.creatorName, creator, entry.fapelloProfileUrl);
@@ -27,7 +26,13 @@ final class CreatorNotificationNavigator {
         return fallback;
     }
 
+    static boolean isRetired(UpdateInboxStore.CreatorItem child) {
+        return child != null && ("wikifeet".equalsIgnoreCase(child.sourceKey)
+                || WikiFeetRepository.isRetiredItem(child.item));
+    }
+
     static Intent itemIntent(Activity activity, UpdateInboxStore.Entry parent, UpdateInboxStore.CreatorItem child) {
+        if (isRetired(child)) return gallery(activity, parent, child.creatorName, null);
         Intent fallback = gallery(activity, parent, child.creatorName, child.item.url);
         if (!(child.item.isImage() || child.item.isVideo())) return fallback;
         // A separate bounded snapshot avoids changing a cached full creator gallery.

@@ -4726,8 +4726,6 @@ public final class ChaosFeedView extends FrameLayout {
             NativeContentItem identity = creatorIdentity;
             if (identity == null) return;
             ShitTokSmartRanker.action(item, ShitTokSmartRanker.Action.GALLERY);
-            String query = identity.searchQuery.trim().isEmpty()
-                    ? identity.title : identity.searchQuery;
             String returnToken = transitionToken == null ? "" : transitionToken.trim();
             if (returnToken.isEmpty()) {
                 View sourceSurface = creatorSwipeSourceView();
@@ -4738,13 +4736,7 @@ public final class ChaosFeedView extends FrameLayout {
                 );
             }
             pauseAndRecord();
-            Intent intent = NativeFeedBrowserActivity.createCreatorGallery(
-                    activity,
-                    identity.title,
-                    query,
-                    NativeFeedBrowserActivity.creatorProfileHint(identity),
-                    ShitTokCreatorGalleryPreloader.sessionId(activity, query)
-            );
+            Intent intent = NativeFeedBrowserActivity.createCreatorGallery(activity, identity);
             if (!returnToken.isEmpty()) {
                 intent.putExtra(
                         NativeFeedBrowserActivity.EXTRA_SHITTOK_RETURN_TRANSITION,
