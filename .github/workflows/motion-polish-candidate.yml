@@ -20,8 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      APP_VERSION_CODE: '7003001'
-      APP_VERSION_NAME: '7.3.1-test.motion'
+      APP_VERSION_CODE: '7003002'
+      APP_VERSION_NAME: '7.3.1-test.motion.2'
       ZEROCHILL_SOURCE_SHA: ${{ github.sha }}
       ZEROCHILL_V7_TRAFFIC: 'true'
       SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
@@ -97,6 +97,7 @@ jobs:
           --tests '*SearchScopeTest'
           --tests '*SearchShitTokPauseTest'
           --tests '*ThumbnailLoadTransitionTest'
+          --tests '*ZeroChillMotionTest'
           :app:assembleDebug :app:assembleRelease
       - name: Verify install upgrade identity and checksum
         env:
@@ -123,7 +124,7 @@ jobs:
           candidate = inspect(os.environ['CANDIDATE_APK'])
           stable = inspect(str(pathlib.Path(os.environ['RUNNER_TEMP'])/'stable/ZeroChill.apk'))
           assert candidate[0] == stable[0] == 'com.addy37.crazyshitunofficial'
-          assert candidate[1] == 7003001 and candidate[1] > stable[1]
+          assert candidate[1] == 7003002 and candidate[1] > max(stable[1], 7003001)
           assert candidate[2] == stable[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356'
           report = ('Source: '+os.environ['GITHUB_SHA']+'\n'
               +'Branch: '+os.environ['GITHUB_REF_NAME']+'\n'

@@ -35,9 +35,9 @@ final class HeroInteraction extends View {
                 fromRight ? getWidth() * .52f : getWidth() * .48f, getHeight() * .55f,
                 accent, accent & 0x00ffffff, Shader.TileMode.CLAMP));
         setVisibility(VISIBLE);
-        float travel = direction * BrowseUi.dp(getContext(), 4);
+        float travel = direction * BrowseUi.dp(getContext(), 9);
         animation = ValueAnimator.ofFloat(1f, 0f);
-        animation.setDuration(220L);
+        animation.setDuration(280L);
         animation.setInterpolator(ZeroChillMotion.EASE_OUT);
         animation.addUpdateListener(frame -> {
             strength = (float) frame.getAnimatedValue();
@@ -64,7 +64,7 @@ final class HeroInteraction extends View {
     }
 
     @Override protected void onDraw(Canvas canvas) {
-        paint.setAlpha(Math.round(strength * 40f));
+        paint.setAlpha(Math.round(strength * 72f));
         canvas.drawRect(0, 0, getWidth(), getHeight(), paint);
     }
 

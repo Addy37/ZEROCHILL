@@ -19,7 +19,7 @@ import java.util.UUID;
 final class DestinationMotion {
     private static final String EXTRA_ORIGIN = "zerochill.destination.origin";
     private static final String ORIGIN_PREFIX = "zerochill_library_";
-    private static final long CONNECTED_MS = 280L;
+    private static final long CONNECTED_MS = 320L;
 
     private DestinationMotion() {}
 
@@ -60,9 +60,9 @@ final class DestinationMotion {
         Window window = activity.getWindow();
         window.setSharedElementEnterTransition(boundsTransition());
         window.setSharedElementReturnTransition(boundsTransition());
-        window.setEnterTransition(new Fade(Fade.IN).setDuration(180L));
-        window.setReturnTransition(new Fade(Fade.OUT).setDuration(160L));
-        window.setTransitionBackgroundFadeDuration(160L);
+        window.setEnterTransition(new Fade(Fade.IN).setDuration(220L));
+        window.setReturnTransition(new Fade(Fade.OUT).setDuration(180L));
+        window.setTransitionBackgroundFadeDuration(180L);
     }
 
     static void attachLibraryHeader(Activity activity, View header) {

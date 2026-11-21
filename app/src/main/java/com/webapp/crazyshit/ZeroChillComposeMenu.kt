@@ -182,9 +182,9 @@ internal object ZeroChillComposeMenu {
                     Color.White.copy(alpha = (.16f * edgeStrength).coerceAtMost(1f))),
             )
         }
-        val rimPulse = remember { Animatable(if (animateRim) .24f * edgeStrength else 0f) }
+        val rimPulse = remember { Animatable(if (animateRim) (.38f * edgeStrength).coerceAtMost(.58f) else 0f) }
         LaunchedEffect(animateRim, edgeStrength) {
-            rimPulse.animateTo(0f, tween(if (animateRim) 180 else 0))
+            rimPulse.animateTo(0f, tween(if (animateRim) 220 else 0))
         }
         val shape = remember { RoundedCornerShape(22.dp) }
         val surfaceOpacity = (.68f + menuTint * .16f).coerceIn(0f, 1f)

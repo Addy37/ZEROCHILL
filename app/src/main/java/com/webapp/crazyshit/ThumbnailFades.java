@@ -70,7 +70,10 @@ final class ThumbnailFades {
     }
 
     static boolean shouldStart(DataSource source, View view) {
-        return source == DataSource.REMOTE && active < MAX_ACTIVE && eligible(view);
+        // Sources that still needed decoding get the existing bounded reveal.
+        // Ready-to-display memory and transformed disk cache hits remain immediate.
+        return source != DataSource.MEMORY_CACHE && source != DataSource.RESOURCE_DISK_CACHE
+                && active < MAX_ACTIVE && eligible(view);
     }
 
     static boolean eligible(View view) {

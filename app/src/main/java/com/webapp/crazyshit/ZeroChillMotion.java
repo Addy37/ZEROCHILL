@@ -6,6 +6,7 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.animation.OvershootInterpolator;
 import android.view.animation.PathInterpolator;
 
 /** Bounded motion that preserves content state and respects Android's animator setting. */
@@ -15,6 +16,8 @@ final class ZeroChillMotion {
     static final long STANDARD_MS = 190L;
     static final long MEDIA_MS = 250L;
     static final PathInterpolator EASE_OUT = new PathInterpolator(0.2f, 0f, 0f, 1f);
+
+    private static final OvershootInterpolator PRESS_RELEASE = new OvershootInterpolator(1.2f);
 
     private ZeroChillMotion() {}
 
@@ -57,7 +60,7 @@ final class ZeroChillMotion {
                     baseX = target.getScaleX();
                     baseY = target.getScaleY();
                     pressed = true;
-                    animateTo(baseX * 0.985f, baseY * 0.985f, PRESS_IN_MS, false);
+                    animateTo(baseX * 0.945f, baseY * 0.945f, PRESS_IN_MS, false);
                     break;
                 case MotionEvent.ACTION_UP:
                     if (pressed) animateTo(baseX, baseY, QUICK_MS, true);
@@ -75,11 +78,14 @@ final class ZeroChillMotion {
             ValueAnimator previous = animator;
             animator = null;
             if (previous != null) previous.cancel();
-            float fromX = view.getScaleX();
-            float fromY = view.getScaleY();
+            // A quick tap can end before the down animator has rendered its first frame.
+            float fromX = release ? Math.min(baseX * .975f, view.getScaleX()) : view.getScaleX();
+            float fromY = release ? Math.min(baseY * .975f, view.getScaleY()) : view.getScaleY();
+            view.setScaleX(fromX);
+            view.setScaleY(fromY);
             animator = ValueAnimator.ofFloat(0f, 1f);
             animator.setDuration(duration);
-            animator.setInterpolator(EASE_OUT);
+            animator.setInterpolator(release ? PRESS_RELEASE : EASE_OUT);
             animator.addUpdateListener(animation -> {
                 float fraction = (float) animation.getAnimatedValue();
                 view.setScaleX(fromX + (x - fromX) * fraction);
@@ -108,7 +114,7 @@ final class ZeroChillMotion {
     }
 
     static void confirm(View view) {
-        if (view != null) accentRim(view, view.getHeight() / 2f, 110);
+        if (view != null) accentRim(view, view.getHeight() / 2f, 154);
     }
 
     static void accentRim(View view, float radius, int opacity) {

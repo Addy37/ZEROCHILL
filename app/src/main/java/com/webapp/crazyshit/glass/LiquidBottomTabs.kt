@@ -181,7 +181,7 @@ fun LiquidBottomTabs(
                 valueRange = 0f..(tabsCount - 1).toFloat(),
                 visibilityThreshold = 0.001f,
                 initialScale = 1f,
-                pressedScale = 1.10f,
+                pressedScale = 78f / 56f,
                 motionEnabled = { currentMotion },
                 onDragStarted = {
                     offsetSettle?.cancel()
@@ -236,7 +236,7 @@ fun LiquidBottomTabs(
                 if (animationsEnabled && index != previous) {
                     previous = index
                     selectionFlash.snapTo(1f)
-                    selectionFlash.animateTo(0f, tween(190))
+                    selectionFlash.animateTo(0f, tween(240))
                 }
             }
         }
@@ -335,8 +335,9 @@ fun LiquidBottomTabs(
         // Stretch the two layers together at draw time without remeasuring the dock.
         val slotGrowth = Modifier.graphicsLayer {
             if (animationsEnabled) {
-                scaleX = dampedDragAnimation.scaleX + .07f * selectionFlash.value
-                scaleY = 1f + .45f * (dampedDragAnimation.scaleY - 1f)
+                val selection = selectionFlash.value
+                scaleX = maxOf(dampedDragAnimation.scaleX, 1f + .24f * selection)
+                scaleY = maxOf(dampedDragAnimation.scaleY, 1f + .13f * selection)
             } else {
                 scaleX = 1f
                 scaleY = 1f
@@ -437,7 +438,7 @@ fun LiquidBottomTabs(
                             alpha = 1f - progress
                         )
                         drawRect(Color.Black.copy(alpha = 0.03f * progress))
-                        drawRect(accentColor, alpha = .13f * selectionFlash.value)
+                        drawRect(accentColor, alpha = .25f * selectionFlash.value)
                     }
                 )
         )
