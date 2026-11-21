@@ -266,21 +266,7 @@ final class BunkrCreatorGalleryRepository {
         LinkedHashMap<Future<FapelloPage>, FapelloCursor> fapelloRequests =
                 new LinkedHashMap<>();
         for (FapelloCursor cursor : selectedFapello) {
-            Future<FapelloPage> request = ALBUM_IO.submit(() -> {
-                try {
-                    return new FapelloPage(
-                            cursor,
-                            new FapelloRepository().fetchModelMediaPage(
-                                    context,
-                                    cursor.model,
-                                    cursor.nextPage
-                            ),
-                            null
-                    );
-                } catch (Exception error) {
-                    return new FapelloPage(cursor, null, error);
-                }
-            });
+            Future<FapelloPage> request = ALBUM_IO.submit(() -> fetchFapelloPage(context, cursor));
             fapelloRequests.put(request, cursor);
         }
 
@@ -550,18 +536,8 @@ final class BunkrCreatorGalleryRepository {
 
             if (!fapelloStarted && (fapelloReady || fapelloCatalog.isDone()) && !state.fapelloPending.isEmpty()) {
                 FapelloCursor cursor = state.fapelloPending.removeFirst();
-                Future<FastPage> request = completed.submit(() -> {
-                    try {
-                        return FastPage.fapello(new FapelloPage(
-                                cursor,
-                                new FapelloRepository().fetchModelMediaPage(
-                                        context, cursor.model, cursor.nextPage),
-                                null
-                        ));
-                    } catch (Exception error) {
-                        return FastPage.fapello(new FapelloPage(cursor, null, error));
-                    }
-                });
+                Future<FastPage> request = completed.submit(() ->
+                        FastPage.fapello(fetchFapelloPage(context, cursor)));
                 metadata.put(request, FastPage.fapello(cursor));
                 fapelloStarted = true;
             }
@@ -853,6 +829,29 @@ final class BunkrCreatorGalleryRepository {
         if (cursor.failures <= 1) state.pending.addLast(cursor);
     }
 
+    private FapelloPage fetchFapelloPage(Context context, FapelloCursor cursor) {
+        FapelloRepository repository = new FapelloRepository();
+        try {
+            return new FapelloPage(cursor,
+                    repository.fetchModelMediaPage(context, cursor.model, cursor.nextPage), null);
+        } catch (Exception error) {
+            if (!cursor.selectedProfile || cursor.nextPage != 1
+                    || fapelloFailure(error).reason != FapelloSourceException.Reason.NOT_FOUND
+                    || Thread.currentThread().isInterrupted()) {
+                return new FapelloPage(cursor, null, error);
+            }
+            try {
+                FapelloRepository.Model replacement = repository.findReplacementProfile(context, cursor.model);
+                if (replacement == null) return new FapelloPage(cursor, null, error);
+                FapelloCursor recovered = new FapelloCursor(replacement);
+                return new FapelloPage(recovered,
+                        repository.fetchModelMediaPage(context, replacement, recovered.nextPage), null);
+            } catch (Exception recoveryFailure) {
+                return new FapelloPage(cursor, null, error);
+            }
+        }
+    }
+
     private void applyFapelloPage(
             State state,
             ArrayList<NativeContentItem> destination,
@@ -873,6 +872,7 @@ final class BunkrCreatorGalleryRepository {
             return;
         }
         state.lastFapelloFailure = null;
+        state.fapelloModelUrls.add(page.cursor.model.url);
 
         int added = 0;
         for (NativeContentItem item : media.items) {
@@ -1130,9 +1130,14 @@ final class BunkrCreatorGalleryRepository {
         String name = creatorName == null || creatorName.trim().isEmpty()
                 ? state.query
                 : creatorName.trim();
-        state.fapelloPending.addFirst(new FapelloCursor(
-                new FapelloRepository.Model(name, profileUrl, "")));
-        if (state.discoveryQueries.size() <= 1) state.fapelloCatalogLoaded = true;
+        FapelloRepository.Model model = new FapelloRepository.Model(name, profileUrl, "");
+        state.fapelloPending.addFirst(new FapelloCursor(model, true));
+        String galleryHandle = FapelloRepository.galleryHandle(model);
+        if (state.discoveryQueries.size() <= 1 || state.discoveryQueries.stream().allMatch(query ->
+                CreatorGalleryMatch.exactHandle(query, model.username)
+                        || CreatorGalleryMatch.exactHandle(query, galleryHandle))) {
+            state.fapelloCatalogLoaded = true;
+        }
     }
 
     private void seedOnlyHavenProfile(State state, String profileUrl, String creatorName) {
@@ -1191,6 +1196,7 @@ final class BunkrCreatorGalleryRepository {
             for (FapelloCursor cursor : state.fapelloPending) models.put(new org.json.JSONObject()
                     .put("name", cursor.model.name).put("url", cursor.model.url)
                     .put("image", cursor.model.imageUrl).put("next", cursor.nextPage)
+                    .put("selectedProfile", cursor.selectedProfile)
                     .put("duplicates", cursor.duplicatePages));
             json.put("pendingModels", models);
             org.json.JSONArray wikiFeet = new org.json.JSONArray();
@@ -1258,7 +1264,8 @@ final class BunkrCreatorGalleryRepository {
             org.json.JSONObject item = models.optJSONObject(i);
             if (item == null || !FapelloRepository.isModelUrl(item.optString("url"))) continue;
             FapelloCursor cursor = new FapelloCursor(new FapelloRepository.Model(
-                    item.optString("name"), item.optString("url"), item.optString("image")));
+                    item.optString("name"), item.optString("url"), item.optString("image")),
+                    item.optBoolean("selectedProfile"));
             cursor.nextPage = Math.max(1, item.optInt("next", 1));
             cursor.duplicatePages = item.optInt("duplicates");
             state.fapelloPending.add(cursor);
@@ -1380,7 +1387,7 @@ final class BunkrCreatorGalleryRepository {
         final Deque<WikiFeetCursor> wikiFeetPending = new ConcurrentLinkedDeque<>();
         final Deque<OnlyHavenCursor> onlyHavenPending = new ConcurrentLinkedDeque<>();
         final Set<String> albumUrls = new HashSet<>();
-        final Set<String> fapelloModelUrls = new HashSet<>();
+        final Set<String> fapelloModelUrls = java.util.concurrent.ConcurrentHashMap.newKeySet();
         final Set<String> wikiFeetProfileUrls = new HashSet<>();
         final Set<String> onlyHavenProfileUrls = new HashSet<>();
         final Set<String> loadedMediaUrls = new HashSet<>();
@@ -1435,12 +1442,18 @@ final class BunkrCreatorGalleryRepository {
 
     private static final class FapelloCursor {
         final FapelloRepository.Model model;
+        final boolean selectedProfile;
         int nextPage = 1;
         int failures;
         int duplicatePages;
 
         FapelloCursor(FapelloRepository.Model model) {
+            this(model, false);
+        }
+
+        FapelloCursor(FapelloRepository.Model model, boolean selectedProfile) {
             this.model = model;
+            this.selectedProfile = selectedProfile;
         }
     }
 

@@ -21,8 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      APP_VERSION_CODE: '7003005'
-      APP_VERSION_NAME: '7.3.1-test.onlyfap-creator-accuracy'
+      APP_VERSION_CODE: '7003006'
+      APP_VERSION_NAME: '7.3.1-test.onlyfap-creator-recovery'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
       ZEROCHILL_SOURCE_BRANCH: ${{ github.head_ref }}
       ZEROCHILL_V7_TRAFFIC: 'true'
@@ -141,7 +141,7 @@ jobs:
           stable = inspect(pathlib.Path(os.environ['RUNNER_TEMP']) / 'stable' / 'ZeroChill.apk')
           assert candidate[0] == stable[0] == 'com.addy37.crazyshitunofficial', 'Incorrect app package'
           assert candidate[1] == int(os.environ['APP_VERSION_CODE']), 'Incorrect candidate version'
-          assert candidate[1] > max(stable[1], 7003004), 'Candidate cannot upgrade the installed version'
+          assert candidate[1] > max(stable[1], 7003005), 'Candidate cannot upgrade the installed version'
           assert candidate[2] == stable[2] == '04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356', 'Incorrect signing identity'
 
           generated = pathlib.Path('app/build/generated/source/buildConfig/release/com/webapp/crazyshit/BuildConfig.java')

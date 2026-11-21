@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -127,6 +128,40 @@ public final class FapelloRepositoryTest {
                 (query, offset, size) -> { queries[0]++; return fixture("search.json"); }, null);
         assertFalse(found.isEmpty());
         assertEquals(1, queries[0]);
+    }
+
+    @Test public void replacedNumberedRouteFindsExactHandleAndSkipsTheRetiredUrl() throws Exception {
+        FapelloRepository repository = new FapelloRepository();
+        FapelloRepository.Model stale = new FapelloRepository.Model(
+                "Haesicks", "https://fapello.com/haesicks-2/", "");
+        FapelloRepository.Model recovered = repository.findReplacementProfile(stale, (query, offset, limit) -> {
+            assertEquals("haesicks", query);
+            assertEquals(0, offset);
+            assertEquals(8, limit);
+            return "{\"results\":["
+                    + "{\"name\":\"Haesicks\",\"url\":\"/haesicks-2/\",\"username\":\"haesicks\"},"
+                    + "{\"name\":\"Haesicks archive\",\"url\":\"/haesicks-archive/\"},"
+                    + "{\"name\":\"Haesicks\",\"url\":\"/haesicks/\"}]}";
+        }, null);
+
+        assertEquals("https://fapello.com/haesicks/", recovered.url);
+    }
+
+    @Test public void staleProfileRecoveryRequiresHandleEvidenceAndRejectsAmbiguity() throws Exception {
+        FapelloRepository repository = new FapelloRepository();
+        FapelloRepository.Model stale = new FapelloRepository.Model(
+                "Fixture", "https://fapello.com/fixture-2/", "");
+        assertNull(repository.findReplacementProfile(stale, (query, offset, limit) ->
+                "{\"results\":[{\"name\":\"Fixture\",\"url\":\"/wrong-person/\"}]}", null));
+        assertNull(repository.findReplacementProfile(stale, (query, offset, limit) ->
+                "{\"results\":[{\"name\":\"Fixture\",\"url\":\"/fixture/\"},"
+                        + "{\"name\":\"Another Fixture\",\"url\":\"/other/\",\"username\":\"fixture\"}]}",
+                null));
+        assertEquals("different-handle", FapelloRepository.galleryHandle(
+                new FapelloRepository.Model("Fixture", "https://fapello.com/different-handle/", "")));
+        assertEquals("fixture-2", FapelloRepository.galleryHandle(
+                new FapelloRepository.Model("Fixture", "https://fapello.com/fixture-2/", "",
+                        "fixture-2", "")));
     }
 
     private static Document aliasProfile(String canonical, String heading, String aliases) {

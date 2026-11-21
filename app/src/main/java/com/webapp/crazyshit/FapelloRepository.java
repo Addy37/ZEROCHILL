@@ -101,6 +101,50 @@ final class FapelloRepository {
                 model -> fetchDocument(context, model.url, baseUrl()), gallery);
     }
 
+    Model findReplacementProfile(Context context, Model stale) throws IOException {
+        return findReplacementProfile(stale, (name, offset, size) ->
+                fetchBody(context, searchUrl(name, size, offset), baseUrl(), true),
+                model -> fetchDocument(context, model.url, baseUrl()));
+    }
+
+    Model findReplacementProfile(Model stale, SearchQueryFetcher search, SearchProfileFetcher profiles)
+            throws IOException {
+        String query = galleryHandle(stale);
+        if (query.isEmpty()) return null;
+
+        List<Model> candidates = parseSearchResponse(search.fetch(query, 0, 8));
+        String retiredProfile = canonicalKey(stale.url);
+        Model match = null;
+        for (Model candidate : candidates) {
+            if (retiredProfile.equals(canonicalKey(candidate.url))) continue;
+            if (CreatorGalleryMatch.fapelloRank(candidate, query) != CreatorGalleryMatch.HANDLE) {
+                if (profiles == null || candidates.size() > 3) continue;
+                try {
+                    if (!profileConfirmsAlias(profiles.fetch(candidate), candidate, query)) continue;
+                } catch (IOException error) {
+                    if (Thread.currentThread().isInterrupted()) throw error;
+                    continue;
+                }
+            }
+            if (match != null) return null;
+            match = candidate;
+        }
+        return match;
+    }
+
+    static String galleryHandle(Model model) {
+        String slug = model.username;
+        String nameHandle = CreatorGalleryMatch.handle(model.name);
+        // A listing may use a numbered route for a creator whose displayed handle
+        // differs from that route only by the suffix.
+        boolean numberedRoute = !model.hasProviderUsername && !nameHandle.isEmpty()
+                && slug.matches(java.util.regex.Pattern.quote(nameHandle) + "-[0-9]{1,3}");
+        if (numberedRoute || CreatorGalleryMatch.exactHandle(model.verifiedAlias, nameHandle)) {
+            return nameHandle;
+        }
+        return slug;
+    }
+
     List<Model> searchModelsWithQueryFallback(String query, int limit, SearchQueryFetcher fetcher,
                                              SearchProfileFetcher profiles) throws IOException {
         return searchModelsWithQueryFallback(query, limit, fetcher, profiles, false);
@@ -1694,6 +1738,7 @@ final class FapelloRepository {
         final String url;
         final String imageUrl;
         final String username;
+        final boolean hasProviderUsername;
         final String verifiedAlias;
 
         Model(String name, String url, String imageUrl) {
@@ -1705,8 +1750,8 @@ final class FapelloRepository {
             this.url = url == null ? "" : url.trim();
             this.imageUrl = imageUrl == null ? "" : imageUrl.trim();
             String explicitHandle = CreatorGalleryMatch.handle(username);
-            this.username = explicitHandle.isEmpty() ? CreatorGalleryMatch.handle(modelSlug(this.url))
-                    : explicitHandle;
+            this.hasProviderUsername = !explicitHandle.isEmpty();
+            this.username = hasProviderUsername ? explicitHandle : CreatorGalleryMatch.handle(modelSlug(this.url));
             this.verifiedAlias = cleanStatic(verifiedAlias);
         }
     }

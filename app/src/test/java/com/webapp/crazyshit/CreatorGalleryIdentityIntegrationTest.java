@@ -6,6 +6,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 
 import org.json.JSONObject;
@@ -15,6 +16,8 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.Implementation;
+import org.robolectric.annotation.Implements;
 import org.robolectric.util.ReflectionHelpers;
 
 import java.util.ArrayList;
@@ -93,6 +96,87 @@ public class CreatorGalleryIdentityIntegrationTest {
         assertEquals(3, (int) ReflectionHelpers.getField(cursor, "nextPage"));
         applyAlbum(gallery, state, cursor, output, later);
         assertEquals(java.util.Arrays.asList(first, later), output);
+    }
+
+    @Test @Config(shadows = FapelloRecovery.class)
+    public void selectedProfile404RecoversMediaWithoutFuzzyMatching() {
+        FapelloRecovery.lookups = 0;
+        BunkrCreatorGalleryRepository gallery = new BunkrCreatorGalleryRepository();
+        FapelloRepository.Model stale = new FapelloRepository.Model(
+                "Haesicks", "https://fapello.com/haesicks-2/", "");
+        Object selected = inner("FapelloCursor",
+                ReflectionHelpers.ClassParameter.from(FapelloRepository.Model.class, stale),
+                ReflectionHelpers.ClassParameter.from(boolean.class, true));
+        Object page = fetchFapello(gallery, selected);
+        FapelloRepository.MediaPage media = ReflectionHelpers.getField(page, "media");
+        assertEquals(1, media.items.size());
+        assertEquals("https://fapello.com/haesicks/1/", media.items.get(0).url);
+        assertEquals(1, FapelloRecovery.lookups);
+
+        ReflectionHelpers.setField(selected, "nextPage", 2);
+        fetchFapello(gallery, selected);
+        assertEquals(1, FapelloRecovery.lookups);
+    }
+
+    @Test @Config(shadows = ShelfAlbums.class)
+    public void mainShelfCarriesConfirmedAlbumAlongsideSelectedProfile() {
+        FapelloRepository.Model model = new FapelloRepository.Model(
+                "Haesicks", "https://fapello.com/haesicks-2/", "https://example.com/preview.jpg");
+        Object result = ReflectionHelpers.callInstanceMethod(new FapzoneCreatorRepository(), "resolve",
+                ReflectionHelpers.ClassParameter.from(Context.class, null),
+                ReflectionHelpers.ClassParameter.from(int.class, 0),
+                ReflectionHelpers.ClassParameter.from(FapelloRepository.Model.class, model));
+        NativeContentItem card = ReflectionHelpers.getField(result, "item");
+        CreatorGallerySpec spec = CreatorGallerySpec.from(card);
+        assertEquals(model.url, spec.profileHint);
+        assertEquals("haesicks", spec.aliases.get(0));
+        assertTrue(spec.seedUrls.contains("https://bunkr.cr/a/fixture"));
+        assertFalse(spec.seedUrls.contains("https://bunkr.cr/a/unrelated"));
+
+        NativeContentItem cached = new NativeContentItem(NativeContentItem.KIND_CREATOR,
+                model.name, model.url, "", "", "", "", "", model.name)
+                .withCreatorIdentity(Collections.singletonList("haesicks-2"),
+                        Collections.singletonList(model.url));
+        CreatorGallerySpec restored = CreatorGallerySpec.from(FapzoneCreatorRepository.withListedHandle(cached));
+        assertEquals("haesicks", restored.aliases.get(0));
+        assertEquals(model.url, restored.profileHint);
+    }
+
+    @Implements(value = FapelloRepository.class, isInAndroidSdk = false)
+    public static class FapelloRecovery {
+        static int lookups;
+
+        @Implementation protected FapelloRepository.MediaPage fetchModelMediaPage(
+                Context context, FapelloRepository.Model model, int page) throws java.io.IOException {
+            if (model.url.endsWith("-2/")) throw new FapelloSourceException(
+                    FapelloSourceException.Reason.NOT_FOUND, 404, "Fixture profile gone");
+            NativeContentItem item = new NativeContentItem(NativeContentItem.KIND_IMAGE,
+                    "Recovered media", model.url + "1/", "", "", "", "");
+            return new FapelloRepository.MediaPage(Collections.singletonList(item), false, "");
+        }
+
+        @Implementation protected FapelloRepository.Model findReplacementProfile(
+                Context context, FapelloRepository.Model stale) {
+            lookups++;
+            return new FapelloRepository.Model(stale.name, "https://fapello.com/haesicks/", "");
+        }
+    }
+
+    @Implements(value = BunkrRepository.class, isInAndroidSdk = false)
+    public static class ShelfAlbums {
+        @Implementation protected List<NativeContentItem> searchAlbums(Context context, String query, int page) {
+            assertEquals("haesicks", query);
+            return List.of(new NativeContentItem(NativeContentItem.KIND_SERIES,
+                    "Haesicks and Other Creator", "https://bunkr.cr/a/unrelated", "", "", "", ""),
+                    album("Haesicks Part 2"));
+        }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static Object fetchFapello(BunkrCreatorGalleryRepository gallery, Object cursor) {
+        return ReflectionHelpers.callInstanceMethod(gallery, "fetchFapelloPage",
+                ReflectionHelpers.ClassParameter.from(Context.class, null),
+                ReflectionHelpers.ClassParameter.from((Class) cursor.getClass(), cursor));
     }
 
     private static Object inner(String name, ReflectionHelpers.ClassParameter<?>... parameters) {

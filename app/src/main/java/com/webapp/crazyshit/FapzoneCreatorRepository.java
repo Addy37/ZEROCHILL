@@ -511,9 +511,10 @@ final class FapzoneCreatorRepository {
             int rank,
             FapelloRepository.Model model
     ) {
+        String handle = FapelloRepository.galleryHandle(model);
         NativeContentItem album = null;
         try {
-            String identity = model.username.isEmpty() ? model.name : model.username;
+            String identity = handle.isEmpty() ? model.name : handle;
             album = chooseAlbum(identity, bunkr.searchAlbums(context, identity, 1));
         } catch (Exception ignored) {
         }
@@ -544,8 +545,9 @@ final class FapzoneCreatorRepository {
                 "",
                 "Bunkr + Fapello + OnlyHaven + WikiFeet X",
                 model.name
-        ).withCreatorIdentity(java.util.Arrays.asList(model.username, model.verifiedAlias),
-                java.util.Collections.singletonList(model.url));
+        ).withCreatorIdentity(java.util.Arrays.asList(handle, model.username, model.verifiedAlias),
+                album == null ? java.util.Collections.singletonList(model.url)
+                        : java.util.Arrays.asList(model.url, album.url));
         return new ResolvedCreator(rank, item);
     }
 
@@ -685,12 +687,23 @@ final class FapzoneCreatorRepository {
             JSONArray values = new JSONArray(prefs.getString("items", "[]"));
             for (NativeContentItem item : ContentItemCodec.decodeList(values, limit)) {
                 if (item.isCreator() && !item.title.isEmpty()
-                        && FapelloRepository.isModelUrl(item.url)) result.add(item);
+                        && FapelloRepository.isModelUrl(item.url)) result.add(withListedHandle(item));
             }
         } catch (Exception ignored) {
             result.clear();
         }
         return result;
+    }
+
+    static NativeContentItem withListedHandle(NativeContentItem item) {
+        FapelloRepository.Model profile = new FapelloRepository.Model(item.title, item.url, "");
+        String handle = FapelloRepository.galleryHandle(profile);
+        if (handle.isEmpty() || handle.equals(profile.username)) return item;
+
+        java.util.LinkedHashSet<String> aliases = new java.util.LinkedHashSet<>();
+        aliases.add(handle);
+        aliases.addAll(item.creatorAliases);
+        return item.withCreatorIdentity(new ArrayList<>(aliases), item.creatorProfileUrls);
     }
 
     private void writeCache(Context context, int mode, List<NativeContentItem> items) {
