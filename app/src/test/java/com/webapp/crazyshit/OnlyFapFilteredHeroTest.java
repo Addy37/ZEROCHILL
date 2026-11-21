@@ -23,6 +23,8 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.Implementation;
+import org.robolectric.annotation.Implements;
 import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.util.ReflectionHelpers;
 import java.util.*;
@@ -557,6 +559,82 @@ public class OnlyFapFilteredHeroTest {
         filteredPoolFills(ContentPreference.TRANS_WOMEN);
     }
 
+    @Implements(value = FapelloRepository.class, isInAndroidSdk = false)
+    public static class SlowCrossSourceLookup {
+        static final AtomicInteger calls = new AtomicInteger();
+
+        @Implementation protected List<FapelloRepository.Model> searchGalleryModels(
+                android.content.Context context, String query, int limit) throws IOException {
+            calls.incrementAndGet();
+            throw new IOException("Fapello lookup unavailable");
+        }
+    }
+
+    @Implements(value = OnlyHavenRepository.class, isInAndroidSdk = false)
+    public static class HomeCreatorMedia {
+        static final List<String> requests = new CopyOnWriteArrayList<>();
+
+        @Implementation protected List<NativeContentItem> fetchCreatorMedia(
+                android.content.Context context, OnlyHavenRepository.Creator creator, int page, int limit) {
+            requests.add(creator.id + "/" + page);
+            return Collections.singletonList(art(creator.id));
+        }
+    }
+
+    @Test @Config(shadows = {SlowCrossSourceLookup.class, HomeCreatorMedia.class})
+    public void allContentUsesKnownProviderAndMovesOnAfterOnePortrait() throws Exception {
+        changeMode(ContentPreference.ALL);
+        SlowCrossSourceLookup.calls.set(0);
+        HomeCreatorMedia.requests.clear();
+        startRealDiscovery();
+        layoutHero();
+        hub.setNewCreators(Arrays.asList(
+                OnlyHavenRepository.creatorItem(profile("known-first")),
+                OnlyHavenRepository.creatorItem(profile("known-next"))));
+        call("requestHeroCandidates");
+        awaitCondition(() -> heroes().size() == 2);
+        assertEquals(0, SlowCrossSourceLookup.calls.get());
+        assertEquals(Arrays.asList("known-first/1", "known-next/1"), HomeCreatorMedia.requests);
+    }
+
+    @Test public void videoHeavyFilteredCategoryFillsFromQualifiedPostersWhenPhotosUnavailable()
+            throws Exception {
+        changeMode(ContentPreference.WOMEN);
+        ReflectionHelpers.setField(hub, "categoryHeroSource", new OnlyFapHubView.CategoryHeroSource() {
+            public OnlyHavenRepository.CategoryPage category(ContentPreference mode, int limit, int offset) {
+                return new OnlyHavenRepository.CategoryPage(Collections.emptyList(), false);
+            }
+            public List<NativeContentItem> media(OnlyHavenRepository.Creator creator, int page, int limit)
+                    throws IOException {
+                if (page == 2) throw new IOException("More posts temporarily unavailable");
+                List<NativeContentItem> items = new ArrayList<>();
+                for (int i = 0; i < Math.min(12, limit); i++) {
+                    items.add(new NativeContentItem(NativeContentItem.KIND_MEDIA, "Tiny poster",
+                            "https://cdn.example.invalid/" + creator.id + "-video-" + i + ".mp4",
+                            "https://cdn.example.invalid/tiny-poster-" + creator.id + ".png", "", "", ""));
+                }
+                if (limit > 12) {
+                    items.add(new NativeContentItem(NativeContentItem.KIND_MEDIA, "Portrait poster",
+                            "https://cdn.example.invalid/" + creator.id + "-portrait.mp4",
+                            "https://cdn.example.invalid/poster-" + creator.id + ".png", "", "", ""));
+                }
+                return items;
+            }
+        });
+        startRealDiscovery();
+        layoutHero();
+        hub.setPreferenceCreators(Arrays.asList(
+                OnlyHavenRepository.creatorItem(profile("women-poster-one")),
+                OnlyHavenRepository.creatorItem(profile("women-poster-two"))));
+        awaitCondition(() -> heroes().size() == 2 && ReflectionHelpers.getField(hub, "heroItem") != null);
+        for (Object hero : heroes()) {
+            NativeContentItem creator = ReflectionHelpers.getField(hero, "creator");
+            List<OnlyFapHeroPolicy.Artwork> artwork = ReflectionHelpers.getField(hero, "artwork");
+            assertTrue(artwork.get(0).url.endsWith("/poster-" + creator.title + ".png"));
+            assertEquals(creator.url, artwork.get(0).referer);
+        }
+    }
+
     private void filteredPoolFills(ContentPreference mode) throws Exception {
         changeMode(mode);
         CountDownLatch laterPage = new CountDownLatch(1);
@@ -754,7 +832,7 @@ public class OnlyFapFilteredHeroTest {
     private OnlyHavenRepository.Creator profile(String id) {
         return new OnlyHavenRepository.Creator("onlyfans", id, id, "https://cum.st/creators/onlyfans/" + id, "");
     }
-    private NativeContentItem art(String id) {
+    private static NativeContentItem art(String id) {
         return new NativeContentItem(NativeContentItem.KIND_IMAGE, id, "https://cdn.example.invalid/" + id + ".png", "", "", "", "");
     }
     private void awaitCondition(java.util.function.BooleanSupplier condition) throws Exception {

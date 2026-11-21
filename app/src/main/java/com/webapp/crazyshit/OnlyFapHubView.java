@@ -209,6 +209,7 @@ final class OnlyFapHubView extends FrameLayout {
     private static final int HERO_DISCOVERY_FIRST_PAGE = 2;
     private static final int HERO_DISCOVERY_LAST_PAGE = 8;
     private static final int HERO_ORIGINAL_CHECKS_PER_PAGE = 4;
+    private static final int HERO_ONLYHAVEN_MEDIA_SAMPLE = 24;
     // Shelf paging is independent of hero paging. Bound extra category work to 128 creators.
     private static final int HERO_CATEGORY_LAST_OFFSET = 160;
     private static final int HERO_CATEGORY_FIRST_OFFSET = OnlyFapCategoryLoader.PAGE_SIZE * OnlyFapCategoryLoader.SHELF_COUNT;
@@ -1479,10 +1480,11 @@ final class OnlyFapHubView extends FrameLayout {
             if (closed || generation != heroGeneration) return;
 
             ArrayList<OnlyFapHeroPolicy.Artwork> portraitArtwork = new ArrayList<>();
+            ArrayList<OnlyFapHeroPolicy.Artwork> videoPosters = new ArrayList<>();
 
-            // Prefer Fapello for portrait discovery. Learned/backfill creators may not carry a
-            // Fapello URL, so search by creator name instead of skipping the source entirely.
-            if (mode == ContentPreference.ALL) try {
+            // Use a selected OnlyHaven profile directly. A cross-source lookup can block
+            // artwork for a creator whose exact profile is already on the card.
+            if (mode == ContentPreference.ALL && !OnlyHavenRepository.isOnlyHavenUrl(creator.url)) try {
                 FapelloRepository fapello = new FapelloRepository();
                 FapelloRepository.Model model = null;
                 if (FapelloRepository.isModelUrl(creator.url)) {
@@ -1504,13 +1506,10 @@ final class OnlyFapHubView extends FrameLayout {
                 if (model != null) {
                     for (int mediaPage = 1;
                             active && !closed && generation == heroGeneration &&
-                                    mediaPage <= 2 && portraitArtwork.size() < 2;
+                                    mediaPage <= 2 && portraitArtwork.isEmpty();
                             mediaPage++) {
-                        List<NativeContentItem> media = fapello.fetchModelMedia(
-                                getContext().getApplicationContext(),
-                                model,
-                                mediaPage
-                        );
+                        List<NativeContentItem> media = fapello.fetchGalleryModelMediaPage(
+                                getContext().getApplicationContext(), model, mediaPage).items;
                         // Gallery previews are cropped to a different aspect ratio on the
                         // device. Qualify the original, never the thumbnail. Bound post-page
                         // requests to preserve the fast shelf and gallery loading path.
@@ -1519,7 +1518,7 @@ final class OnlyFapHubView extends FrameLayout {
                                         media, HERO_ORIGINAL_CHECKS_PER_PAGE);
                         for (NativeContentItem item : originals) {
                             if (!active || closed || generation != heroGeneration ||
-                                    portraitArtwork.size() >= 2) break;
+                                    !portraitArtwork.isEmpty()) break;
                             String directOriginal =
                                     FapelloRepository.originalUrlFromPreview(item.imageUrl);
                             if (!directOriginal.isEmpty()) {
@@ -1555,8 +1554,8 @@ final class OnlyFapHubView extends FrameLayout {
                 }
             } catch (IOException ignored) { }
 
-            // If Fapello did not provide enough usable portrait media, try OnlyHaven.
-            if (active && !closed && generation == heroGeneration && portraitArtwork.size() < 2) {
+            // Fill the next creator slot as soon as this creator has one usable portrait.
+            if (active && !closed && generation == heroGeneration && portraitArtwork.isEmpty()) {
                 try {
                     OnlyHavenRepository repository = new OnlyHavenRepository();
                     String query = heroIdentityQuery(creator);
@@ -1577,25 +1576,32 @@ final class OnlyFapHubView extends FrameLayout {
                         }
                     }
                     if (best != null) {
-                        // Filtered mode needs creator diversity before alternatives for one creator.
-                        // Sample two bounded media pages; a video/tiny/landscape first page isn't exhaustion.
-                        int desired = mode == ContentPreference.ALL ? 2 : 1;
-                        for (int page = 1; page <= (mode == ContentPreference.ALL ? 1 : 2)
-                                && portraitArtwork.size() < desired && active && !closed && generation == heroGeneration; page++) {
+                        for (int page = 1; page <= 2 && portraitArtwork.isEmpty()
+                                && active && !closed && generation == heroGeneration; page++) {
                             List<NativeContentItem> media = mode == ContentPreference.ALL
-                                    ? repository.fetchCreatorMedia(getContext().getApplicationContext(), best, page, 12)
-                                    : categoryHeroSource.media(best, page, 12);
+                                    ? repository.fetchCreatorMedia(getContext().getApplicationContext(),
+                                            best, page, HERO_ONLYHAVEN_MEDIA_SAMPLE)
+                                    : categoryHeroSource.media(best, page, HERO_ONLYHAVEN_MEDIA_SAMPLE);
+                            OnlyFapHeroPolicy.addVideoPosters(videoPosters, media, best.url);
                             ArrayList<OnlyFapHeroPolicy.Artwork> candidates = new ArrayList<>();
-                            OnlyFapHeroPolicy.addDirectImages(candidates, mode == ContentPreference.ALL ? media
-                                    : OnlyFapHeroPolicy.originalResolutionCandidates(media, HERO_ORIGINAL_CHECKS_PER_PAGE), best.url);
+                            OnlyFapHeroPolicy.addDirectImages(candidates,
+                                    OnlyFapHeroPolicy.originalResolutionCandidates(
+                                            media, HERO_ORIGINAL_CHECKS_PER_PAGE), best.url);
                             for (OnlyFapHeroPolicy.Artwork choice : candidates) {
-                                if (!active || closed || generation != heroGeneration || portraitArtwork.size() >= desired) break;
+                                if (!active || closed || generation != heroGeneration || !portraitArtwork.isEmpty()) break;
                                 qualifyPortraitArtwork(generation, creator, portraitArtwork, choice, trace);
                             }
                             if (media.isEmpty()) break;
                         }
                     }
                 } catch (IOException ignored) { }
+            }
+
+            // Video-heavy pages can still provide a full-size portrait poster.
+            // Apply the same dimension and ownership checks as gallery photos.
+            for (OnlyFapHeroPolicy.Artwork poster : videoPosters) {
+                if (!active || closed || generation != heroGeneration || !portraitArtwork.isEmpty()) break;
+                qualifyPortraitArtwork(generation, creator, portraitArtwork, poster, trace);
             }
 
             List<OnlyFapHeroPolicy.Artwork> choices =
