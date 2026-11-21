@@ -23,6 +23,7 @@ final class TabWaterline {
     private final float density;
     private int shape;
     private int accent = Color.TRANSPARENT;
+    private int glintShape;
     private float progress, originX;
     private float glintWidth = -1f, glintHeight = -1f;
 
@@ -145,8 +146,10 @@ final class TabWaterline {
 
     private void refreshGlint(float width, float height) {
         int currentAccent = AppearanceTheme.accent(context);
-        if (currentAccent == accent && glintWidth == width && glintHeight == height) return;
+        if (currentAccent == accent && glintWidth == width && glintHeight == height
+                && glintShape == shape) return;
         accent = currentAccent;
+        glintShape = shape;
         glintWidth = width;
         glintHeight = height;
         int pale = Color.rgb((Color.red(accent) + 255) / 2,
