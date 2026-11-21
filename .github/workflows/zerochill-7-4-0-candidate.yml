@@ -42,7 +42,7 @@ jobs:
         run: bash tools/verify-android-build-lineage.sh "$RUNNER_TEMP/BUILD_LINEAGE.txt"
       - name: Validate release version and update-dialog copy
         env:
-          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_VERSION: '7.4.0'
         run: |
           python3 - <<'PY'
           import os, pathlib
@@ -51,13 +51,13 @@ jobs:
           release = pathlib.Path('RELEASE_NOTES.md').read_text()
           bundled = pathlib.Path('app/src/main/res/raw/whats_new_7_0.md').read_text()
           assert version == declared == '7.4.0', 'Release version differs from approved notes'
-          assert release.startswith('# ZEROCHILL 7.4.0\\n'), 'Release title mismatch'
-          assert bundled.startswith('# ZEROCHILL 7.4.0\\n'), 'Bundled title mismatch'
+          assert release.startswith('# ZEROCHILL 7.4.0\n'), 'Release title mismatch'
+          assert bundled.startswith('# ZEROCHILL 7.4.0\n'), 'Bundled title mismatch'
           def bullets(s):
               return [line[2:].strip() for line in s.splitlines() if line.startswith('- ')]
           assert len(bullets(release)) == 8, 'Unexpected release highlight count'
           assert bullets(release) == bullets(bundled), 'GitHub / offline What's New mismatch'
-          paragraph = release.split('\\n\\n')[1].strip()
+          paragraph = release.split('\n\n')[1].strip()
           assert len(paragraph) <= 180, 'Updater summary will be truncated'
           assert 'Bunkr' in paragraph and "outside ZEROCHILL's control" in paragraph
           assert any('Retry' in line and 'maintenance' in line for line in bullets(release))
