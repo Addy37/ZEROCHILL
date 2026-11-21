@@ -138,12 +138,14 @@ public class FavoriteImageNavigationTest {
             View name = GlassMenuTestSupport.description(card, "Open gallery for " + NAME);
             assertNotNull(name);
             assertTrue(name.performClick());
-            assertGallery(shadowOf(activity).getNextStartedActivity(), NAME, PROFILE);
+            assertGallery(shadowOf(activity).getNextStartedActivity(), NAME, PROFILE,
+                    OnlyFapGalleryActivity.class);
             assertTrue(card.findViewWithTag("library-card-options").performClick());
             PopupWindow popup = shadowOf(RuntimeEnvironment.getApplication()).getLatestPopupWindow();
             GlassMenuTestSupport.assertGlass(popup);
             assertTrue(GlassMenuTestSupport.click(popup, "Open gallery"));
-            assertGallery(shadowOf(activity).getNextStartedActivity(), NAME, PROFILE);
+            assertGallery(shadowOf(activity).getNextStartedActivity(), NAME, PROFILE,
+                    OnlyFapGalleryActivity.class);
             assertEquals(1, FavoriteStore.mediaFavorites(context).size());
         }
     }
@@ -212,8 +214,12 @@ public class FavoriteImageNavigationTest {
         return popup;
     }
     private void assertGallery(Intent intent, String name, String profile) {
+        assertGallery(intent, name, profile, NativeFeedBrowserActivity.class);
+    }
+
+    private void assertGallery(Intent intent, String name, String profile, Class<? extends Activity> target) {
         assertNotNull(intent);
-        assertEquals(NativeFeedBrowserActivity.class.getName(), intent.getComponent().getClassName());
+        assertEquals(target.getName(), intent.getComponent().getClassName());
         assertEquals(name, intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_BUNKR_CREATOR_QUERY));
         assertEquals(profile, intent.getStringExtra(NativeFeedBrowserActivity.EXTRA_FAPELLO_PROFILE_URL));
     }
