@@ -94,6 +94,8 @@ public class PrimaryTabRevealTest {
             assertTrue(Math.abs(incoming.getX() - outgoing.getX()) <= 24f);
             assertTrue(incoming.getTranslationZ() > outgoing.getTranslationZ());
             assertTrue(incoming.getAlpha() < 1f);
+            // The outgoing screen stays opaque while the incoming page fades in.
+            assertTrue(incoming.getAlpha() > 0f);
             assertEquals(1f, outgoing.getAlpha(), .001f);
             assertEquals(0f, other.getTranslationX(), .001f);
 
