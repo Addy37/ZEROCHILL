@@ -78,7 +78,7 @@ jobs:
           def bullets(s):
               return [line[2:].strip() for line in s.splitlines() if line.startswith('- ')]
           assert len(bullets(release)) == 8, 'Unexpected release highlight count'
-          assert bullets(release) == bullets(bundled), 'GitHub / offline What's New mismatch'
+          assert bullets(release) == bullets(bundled), "GitHub / offline What\'s New mismatch"
           paragraph = release.split('\n\n')[1].strip()
           assert len(paragraph) <= 180, 'Updater summary will be truncated'
           assert 'Bunkr' in paragraph and "outside ZEROCHILL's control" in paragraph
