@@ -130,8 +130,9 @@ final class WebVideoSourceRepository {
         String value = query == null ? "" : query.trim();
         if (value.length() < 2 || baseUrl == null || baseUrl.trim().isEmpty()) return "";
         try {
-            String encoded = URLEncoder.encode(value, "UTF-8").replace("+", "%20");
-            return URI.create(baseUrl).resolve("search/" + encoded).toString();
+            // Kaotic's public GET search form uses this route and parameter.
+            String encoded = URLEncoder.encode(value, "UTF-8");
+            return URI.create(baseUrl).resolve("mediaSearch/?search=" + encoded).toString();
         } catch (Exception ignored) {
             return "";
         }

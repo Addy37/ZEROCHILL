@@ -504,7 +504,7 @@ public class SearchScopeTest {
         assertEquals("https://cdn.example/?s=car+crash",
                 BaddieHubRepository.searchUrl("https://cdn.example/", "car crash"));
         assertEquals("", BaddieHubRepository.searchUrl("https://cdn.example/", "a"));
-        assertEquals("https://kaotic.example/search/car%20crash",
+        assertEquals("https://kaotic.example/mediaSearch/?search=car+crash",
                 WebVideoSourceRepository.kaoticSearchUrl("https://kaotic.example/", "car crash"));
         assertEquals("", WebVideoSourceRepository.kaoticSearchUrl("https://kaotic.example/", "a"));
     }

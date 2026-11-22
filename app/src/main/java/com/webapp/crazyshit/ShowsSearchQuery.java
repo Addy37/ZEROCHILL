@@ -26,6 +26,8 @@ final class ShowsSearchQuery {
     private static final int RELATED = 100;
     private static final Set<String> STOP_WORDS = new HashSet<>(Arrays.asList(
             "a", "an", "the", "of", "in", "on", "at", "for", "to", "and", "with", "by"));
+    private static final Set<String> BROAD_ANCHORS = new HashSet<>(Arrays.asList(
+            "video", "footage", "clip", "accident", "crash", "shooting"));
     private static final Pattern MARKS = Pattern.compile("\\p{M}+");
     private static final Pattern PUNCTUATION = Pattern.compile("[^\\p{L}\\p{N}]+");
     private static final Pattern EFUKT_ID = Pattern.compile("/(\\d+)_[^/]+\\.html$");
@@ -48,6 +50,9 @@ final class ShowsSearchQuery {
         phrase = normalize(original);
         words = contentWords(phrase);
         terms = new LinkedHashSet<>(words);
+        if (terms.contains("cartel") && terms.contains("funeral")) {
+            related.put("cartel", Arrays.asList("narco", "drug trafficker"));
+        }
         if (terms.size() > 1 && terms.contains("funeral")) {
             related.put("funeral", Arrays.asList("burial", "memorial service"));
         }
@@ -76,13 +81,23 @@ final class ShowsSearchQuery {
         }
         String simplified = String.join(" ", words);
         if (simplified.length() >= 2) queries.putIfAbsent(simplified, simplified);
+        if (terms.size() > 1 && !related.isEmpty()) addAnchor(queries);
         if (words.size() > 1) {
             List<String> reversed = new ArrayList<>(words);
             Collections.reverse(reversed);
             String reordered = String.join(" ", reversed);
             queries.putIfAbsent(reordered, reordered);
         }
+        if (terms.size() > 1 && related.isEmpty()) addAnchor(queries);
         return new ArrayList<>(queries.values());
+    }
+
+    private void addAnchor(Map<String, String> queries) {
+        String anchor = "";
+        for (String term : terms) {
+            if (term.length() > anchor.length() && !BROAD_ANCHORS.contains(term)) anchor = term;
+        }
+        if (anchor.length() >= 2) queries.putIfAbsent(anchor, anchor);
     }
 
     boolean hasEnoughResults(List<NativeContentItem> items) {

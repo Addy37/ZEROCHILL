@@ -7,6 +7,7 @@ import org.jsoup.nodes.Element;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -153,9 +154,15 @@ final class ShowsSearch {
         try {
             URI origin = URI.create(document.location());
             URI requested = URI.create(requestedUrl);
+            String formQuery = kaoticFormQuery(requested);
             String path = searchPath(requested);
-            if (path.isEmpty() || !path.equals(searchPath(origin))
-                    || isNextPage(origin, path, nextPage)) return "";
+            if (formQuery == null) {
+                if (path.isEmpty() || !path.equals(searchPath(origin))
+                        || isNextPage(origin, path, nextPage)) return "";
+            } else if (!formQuery.equals(kaoticFormQuery(origin))
+                    || String.valueOf(nextPage).equals(queryParameter(origin, "paged"))) {
+                return "";
+            }
             Set<String> numericLinks = new HashSet<>();
             for (Element link : document.select("a[href], link[rel][href]")) {
                 String address = link.absUrl("href");
@@ -166,8 +173,12 @@ final class ShowsSearch {
                 } catch (IllegalArgumentException ignored) {
                     continue;
                 }
-                if (!sameOrigin(origin, next) || !path.equals(searchPath(next))
-                        || !isNextPage(next, path, nextPage)) continue;
+                if (!sameOrigin(origin, next) || next.getRawFragment() != null) continue;
+                boolean nextForQuery = formQuery == null
+                        ? path.equals(searchPath(next)) && isNextPage(next, path, nextPage)
+                        : formQuery.equals(kaoticFormQuery(next))
+                                && String.valueOf(nextPage).equals(queryParameter(next, "paged"));
+                if (!nextForQuery) continue;
                 if (NEXT_REL.matcher(link.attr("rel")).find()) return next.toString();
                 String label = link.text().trim();
                 if (label.equals(String.valueOf(nextPage)) || label.equalsIgnoreCase("next")
@@ -177,6 +188,30 @@ final class ShowsSearch {
         } catch (IllegalArgumentException ignored) {
             return "";
         }
+    }
+
+    private static String kaoticFormQuery(URI url) {
+        String path = url.getRawPath();
+        return "/mediaSearch/".equals(path) || "/mediaSearch".equals(path)
+                ? queryParameter(url, "search") : null;
+    }
+
+    private static String queryParameter(URI url, String name) {
+        if (url.getRawQuery() == null) return null;
+        String value = null;
+        for (String parameter : url.getRawQuery().split("&")) {
+            String[] parts = parameter.split("=", 2);
+            if (parts.length != 2 || (!parts[0].equals("search") && !parts[0].equals("paged"))) return null;
+            if (parts[0].equals(name)) {
+                if (value != null) return null;
+                try {
+                    value = URLDecoder.decode(parts[1], "UTF-8");
+                } catch (java.io.UnsupportedEncodingException impossible) {
+                    throw new AssertionError(impossible);
+                }
+            }
+        }
+        return value;
     }
 
     private static String searchPath(URI url) {

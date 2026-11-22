@@ -40,7 +40,7 @@ public class ShowsSearchTest {
                 video("A car show", "3", "See the weekend listings"),
                 video("Truck crash", "4", ""),
                 related)));
-        assertEquals(Arrays.asList("car accident", "car crash", "accident car"), query.attempts());
+        assertEquals(Arrays.asList("car accident", "car crash", "car", "accident car"), query.attempts());
         assertEquals(Arrays.asList("The cars", "car"), new ShowsSearchQuery("The cars").attempts());
     }
 
@@ -76,6 +76,31 @@ public class ShowsSearchTest {
         assertEquals("", ShowsSearch.nextLink(Jsoup.parse("<a href='/2/'>Next</a>", base), base, 2));
         assertEquals("", ShowsSearch.nextLink(
                 Jsoup.parse("<a href='?page=2'>2</a>", base + "?page=2"), base, 2));
+    }
+
+    @Test public void followsKaoticFormPaginationOnlyForTheSameQuery() {
+        String base = "https://kaotic.com/mediaSearch/?search=car+accident";
+        String links = "<a rel=next href='/mediaSearch/?search=other&paged=2'>Next</a>"
+                + "<a rel=next href='/mediaSearch/?search=car+accident&paged=5'>Next</a>"
+                + "<a rel=next href='/mediaSearch/?search=car+accident&search=other&paged=2'>Next</a>"
+                + "<a rel=next href='https://other.example/mediaSearch/?search=car+accident&paged=2'>Next</a>"
+                + "<a href='/mediaSearch/?search=car%20accident&paged=2'>2</a>";
+        assertEquals("https://kaotic.com/mediaSearch/?search=car%20accident&paged=2",
+                ShowsSearch.nextLink(Jsoup.parse(links, base), base, 2));
+        assertEquals("", ShowsSearch.nextLink(Jsoup.parse(links, "https://kaotic.com/"), base, 2));
+    }
+
+    @Test public void findsAnchoredCandidatesWithoutAcceptingTheSingleTermAsAMatch() throws Exception {
+        NativeContentItem hit = video("Van crashes into a warehouse", "1", "");
+        NativeContentItem noise = video("New warehouse opens", "2", "");
+        List<String> attempts = new ArrayList<>();
+        assertEquals(Collections.singletonList(hit), ShowsSearch.find(
+                new ShowsSearchQuery("warehouse accident"), text -> text, (address, page, budget) -> {
+                    attempts.add(address);
+                    return new ShowsSearch.Page(address.equals("warehouse") ? Arrays.asList(hit, noise)
+                            : Collections.singletonList(noise), "");
+                }, null, ignored -> {}));
+        assertEquals(Arrays.asList("warehouse accident", "warehouse crash", "warehouse"), attempts);
     }
 
     @Test public void capsPagesAndRequestsAndPublishesUsefulHitsBeforeFinishing() throws Exception {
