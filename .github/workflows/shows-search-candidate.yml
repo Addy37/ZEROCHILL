@@ -192,17 +192,18 @@ jobs:
                   parser.feed(body)
                   links = [a for a in parser.links if re.search(r'/cnt/medias/|/video/|/\d+_.*\.html', a['href'])]
                   classified = {a['href']: a.get('title') for a in links if a.get('title') and re.search(r'\b(cartel|funeral|accident|warehouse|car|crash|police|shooting|collision)\b', a['title'], re.I)}
-                  search = [a['href'] for a in parser.links if 'search' in a['href'].lower()]
+                  search = [a['href'] for a in parser.links if 'search' in a['href'].lower() or 'page=' in a['href'].lower()]
                   print(json.dumps({'url':url, 'forms':parser.forms[:8] if route == '' else [],
                                     'local_scripts': [s for s in parser.scripts if site in s or s.startswith('/')] if route == '' else [],
                                     'video_links':len({a['href'] for a in links}), 'sample':list(classified.values())[:15],
                                     'search_links':list(dict.fromkeys(search))[:12],
                                     'search_js': re.findall(r'.{0,60}(?:/search|searchForm|searchQuery|searchInput).{0,100}', body, re.I)[:15] if route == '' else []}))
 
+          queries = ['cartel funeral', 'car accident', 'police shooting', 'warehouse accident']
           routes = {
-              'crazyshit.com':['','search/cartel/','search/funeral/','search/accident/','search/shooting/','search/warehouse/'],
-              'kaotic.com':['','search/cartel','search/funeral','search/accident','search/shooting','search/warehouse'],
-              'efukt.com':['','search/funeral/','search/accident/','search/shooting/','search/warehouse/']
+              'crazyshit.com':['search/?query=' + urllib.parse.quote_plus(q) for q in queries],
+              'kaotic.com':['mediaSearch/?search=' + urllib.parse.quote_plus(q) for q in queries]
+                  + ['mediaSearch/?search=warehouse', 'mediaSearch/?search=funeral', 'mediaSearch/?search=car+crash'],
           }
           with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
               list(pool.map(lambda pair: probe(*pair), routes.items()))
