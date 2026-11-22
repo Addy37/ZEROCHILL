@@ -76,11 +76,19 @@ public final class EfuktRepository {
         return parseVideoFeed(fetchDocument(context, seriesUrl));
     }
 
-    public List<NativeContentItem> search(Context context, String query) throws IOException {
-        String value = query == null ? "" : query.trim();
-        if (value.length() < 2) return new ArrayList<>();
-        String encoded = URLEncoder.encode(value, "UTF-8");
-        return parseVideoFeed(fetchDocument(context, BASE + "search/" + encoded + "/"));
+    static String searchUrl(String query) {
+        try {
+            return BASE + "search/" + URLEncoder.encode(query, "UTF-8") + "/";
+        } catch (java.io.UnsupportedEncodingException impossible) {
+            throw new AssertionError(impossible);
+        }
+    }
+
+    ShowsSearch.Page searchPage(Context context, String url, int page, ShowsSearch.Budget budget)
+            throws IOException {
+        Document doc = fetchDocument(context, url, budget.beginRequest(18000));
+        ShowsSearch.checkCancelled();
+        return ShowsSearch.Page.from(doc, parseVideoFeed(doc), url, page);
     }
 
     private List<NativeContentItem> parseVideoFeed(Document doc) {
@@ -340,12 +348,16 @@ public final class EfuktRepository {
     }
 
     private Document fetchDocument(Context context, String url) throws IOException {
+        return fetchDocument(context, url, 18000);
+    }
+
+    private Document fetchDocument(Context context, String url, int timeoutMs) throws IOException {
         Connection connection = Jsoup.connect(url)
                 .userAgent(USER_AGENT)
                 .referrer(BASE)
                 .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
                 .header("Accept-Encoding", "identity")
-                .timeout(18000)
+                .timeout(timeoutMs)
                 .maxBodySize(6 * 1024 * 1024)
                 .followRedirects(true)
                 .ignoreHttpErrors(false);

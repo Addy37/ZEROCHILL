@@ -119,13 +119,17 @@ public final class CrazyShitRepository {
     }
 
     private List<NativeContentItem> parsePlainFeed(Document doc) {
+        return parsePlainFeed(doc, false);
+    }
+
+    private List<NativeContentItem> parsePlainFeed(Document doc, boolean search) {
         LinkedHashMap<String, NativeContentItem> items = new LinkedHashMap<>();
 
         for (Element link : doc.select("a[href*=/cnt/medias/]")) {
             String url = normalizeUrl(link.absUrl("href"));
             if (!isMediaPage(url)) continue;
 
-            NativeContentItem candidate = buildMediaItem(link, url, 0L);
+            NativeContentItem candidate = buildMediaItem(link, url, 0L, search);
             NativeContentItem old = items.get(url);
             items.put(url, old == null ? candidate : old.merge(candidate));
         }
@@ -140,6 +144,11 @@ public final class CrazyShitRepository {
     }
 
     private NativeContentItem buildMediaItem(Element link, String url, long publishedAtMillis) {
+        return buildMediaItem(link, url, publishedAtMillis, false);
+    }
+
+    private NativeContentItem buildMediaItem(Element link, String url, long publishedAtMillis,
+                                             boolean search) {
         Element scope = findCardScope(link);
         String title = findTitle(link, scope, url);
         String image = findImage(link, scope);
@@ -156,9 +165,9 @@ public final class CrazyShitRepository {
                 url,
                 image,
                 meta.views,
-                meta.uploader,
+                search ? "CrazyShit" : meta.uploader,
                 meta.comments,
-                "",
+                search ? ShowsSearch.cardDescription(scope) : "",
                 "",
                 published
         );
@@ -303,6 +312,13 @@ public final class CrazyShitRepository {
         return BASE + "search/" + slug + "/";
     }
 
+    ShowsSearch.Page searchPage(Context context, String url, int page, ShowsSearch.Budget budget)
+            throws IOException {
+        Document doc = fetchDocument(context, url, budget.beginRequest(18000));
+        ShowsSearch.checkCancelled();
+        return ShowsSearch.Page.from(doc, parsePlainFeed(doc, true), url, page);
+    }
+
     public String pageUrl(String baseUrl, int page) {
         String base = baseUrl == null || baseUrl.trim().isEmpty() ? HOME : baseUrl.trim();
         if (page <= 1) return ensureTrailingSlash(base);
@@ -311,11 +327,15 @@ public final class CrazyShitRepository {
     }
 
     private Document fetchDocument(Context context, String url) throws IOException {
+        return fetchDocument(context, url, 18000);
+    }
+
+    private Document fetchDocument(Context context, String url, int timeoutMs) throws IOException {
         Connection connection = Jsoup.connect(url)
                 .userAgent(USER_AGENT)
                 .referrer(BASE)
                 .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-                .timeout(18000)
+                .timeout(timeoutMs)
                 .maxBodySize(5 * 1024 * 1024)
                 .followRedirects(true)
                 .ignoreHttpErrors(false);

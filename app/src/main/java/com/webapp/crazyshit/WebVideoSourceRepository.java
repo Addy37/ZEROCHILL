@@ -4,6 +4,7 @@ import android.content.Context;
 import android.webkit.CookieManager;
 
 import org.jsoup.Connection;
+import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -16,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -124,64 +126,38 @@ final class WebVideoSourceRepository {
         return parseFeed(document, source, requestedPage, config);
     }
 
-    /**
-     * Kaotic has no remote search route. The path is compiled. The origin, headers, timeouts,
-     * retries and card parser all come from the current Kaotic configuration. At most one search
-     * request, then the first configured feed page if that request misses.
-     */
     static String kaoticSearchUrl(String baseUrl, String query) {
         String value = query == null ? "" : query.trim();
         if (value.length() < 2 || baseUrl == null || baseUrl.trim().isEmpty()) return "";
         try {
-            String encoded = URLEncoder.encode(value, "UTF-8").replace("+", "%20");
-            return URI.create(baseUrl).resolve("search/" + encoded).toString();
+            // Kaotic's public GET search form uses this route and parameter.
+            String encoded = URLEncoder.encode(value, "UTF-8");
+            return URI.create(baseUrl).resolve("mediaSearch/?search=" + encoded).toString();
         } catch (Exception ignored) {
             return "";
         }
     }
 
-    List<NativeContentItem> search(Context context, String query) throws IOException {
+    List<NativeContentItem> search(Context context, ShowsSearchQuery query,
+                                   Consumer<List<NativeContentItem>> publish)
+            throws IOException {
         SourceConfig.WebVideo config = config(Source.KAOTIC);
         if (!config.enabled) throw new IOException(Source.KAOTIC.label + " is temporarily unavailable");
-        String value = query == null ? "" : query.trim();
-        if (value.length() < 2) return new ArrayList<>();
-        if (Thread.currentThread().isInterrupted()) throw new IOException("Kaotic search was cancelled");
-        String url = kaoticSearchUrl(config.baseUrl, value);
-        ArrayList<NativeContentItem> found = new ArrayList<>();
-        IOException failure = null;
-        if (!url.isEmpty()) {
-            try {
-                addKaoticMatches(found, parseFeed(
-                        fetchConfigured(context, config, url), Source.KAOTIC, 1, config), value);
-            } catch (IOException error) {
-                failure = error;
-            }
-        }
-        if (!found.isEmpty()) return found;
-        if (Thread.currentThread().isInterrupted()) {
-            throw failure == null ? new IOException("Kaotic search was cancelled") : failure;
-        }
-        try {
-            addKaoticMatches(found, fetchFeed(context, Source.KAOTIC, 1), value);
-        } catch (IOException error) {
-            if (failure != null) throw failure;
-            throw error;
-        }
-        return found;
-    }
-
-    private static void addKaoticMatches(
-            List<NativeContentItem> found,
-            List<NativeContentItem> items,
-            String query
-    ) {
-        if (items == null) return;
-        for (NativeContentItem item : items) {
-            if (item == null || item.isSection()) continue;
-            if (!LibrarySearch.matches(query, item.title, item.url, item.description, item.uploader)) continue;
-            found.add(item);
-            if (found.size() >= 40) return;
-        }
+        return ShowsSearch.find(query, text -> kaoticSearchUrl(config.baseUrl, text),
+                (url, page, budget) -> {
+                    Document document = fetchConfigured(context, config, url, budget);
+                    ShowsSearch.checkCancelled();
+                    return ShowsSearch.Page.from(document, parseFeed(document, Source.KAOTIC, page, config, true),
+                            url, page);
+                },
+                budget -> {
+                    Document document = fetchConfigured(context, config, config.baseUrl
+                            + config.feedFirstRoute.replace("{page}", "1"), budget);
+                    ShowsSearch.checkCancelled();
+                    List<NativeContentItem> items = parseFeed(document, Source.KAOTIC, 1, config, true);
+                    if (items.isEmpty()) throw new IOException("Kaotic returned no playable feed items");
+                    return items;
+                }, publish);
     }
 
     List<NativeContentItem> parseKaoticCategories(Document document) {
@@ -287,6 +263,11 @@ final class WebVideoSourceRepository {
             int page,
             SourceConfig.WebVideo config
     ) {
+        return parseFeed(document, source, page, config, false);
+    }
+
+    private List<NativeContentItem> parseFeed(Document document, Source source, int page,
+                                              SourceConfig.WebVideo config, boolean search) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         LinkedHashMap<String, Integer> positions = new LinkedHashMap<>();
         String pendingHeader = "";
@@ -333,7 +314,7 @@ final class WebVideoSourceRepository {
                     views,
                     source.label,
                     "",
-                    "",
+                    search ? ShowsSearch.cardDescription(scope) : "",
                     "",
                     publishedAt
             );
@@ -415,7 +396,7 @@ final class WebVideoSourceRepository {
                 String frameUrl = absolute(frame, "src", page.location());
                 if (!frameUrl.startsWith("https://")) continue;
                 try {
-                    Document framePage = fetchDocument(context, config, frameUrl, pageUrl);
+                    Document framePage = fetchDocument(context, config, frameUrl, pageUrl, config.requestTimeoutMs);
                     media = playableFromDocument(framePage, config);
                     if (!media.isEmpty()) break;
                 } catch (IOException ignored) {
@@ -452,11 +433,35 @@ final class WebVideoSourceRepository {
             SourceConfig.WebVideo config,
             String requested
     ) throws IOException {
+        return fetchConfigured(context, config, requested, null);
+    }
+
+    private Document fetchConfigured(Context context, SourceConfig.WebVideo config, String requested,
+                                     ShowsSearch.Budget searchBudget) throws IOException {
         IOException failure = null;
-        for (String candidate : candidates(config, requested)) {
+        List<String> origins = candidates(config, requested);
+        if (searchBudget != null) {
+            // Give configured mirrors a chance before retrying a slow or unavailable origin.
+            for (int attempt = 0; attempt <= config.retryCount; attempt++) {
+                for (String candidate : origins) {
+                    if (!searchBudget.available()) break;
+                    try {
+                        return fetchDocument(context, config, candidate, config.baseUrl,
+                                searchBudget.beginRequest(config.requestTimeoutMs));
+                    } catch (IOException error) {
+                        ShowsSearch.checkCancelled();
+                        failure = error;
+                        if (origins.size() == 1 && error instanceof HttpStatusException) throw error;
+                    }
+                }
+                if (failure instanceof HttpStatusException) break;
+            }
+            throw failure == null ? new IOException("Kaotic search request budget exhausted") : failure;
+        }
+        for (String candidate : origins) {
             for (int attempt = 0; attempt <= config.retryCount; attempt++) {
                 try {
-                    return fetchDocument(context, config, candidate, config.baseUrl);
+                    return fetchDocument(context, config, candidate, config.baseUrl, config.requestTimeoutMs);
                 } catch (IOException error) {
                     failure = error;
                 }
@@ -469,12 +474,13 @@ final class WebVideoSourceRepository {
             Context context,
             SourceConfig.WebVideo config,
             String url,
-            String referer
+            String referer,
+            int timeoutMs
     ) throws IOException {
         Connection connection = Jsoup.connect(url)
                 .userAgent(config.userAgent)
                 .referrer(config.refererOverride.isEmpty() ? referer : config.refererOverride)
-                .timeout(config.requestTimeoutMs)
+                .timeout(timeoutMs)
                 .maxBodySize(8 * 1024 * 1024)
                 .followRedirects(true)
                 .ignoreHttpErrors(false);
