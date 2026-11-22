@@ -130,3 +130,10 @@ jobs:
           path: candidate/
           if-no-files-found: error
           retention-days: 14
+      - name: Sample live metadata search on the base and candidate
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          BASE_SHA="$(sed -n 's/^BASE_SHA=//p' candidate/BUILD_LINEAGE.txt)"
+          bash tools/compare-shows-search.sh "$BASE_SHA" | tee "$RUNNER_TEMP/shows-search-sample.txt"
