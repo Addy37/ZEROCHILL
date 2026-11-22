@@ -143,20 +143,25 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     void replace(List<Entry> next) {
+        replace(next, false);
+    }
+
+    void replace(List<Entry> next, boolean keepRank) {
         List<Entry> old = new ArrayList<>(entries);
-        List<Entry> replacement = stableOrder(next == null ? new ArrayList<>() : next);
+        List<Entry> incoming = next == null ? new ArrayList<>() : next;
+        List<Entry> ordered = keepRank ? incoming : stableOrder(incoming);
         androidx.recyclerview.widget.DiffUtil.DiffResult diff = androidx.recyclerview.widget.DiffUtil.calculateDiff(
                 new androidx.recyclerview.widget.DiffUtil.Callback() {
                     public int getOldListSize() { return old.size(); }
-                    public int getNewListSize() { return replacement.size(); }
+                    public int getNewListSize() { return ordered.size(); }
                     public boolean areItemsTheSame(int a, int b) {
-                        Entry x = old.get(a), y = replacement.get(b);
+                        Entry x = old.get(a), y = ordered.get(b);
                         if (x.section != y.section) return false;
                         if (x.section) return sectionKey(x).equals(sectionKey(y));
                         return itemKey(x).equals(itemKey(y));
                     }
                     public boolean areContentsTheSame(int a, int b) {
-                        Entry x = old.get(a), y = replacement.get(b);
+                        Entry x = old.get(a), y = ordered.get(b);
                         if (x.section) return x.sectionTitle.equals(y.sectionTitle);
                         return x.item.url.equals(y.item.url) && x.item.searchQuery.equals(y.item.searchQuery)
                                 && x.item.title.equals(y.item.title) && x.item.imageUrl.equals(y.item.imageUrl)
@@ -165,7 +170,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                     }
                 });
         entries.clear();
-        entries.addAll(replacement);
+        entries.addAll(ordered);
         diff.dispatchUpdatesTo(this);
         preloadDirectThumbnails();
     }

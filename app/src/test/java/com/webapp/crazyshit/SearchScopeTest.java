@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -51,9 +52,9 @@ public class SearchScopeTest {
     public static class QuietCrazy {
         static final AtomicInteger calls = new AtomicInteger();
         @Implementation
-        protected List<NativeContentItem> fetchFeed(Context context, String url, int page) {
+        protected ShowsSearch.Page searchPage(Context context, String url, int page, ShowsSearch.Budget budget) {
             calls.incrementAndGet();
-            return Collections.emptyList();
+            return new ShowsSearch.Page(Collections.emptyList(), "");
         }
     }
 
@@ -61,9 +62,9 @@ public class SearchScopeTest {
     public static class QuietEfukt {
         static final AtomicInteger calls = new AtomicInteger();
         @Implementation
-        protected List<NativeContentItem> search(Context context, String query) {
+        protected ShowsSearch.Page searchPage(Context context, String url, int page, ShowsSearch.Budget budget) {
             calls.incrementAndGet();
-            return Collections.emptyList();
+            return new ShowsSearch.Page(Collections.emptyList(), "");
         }
     }
 
@@ -71,7 +72,8 @@ public class SearchScopeTest {
     public static class QuietKaotic {
         static final AtomicInteger calls = new AtomicInteger();
         @Implementation
-        protected List<NativeContentItem> search(Context context, String query) {
+        protected List<NativeContentItem> search(Context context, ShowsSearchQuery query,
+                                                 Consumer<List<NativeContentItem>> publish) {
             calls.incrementAndGet();
             return Collections.emptyList();
         }
@@ -223,15 +225,17 @@ public class SearchScopeTest {
             assertEquals(0, QuietXMega.calls.get());
             assertEquals(0, QuietBaddie.calls.get());
             ReflectionHelpers.setField(panel, "crazyVideos", Collections.singletonList(
-                    video("Crazy clip", "https://crazyshit.com/v/1", "CrazyShit")));
+                    video("Crash involving a car", "https://crazyshit.com/v/1", "CrazyShit")));
             ReflectionHelpers.setField(panel, "efuktVideos", Collections.singletonList(
-                    video("Efukt clip", "https://efukt.com/v/1", "EFukt")));
+                    video("Car crash at the intersection", "https://efukt.com/v/1", "EFukt")));
             ReflectionHelpers.setField(panel, "kaoticVideos", Collections.singletonList(
-                    video("Kaotic clip", "https://kaotic.com/video/1", "Kaotic")));
+                    video("Car crash", "https://kaotic.com/video/1", "Kaotic")));
             ReflectionHelpers.callInstanceMethod(panel, "renderResults");
             GlobalSearchAdapter adapter = ReflectionHelpers.getField(panel, "adapter");
-            assertEquals(6, adapter.getItemCount());
+            assertEquals(4, adapter.getItemCount());
             String shown = boundText(panel, adapter);
+            assertTrue(shown.indexOf("Kaotic") < shown.indexOf("EFukt"));
+            assertTrue(shown.indexOf("EFukt") < shown.indexOf("CrazyShit"));
             assertTrue(shown.contains("CrazyShit"));
             assertTrue(shown.contains("EFukt"));
             assertTrue(shown.contains("Kaotic"));

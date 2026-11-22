@@ -114,6 +114,8 @@ final class SearchPanel {
     private List<NativeContentItem> crazyVideos = new ArrayList<>();
     private List<NativeContentItem> efuktVideos = new ArrayList<>();
     private List<NativeContentItem> kaoticVideos = new ArrayList<>();
+    private ShowsSearchQuery showsQuery;
+    private List<NativeContentItem> rankedShows = new ArrayList<>();
     private List<NativeContentItem> xmegaResults = new ArrayList<>();
     private List<NativeContentItem> bunkrResults = new ArrayList<>();
     private List<NativeContentItem> baddieResults = new ArrayList<>();
@@ -444,6 +446,8 @@ final class SearchPanel {
         crazyVideos = new ArrayList<>();
         efuktVideos = new ArrayList<>();
         kaoticVideos = new ArrayList<>();
+        showsQuery = null;
+        rankedShows = new ArrayList<>();
         xmegaResults = new ArrayList<>();
         bunkrResults = new ArrayList<>();
         baddieResults = new ArrayList<>();
@@ -811,13 +815,20 @@ final class SearchPanel {
         final Scope requestedScope = Scope.SHOWS;
         errors.clear();
         pendingSources = 3;
+        ShowsSearchQuery ranking = new ShowsSearchQuery(requested);
+        showsQuery = ranking;
         renderResults();
         source(token, requestedScope, requested, 0, "CrazyShit", () ->
-                label(repository.fetchFeed(activity, repository.searchUrl(requested), 1), "CrazyShit"));
+                ShowsSearch.find(ranking, repository::searchUrl,
+                        (url, page, budget) -> repository.searchPage(activity, url, page, budget),
+                        null, items -> publishPartial(token, requestedScope, requested, 0, items)));
         source(token, requestedScope, requested, 1, "EFukt", () ->
-                label(efuktRepository.search(activity, requested), "EFukt"));
+                ShowsSearch.find(ranking, EfuktRepository::searchUrl,
+                        (url, page, budget) -> efuktRepository.searchPage(activity, url, page, budget),
+                        null, items -> publishPartial(token, requestedScope, requested, 1, items)));
         source(token, requestedScope, requested, 2, "Kaotic", () ->
-                label(webVideoRepository.search(activity, requested), "Kaotic"));
+                webVideoRepository.search(activity, ranking,
+                        items -> publishPartial(token, requestedScope, requested, 2, items)));
     }
 
     private void startXMegaDriveSearch(String query) {
@@ -952,20 +963,6 @@ final class SearchPanel {
         else if (requested == Scope.LIBRARY) library = result;
     }
 
-    private List<NativeContentItem> label(List<NativeContentItem> items, String source) {
-        ArrayList<NativeContentItem> labeled = new ArrayList<>();
-        if (items == null) return labeled;
-        for (NativeContentItem item : items) {
-            if (item == null || item.isSection()) continue;
-            if (source.equals(item.uploader)) labeled.add(item);
-            else labeled.add(new NativeContentItem(
-                    item.kind, item.title, item.url, item.imageUrl, item.views, source,
-                    item.comments, item.description, item.searchQuery, item.publishedAtMillis,
-                    item.aspectRatioHint));
-        }
-        return labeled;
-    }
-
     private void saveSnapshot() {
         try {
             JSONObject data = new JSONObject().put("query", activeQuery);
@@ -1074,9 +1071,9 @@ final class SearchPanel {
         if (activeQuery.isEmpty() || adapter == null || scope == Scope.ONLYFAP) return;
         ArrayList<GlobalSearchAdapter.Entry> output = new ArrayList<>();
         if (scope == Scope.SHOWS) {
-            appendSection(output, "CrazyShit", crazyVideos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
-            appendSection(output, "EFukt", efuktVideos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
-            appendSection(output, "Kaotic", kaoticVideos, GlobalSearchAdapter.SOURCE_REMOTE, 40);
+            if (showsQuery == null) showsQuery = new ShowsSearchQuery(activeQuery);
+            rankedShows = showsQuery.rank(3 * ShowsSearch.SOURCE_LIMIT, crazyVideos, efuktVideos, kaoticVideos);
+            appendSection(output, "Shows", rankedShows, GlobalSearchAdapter.SOURCE_REMOTE, rankedShows.size());
         } else if (scope == Scope.XMEGADRIVE) {
             appendKind(output, "Videos", xmegaResults, false);
             appendKind(output, "Categories", xmegaResults, true);
@@ -1097,7 +1094,7 @@ final class SearchPanel {
             searchCompletedMs = android.os.SystemClock.elapsedRealtime() - searchStarted;
             AppPerformance.record("Search complete", searchCompletedMs);
         }
-        adapter.replace(output);
+        adapter.replace(output, scope == Scope.SHOWS);
         progress.setVisibility(pendingSources > 0 ? View.VISIBLE : View.GONE);
         String unavailable = unavailableNow();
         searchState.setVisibility(View.VISIBLE);
@@ -1190,9 +1187,7 @@ final class SearchPanel {
         final Scope requestedScope = scope;
         final List<NativeContentItem> watchItems = new ArrayList<>();
         if (requestedScope == Scope.SHOWS) {
-            watchItems.addAll(crazyVideos);
-            watchItems.addAll(efuktVideos);
-            watchItems.addAll(kaoticVideos);
+            watchItems.addAll(rankedShows);
         } else if (requestedScope == Scope.LIBRARY) {
             for (NativeContentItem candidate : library) {
                 if (!OnlyFapVideoMetadata.applies(candidate)) watchItems.add(candidate);
