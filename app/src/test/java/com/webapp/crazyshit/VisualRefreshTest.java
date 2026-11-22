@@ -138,13 +138,15 @@ public class VisualRefreshTest {
         assertTrue(topBar instanceof GlassHeaderView);
         topBar = ((android.view.ViewGroup) topBar).getChildAt(1);
         assertTrue(topBar instanceof LinearLayout);
-        assertEquals(4, ((LinearLayout) topBar).getChildCount());
-        View search = ((LinearLayout) topBar).getChildAt(1);
-        assertEquals("Global Search", String.valueOf(search.getContentDescription()));
-        View avatar = ((LinearLayout) topBar).getChildAt(2);
+        // The ShitTok All/OnlyFap selector occupies its own header slot.
+        assertEquals(5, ((LinearLayout) topBar).getChildCount());
+        assertTrue(((LinearLayout) topBar).getChildAt(1) instanceof ShitTokSourceControl);
+        View search = ((LinearLayout) topBar).getChildAt(2);
+        assertEquals("Search", String.valueOf(search.getContentDescription()));
+        View avatar = ((LinearLayout) topBar).getChildAt(3);
         assertTrue(avatar instanceof HeaderProfileAvatar);
         assertEquals(View.GONE, avatar.getVisibility());
-        View more = ((LinearLayout) topBar).getChildAt(3);
+        View more = ((LinearLayout) topBar).getChildAt(4);
         assertEquals("More", String.valueOf(more.getContentDescription()));
 
         RecyclerView homeList = ReflectionHelpers.getField(home, "recycler");
@@ -474,7 +476,10 @@ public class VisualRefreshTest {
 
     @Test public void creatorGalleryRendersTheSavedGridWithoutFetching() throws Exception {
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
-        String id = BunkrGallerySessionStore.createCreator("Alex Rivera", creator().url, "Alex Rivera");
+        // Match the current creator-gallery identity contract, not the old raw query.
+        String galleryKey = CreatorGallerySpec.sessionKey("Alex Rivera", "", "Alex Rivera",
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        String id = BunkrGallerySessionStore.createCreator("Alex Rivera", creator().url, galleryKey);
         java.util.List<NativeContentItem> media = new java.util.ArrayList<>();
         for (int i = 0; i < 8; i++) media.add(new NativeContentItem(i % 2 == 0 ? NativeContentItem.KIND_MEDIA : NativeContentItem.KIND_IMAGE,
                 "Sample " + i, "https://fapello.com/alex-rivera/" + (i + 1) + "/", "", "", "", "", ""));
