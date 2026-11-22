@@ -17,7 +17,7 @@ jobs:
     if: >-
       github.repository == 'Addy37/ZEROCHILL' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.head_ref == 'release/zerochill-7.4.0'
+      github.head_ref == 'fix/zerochill-7-4-release-visual-tests'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -110,6 +110,7 @@ jobs:
         run: >-
           gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
           :app:testReleaseUnitTest
+          --tests '*VisualRefreshTest'
           --tests '*WhatsNewTest'
           --tests '*ReleaseNotesSummaryTest'
           --tests '*UpdateCardControllerTest'
