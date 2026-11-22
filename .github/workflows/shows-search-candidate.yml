@@ -15,7 +15,7 @@ permissions:
 jobs:
   candidate:
     if: >-
-      github.repository == 'Addy37/ZEROCHILL' &&
+      false && github.repository == 'Addy37/ZEROCHILL' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.head_ref == 'feature/shows-search-accuracy'
     runs-on: ubuntu-latest
@@ -137,3 +137,73 @@ jobs:
           set -euo pipefail
           BASE_SHA="$(sed -n 's/^BASE_SHA=//p' candidate/BUILD_LINEAGE.txt)"
           bash tools/compare-shows-search.sh "$BASE_SHA" | tee "$RUNNER_TEMP/shows-search-sample.txt"
+  inspect-provider-search:
+    if: >-
+      github.repository == 'Addy37/ZEROCHILL' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'feature/shows-search-accuracy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Inspect public search forms and result routes
+        run: |
+          python3 - <<'PY'
+          import concurrent.futures, html, json, re, urllib.error, urllib.parse, urllib.request
+          from html.parser import HTMLParser
+
+          class SearchMarkup(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.forms, self.links, self.scripts = [], [], []
+                  self.form = None
+              def handle_starttag(self, tag, values):
+                  attrs = dict(values)
+                  if tag == 'form':
+                      self.form = {'action': attrs.get('action'), 'method': attrs.get('method'), 'id': attrs.get('id'), 'inputs': []}
+                      self.forms.append(self.form)
+                  elif tag == 'input' and self.form is not None:
+                      self.form['inputs'].append({key: attrs[key] for key in ('name','type','id','placeholder') if key in attrs})
+                  elif tag == 'script' and attrs.get('src'):
+                      self.scripts.append(attrs['src'])
+                  elif tag == 'a' and attrs.get('href'):
+                      self.links.append(attrs)
+              def handle_endtag(self, tag):
+                  if tag == 'form':
+                      self.form = None
+
+          def fetch(base, route):
+              url = urllib.parse.urljoin(base, route)
+              agent = 'Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36'
+              headers = {'User-Agent': agent, 'Referer': base, 'Accept-Language': 'en-US,en;q=0.9'}
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=7) as page:
+                      return page.url, page.read(3*1024*1024).decode('utf8', 'replace')
+              except Exception as failure:
+                  print(json.dumps({'url': url, 'error': str(failure)}))
+                  return url, ''
+
+          def probe(site, routes):
+              base = 'https://' + site + '/'
+              for route in routes:
+                  url, body = fetch(base, route)
+                  if not body:
+                      continue
+                  parser = SearchMarkup()
+                  parser.feed(body)
+                  links = [a for a in parser.links if re.search(r'/cnt/medias/|/video/|/\d+_.*\.html', a['href'])]
+                  classified = {a['href']: a.get('title') for a in links if a.get('title') and re.search(r'\b(cartel|funeral|accident|warehouse|car|crash|police|shooting|collision)\b', a['title'], re.I)}
+                  search = [a['href'] for a in parser.links if 'search' in a['href'].lower()]
+                  print(json.dumps({'url':url, 'forms':parser.forms[:8] if route == '' else [],
+                                    'local_scripts': [s for s in parser.scripts if site in s or s.startswith('/')] if route == '' else [],
+                                    'video_links':len({a['href'] for a in links}), 'sample':list(classified.values())[:15],
+                                    'search_links':list(dict.fromkeys(search))[:12],
+                                    'search_js': re.findall(r'.{0,60}(?:/search|searchForm|searchQuery|searchInput).{0,100}', body, re.I)[:15] if route == '' else []}))
+
+          routes = {
+              'crazyshit.com':['','search/cartel/','search/funeral/','search/accident/','search/shooting/','search/warehouse/'],
+              'kaotic.com':['','search/cartel','search/funeral','search/accident','search/shooting','search/warehouse'],
+              'efukt.com':['','search/funeral/','search/accident/','search/shooting/','search/warehouse/']
+          }
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+              list(pool.map(lambda pair: probe(*pair), routes.items()))
+          PY
