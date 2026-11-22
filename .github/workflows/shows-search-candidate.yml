@@ -83,6 +83,8 @@ jobs:
                   out.write(key+'='+value+'\n')
           PY
       - name: Run search and watch tests and assemble the signed test APK
+        env:
+          JAVA_TOOL_OPTIONS: -Drobolectric.dependency.repo.url=https://repo.maven.apache.org/maven2
         run: >-
           gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
           :app:testReleaseUnitTest
