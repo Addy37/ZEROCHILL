@@ -142,7 +142,8 @@ public class VisualRefreshTest {
         assertEquals(5, ((LinearLayout) topBar).getChildCount());
         assertTrue(((LinearLayout) topBar).getChildAt(1) instanceof ShitTokSourceControl);
         View search = ((LinearLayout) topBar).getChildAt(2);
-        assertEquals("Search", String.valueOf(search.getContentDescription()));
+        // The live search controller updates the accessible action label.
+        assertEquals("Global Search", String.valueOf(search.getContentDescription()));
         View avatar = ((LinearLayout) topBar).getChildAt(3);
         assertTrue(avatar instanceof HeaderProfileAvatar);
         assertEquals(View.GONE, avatar.getVisibility());
