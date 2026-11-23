@@ -296,7 +296,7 @@ public class ContentPreferenceTest {
         ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
         NativeContentItem current = clip("current"), next = clip("next"), future = clip("future");
         items.add(current); items.add(next); items.add(future);
-        ContentPreference.set(activity, ContentPreference.MEN);
+        ShitTokContentPreference.set(activity, ContentPreference.MEN);
         org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
         assertEquals(7, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "feedGeneration"));
         assertEquals(Arrays.asList(current), items);
@@ -311,7 +311,7 @@ public class ContentPreferenceTest {
             fixture.install(fixture.selected, fixture.selectedPlayer);
             org.robolectric.util.ReflectionHelpers.setField(fixture.feed, "clearDisplay", true);
             Object player = org.robolectric.util.ReflectionHelpers.getField(fixture.selected, "player");
-            ContentPreference.set(fixture.host.get(), ContentPreference.MEN);
+            ShitTokContentPreference.set(fixture.host.get(), ContentPreference.MEN);
             org.robolectric.util.ReflectionHelpers.callInstanceMethod(fixture.feed, "applyContentPreference");
             assertSame(player, org.robolectric.util.ReflectionHelpers.getField(fixture.selected, "player"));
             assertTrue((boolean) org.robolectric.util.ReflectionHelpers.getField(fixture.feed, "clearDisplay"));
@@ -329,7 +329,7 @@ public class ContentPreferenceTest {
         NativeContentItem current = clip("playing");
         items.addAll(Arrays.asList(clip("past0"), clip("past1"), current, clip("prepared")));
         org.robolectric.util.ReflectionHelpers.setField(feed, "selectedPosition", 2);
-        ContentPreference.set(activity, ContentPreference.WOMEN);
+        ShitTokContentPreference.set(activity, ContentPreference.WOMEN);
         org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
         assertEquals(Arrays.asList(current), items);
         assertEquals(0, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "selectedPosition"));
@@ -339,7 +339,7 @@ public class ContentPreferenceTest {
 
     @Test public void latePreferenceAdmissionKeepsHistoricalContentButRejectsStaleBlockedAndDuplicateItems() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        ContentPreference.set(activity, ContentPreference.MEN);
+        ShitTokContentPreference.set(activity, ContentPreference.MEN);
         ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
         ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
         NativeContentItem current = clip("current"), next = clip("next"),
@@ -371,7 +371,7 @@ public class ContentPreferenceTest {
 
     @Test public void womenMenWomenRestoresVerifiedFutureStreamsAndKeepsCurrentClip() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        ContentPreference.set(activity, ContentPreference.WOMEN);
+        ShitTokContentPreference.set(activity, ContentPreference.WOMEN);
         ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
         NativeContentItem current = havenClip("current"), future = havenClip("warm-future");
         ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
@@ -383,10 +383,10 @@ public class ContentPreferenceTest {
         org.robolectric.util.ReflectionHelpers.setField(mixer, "filtered",
                 ShitTokFilteredInventoryTest.seed(ContentPreference.WOMEN, Arrays.asList(future)));
         org.robolectric.util.ReflectionHelpers.setField(feed, "queuePreference", ContentPreference.WOMEN);
-        ContentPreference.set(activity, ContentPreference.MEN);
+        ShitTokContentPreference.set(activity, ContentPreference.MEN);
         org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
         assertEquals(Arrays.asList(current), items);
-        ContentPreference.set(activity, ContentPreference.WOMEN);
+        ShitTokContentPreference.set(activity, ContentPreference.WOMEN);
         org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
         assertEquals(Arrays.asList(current, future), items);
         assertSame(stream, streams.get(future.url));
@@ -395,7 +395,7 @@ public class ContentPreferenceTest {
 
     @Test public void filteredFutureSequencingPreservesCurrentAndSeparatesCrossSourceCreator() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        ContentPreference.set(activity, ContentPreference.WOMEN);
+        ShitTokContentPreference.set(activity, ContentPreference.WOMEN);
         ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
         ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
         NativeContentItem current = ShitTokFilteredInventoryTest.clip("Alice", 6, 1);
@@ -405,7 +405,7 @@ public class ContentPreferenceTest {
         org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "sequenceFilteredFuture");
         assertEquals(Arrays.asList(current, other, duplicate), items);
         assertEquals(0, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "selectedPosition"));
-        ContentPreference.set(activity, ContentPreference.ALL);
+        ShitTokContentPreference.set(activity, ContentPreference.ALL);
         items.clear(); items.addAll(Arrays.asList(current, duplicate, other));
         org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "sequenceFilteredFuture");
         assertEquals(Arrays.asList(current, duplicate, other), items);
