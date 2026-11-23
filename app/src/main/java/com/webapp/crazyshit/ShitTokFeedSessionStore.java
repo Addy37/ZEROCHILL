@@ -54,10 +54,24 @@ final class ShitTokFeedSessionStore {
         // Prioritize the current video; a full source cache should not evict it.
         CrazyShitRepository.StreamInfo current = streams.get(selected.url);
         if (current != null) resolved.put(selected.url, current);
-        for (int i = 0; i < copy.size() && resolved.size() < MAX_STREAMS; i++) {
+        // Keep the next playable clips warm before retaining older history;
+        // otherwise a deep saved position can resume immediately yet stall
+        // on the very next vertical swipe.
+        int selectedInCopy = selectedIndex - start;
+        for (int i = selectedInCopy + 1; i < copy.size() && i <= selectedInCopy + 24
+                && resolved.size() < MAX_STREAMS; i++) {
             NativeContentItem item = copy.get(i);
-            if (item == null || item.url == null) continue;
-            CrazyShitRepository.StreamInfo value = streams.get(item.url);
+            CrazyShitRepository.StreamInfo value = item == null ? null : streams.get(item.url);
+            if (value != null) resolved.put(item.url, value);
+        }
+        for (int i = selectedInCopy - 1; i >= 0 && resolved.size() < MAX_STREAMS; i--) {
+            NativeContentItem item = copy.get(i);
+            CrazyShitRepository.StreamInfo value = item == null ? null : streams.get(item.url);
+            if (value != null) resolved.put(item.url, value);
+        }
+        for (int i = selectedInCopy + 25; i < copy.size() && resolved.size() < MAX_STREAMS; i++) {
+            NativeContentItem item = copy.get(i);
+            CrazyShitRepository.StreamInfo value = item == null ? null : streams.get(item.url);
             if (value != null) resolved.put(item.url, value);
         }
         feeds.put(source.key(preference), new Session(selected.url, selectedIndex - start,
