@@ -289,8 +289,19 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         ));
         shitTokCategoryStrip = new ShitTokCategoryStrip(this);
         shitTokCategoryStrip.setVisibility(View.GONE);
-        shell.addView(shitTokCategoryStrip, new LinearLayout.LayoutParams(-1, dp(40)));
-        ((FrostedNavigationLayout) shell).setShitTokCategoryStripView(shitTokCategoryStrip);
+        shitTokCategoryStrip.setOnSearchClickListener(v -> {
+            haptic(v);
+            openContextualSearchFrom(v);
+        });
+        shitTokCategoryStrip.setOnMoreClickListener(v -> {
+            haptic(v);
+            showMoreSheet(v);
+        });
+        // An overlay instead of a LinearLayout row: the active ShitTok video reaches
+        // the Android status bar while the tabs render on top without reserving height.
+        FrameLayout.LayoutParams categoryOverlay = new FrameLayout.LayoutParams(
+                -1, dp(48), Gravity.TOP);
+        overlayRoot.addView(shitTokCategoryStrip, categoryOverlay);
 
         FrameLayout content = new FrameLayout(this);
         legacyContent = content;
@@ -578,9 +589,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         shitTokSourceSelectorVisible = visible;
         if (shitTokSourceSelector == null) return;
         shitTokSourceSelector.refresh(false);
-        // Source and category are independent dimensions. Keep the existing
-        // All / OnlyFap control available for every ShitTok category.
-        boolean showSelector = screen == Screen.CHAOS && visible;
+        // The former All / OnlyFap source selector is retired from ShitTok.
+        // Source selection now belongs to the five category tabs in the overlay.
+        boolean showSelector = false;
         shitTokSourceSelector.setVisibility(showSelector ? View.VISIBLE : View.GONE);
         if (headerProfileAvatar != null) headerProfileAvatar.setReserveSpaceWhenSignedOut(showSelector);
     }
@@ -897,14 +908,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (position == MainPagerAdapter.PAGE_CHAOS) scheduleRatingPromptCheck();
     }
 
-    /** ShitTok stays solid OLED black. Other pages retain their approved glass. */
+    /** ShitTok uses no traditional header; other pages retain approved glass. */
     private void setPrimaryHeaderMaterial(int position) {
         if (!(topBar instanceof GlassHeaderView)) return;
         boolean glass = position == MainPagerAdapter.PAGE_SERIES
                 || position == MainPagerAdapter.PAGE_LIBRARY;
         ((GlassHeaderView) topBar).setGlassEnabled(glass);
-        if (position == MainPagerAdapter.PAGE_CHAOS)
-            topBar.setBackgroundColor(android.graphics.Color.BLACK);
     }
 
     private void setZeroChillWordmark() {
@@ -958,7 +967,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 primaryPager.getVisibility() == View.VISIBLE;
         if (topBar != null) {
             topBar.setVisibility(
-                    fullscreen || immersiveOnlyFap || showsOwnsHeader() ? View.GONE : View.VISIBLE
+                    fullscreen || screen == Screen.CHAOS ||
+                            immersiveOnlyFap || showsOwnsHeader() ? View.GONE : View.VISIBLE
             );
         }
         if (bottomNavigation != null) {
@@ -1016,7 +1026,21 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             bottom = insets.getSystemWindowInsetBottom();
         }
         view.setPadding(left, top, right, bottom);
+        updateShitTokOverlayInsets(left, top, right);
         cachePortraitShellInsets(left, top, right, bottom);
+    }
+
+    private void updateShitTokOverlayInsets(int left, int top, int right) {
+        if (shitTokCategoryStrip == null ||
+                !(shitTokCategoryStrip.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams lp =
+                (FrameLayout.LayoutParams) shitTokCategoryStrip.getLayoutParams();
+        int desiredTop = top + dp(4);
+        if (lp.topMargin == desiredTop && lp.leftMargin == left && lp.rightMargin == right) return;
+        lp.topMargin = desiredTop;
+        lp.leftMargin = left;
+        lp.rightMargin = right;
+        shitTokCategoryStrip.setLayoutParams(lp);
     }
 
     private void cachePortraitShellInsets(int left, int top, int right, int bottom) {
