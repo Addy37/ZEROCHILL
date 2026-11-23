@@ -1164,7 +1164,8 @@ public final class ChaosFeedView extends FrameLayout {
         ArrayList<NativeContentItem> outgoingFuture = new ArrayList<>(items.subList(
                 Math.min(items.size(), selectedPosition + 1), items.size()));
         warmCategories.save(queueSources, previous, outgoingFuture, streamCache, categoryAt);
-        if (hasSelectedPage()) {
+        if (hasSelectedPage() && !pendingCategoryActivation) {
+            // Do not bookmark the old clip as the category we only tapped briefly.
             rememberSelectedPosition();
             returnCategories.remember(queueSources, previous, items.get(selectedPosition),
                     outgoingFuture, streamCache, categoryAt);
@@ -1283,10 +1284,7 @@ public final class ChaosFeedView extends FrameLayout {
                     publishQueueChange(() -> adapter.notifyItemRangeInserted(before, items.size() - before));
             }
         }
-        if (checkpoint.entries.size() > 0) {
-            sequenceFilteredFuture();
-            post(this::activatePendingCategory);
-        }
+        if (!checkpoint.entries.isEmpty()) post(this::activatePendingCategory);
         return selectedAlreadyVisible;
     }
 
@@ -4940,7 +4938,18 @@ public final class ChaosFeedView extends FrameLayout {
             if (surface instanceof TextureView) {
                 liveAmbientBackdrop.bind((TextureView) surface);
             }
-            liveAmbientBackdrop.setMotionEnabled(canSampleLiveAmbient());
+            // User pause keeps the most recently rendered GPU blur while everything
+            // else (offscreen, tab changes, fullscreen, pinch) still stops the layer.
+            boolean holdPaused = userPaused && ShitTokAmbientSampling.shouldSample(
+                    !closed && item != null && boundPosition == selectedPosition
+                            && holderAt(boundPosition) == this && !isPaging() && !searchCoverActive,
+                    active, hostResumed, true, horizontalVideo,
+                    landscapeFullscreen(), clearDisplay || pinch.isActive(),
+                    surface instanceof TextureView
+                            && ((TextureView) surface).isAvailable()
+                            && root.isAttachedToWindow(),
+                    Build.VERSION.SDK_INT >= 31, liveAmbientBackdrop.hasFailed());
+            liveAmbientBackdrop.setMotionEnabled(canSampleLiveAmbient(), holdPaused);
         }
 
         private void stopLiveAmbient(boolean failure) {
