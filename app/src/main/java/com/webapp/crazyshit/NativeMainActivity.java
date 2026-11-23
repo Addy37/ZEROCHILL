@@ -76,6 +76,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private FrameLayout overlayRoot;
     private LinearLayout shell;
     private View topBar;
+    private ShitTokCategoryStrip shitTokCategoryStrip;
+    private boolean shitTokCategoriesCollapsed;
+    private boolean shitTokStripPinched;
     private HeaderProfileAvatar headerProfileAvatar;
     private TextView headerTitle;
     private TextView headerSubtitle;
@@ -285,6 +288,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 -1,
                 ZeroChillUi.dimension(this, R.dimen.zc_top_bar_height)
         ));
+        shitTokCategoryStrip = new ShitTokCategoryStrip(this);
+        shitTokCategoryStrip.setVisibility(View.GONE);
+        shell.addView(shitTokCategoryStrip, new LinearLayout.LayoutParams(-1, dp(40)));
 
         FrameLayout content = new FrameLayout(this);
         legacyContent = content;
@@ -338,6 +344,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             public void onChaosTemporaryPinchChanged(boolean pinching) {
                 // Alpha preserves the fitted viewport and shell insets during the gesture.
                 if (topBar != null) topBar.setAlpha(pinching ? 0f : 1f);
+                shitTokStripPinched = pinching;
+                if (shitTokCategoryStrip != null) {
+                    shitTokCategoryStrip.setAlpha(pinching ? 0f : 1f);
+                    shitTokCategoryStrip.setClickable(!pinching);
+                }
                 if (bottomNavigation != null) bottomNavigation.setAlpha(pinching ? 0f : 1f);
             }
 
@@ -348,6 +359,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
             @Override
             public void onNavigationScroll(int sourcePage, int dy, boolean atTop, boolean userDriven) {
+                if (sourcePage == MainPagerAdapter.PAGE_CHAOS && userDriven && dy != 0) {
+                    setShitTokCategoriesCollapsed(dy > 0);
+                }
                 if (navigationMotion != null) {
                     navigationMotion.onScroll(sourcePage, dy, atTop, userDriven);
                 }
@@ -567,10 +581,31 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         shitTokSourceSelectorVisible = visible;
         if (shitTokSourceSelector == null) return;
         shitTokSourceSelector.refresh(false);
-        boolean showSelector = screen == Screen.CHAOS && visible
-                && ContentPreference.get(this) == ContentPreference.ALL;
+        // Source and category are independent dimensions. Keep the existing
+        // All / OnlyFap control available for every ShitTok category.
+        boolean showSelector = screen == Screen.CHAOS && visible;
         shitTokSourceSelector.setVisibility(showSelector ? View.VISIBLE : View.GONE);
         if (headerProfileAvatar != null) headerProfileAvatar.setReserveSpaceWhenSignedOut(showSelector);
+    }
+
+    private void setShitTokCategoriesCollapsed(boolean collapsed) {
+        if (shitTokCategoriesCollapsed == collapsed) return;
+        shitTokCategoriesCollapsed = collapsed;
+        updateShitTokCategoryStrip();
+    }
+
+    private void updateShitTokCategoryStrip() {
+        if (shitTokCategoryStrip == null) return;
+        boolean show = screen == Screen.CHAOS && !shitTokCategoriesCollapsed
+                && !chaosClearDisplay && !shitTokStripPinched
+                && primaryPager != null && primaryPager.getVisibility() == View.VISIBLE
+                && getResources().getConfiguration().orientation !=
+                        android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        shitTokCategoryStrip.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show) {
+            shitTokCategoryStrip.refresh(false);
+            shitTokCategoryStrip.setAlpha(1f);
+        }
     }
 
     private View buildTopBar() {
@@ -848,7 +883,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             selectNavSilently(NAV_HOME);
         }
 
-        if (position != MainPagerAdapter.PAGE_CHAOS) chaosClearDisplay = false;
+        if (position != MainPagerAdapter.PAGE_CHAOS) {
+            chaosClearDisplay = false;
+            shitTokCategoriesCollapsed = false;
+        }
         if (primaryPagerAdapter != null) primaryPagerAdapter.setPrimaryActive(position);
         if (headerTitle != null) {
             if (position == MainPagerAdapter.PAGE_HOME) {
@@ -927,6 +965,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (bottomNavigation != null) {
             bottomNavigation.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
         }
+        updateShitTokCategoryStrip();
 
         if (Build.VERSION.SDK_INT >= 30) {
             android.view.WindowInsetsController controller = getWindow().getInsetsController();
@@ -1049,6 +1088,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             old.height = 0;
             legacyContent.setLayoutParams(old);
         }
+        updateShitTokCategoryStrip();
     }
 
     private void showSearch(String query) {
@@ -1620,6 +1660,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     protected void onResume() {
         super.onResume();
         setShitTokSourceSelectorVisible(shitTokSourceSelectorVisible);
+        if (shitTokCategoryStrip != null) shitTokCategoryStrip.refresh(false);
         // Rebuild native colors once after returning from Appearance, never per glass slider tick.
         // The existing adapter saves the selected page when the Activity is recreated.
         if (!AppearanceTheme.colorSignature(this).equals(appliedAppearanceColors)) {
