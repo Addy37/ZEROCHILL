@@ -11,6 +11,9 @@ import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.TransitionDrawable;
 import android.os.SystemClock;
 import android.os.Build;
 import android.view.TextureView;
@@ -3266,8 +3269,11 @@ public final class ChaosFeedView extends FrameLayout {
         boolean maintenanceFailure;
         boolean horizontalVideo;
         String ambientUrl = "";
-        private final Bitmap[] ambientFrames = new Bitmap[2];
+        // Three buffers keep an outgoing fade frame immutable while the next
+        // texture sample is captured. The onscreen blur remains a single view.
+        private final Bitmap[] ambientFrames = new Bitmap[3];
         private int ambientFrameIndex;
+        private int currentAmbientFrame = -1;
         private int ambientSlowSamples;
         private boolean ambientFailed;
         private boolean ambientTickScheduled;
@@ -3299,11 +3305,29 @@ public final class ChaosFeedView extends FrameLayout {
                         stopLiveAmbient(true);
                         return;
                     }
-                    // Two tiny reusable frames prevent the displayed bitmap from
-                    // being written while Android is drawing it.
-                    liveAmbientBackdrop.setImageBitmap(result);
-                    liveAmbientBackdrop.setVisibility(View.VISIBLE);
-                    ambientFrameIndex = 1 - slot;
+                    if (currentAmbientFrame >= 0) {
+                        BitmapDrawable from = new BitmapDrawable(getResources(),
+                                ambientFrames[currentAmbientFrame]);
+                        BitmapDrawable to = new BitmapDrawable(getResources(), result);
+                        from.setFilterBitmap(true);
+                        to.setFilterBitmap(true);
+                        // Crossfade both frames in one ImageView, so the full-screen
+                        // blur render pass runs once rather than twice.
+                        TransitionDrawable fade = new TransitionDrawable(
+                                new Drawable[]{from, to});
+                        fade.setCrossFadeEnabled(true);
+                        liveAmbientBackdrop.setImageDrawable(fade);
+                        liveAmbientBackdrop.setVisibility(View.VISIBLE);
+                        fade.startTransition(ShitTokAmbientSampling.CROSSFADE_MS);
+                    } else {
+                        liveAmbientBackdrop.setImageBitmap(result);
+                        liveAmbientBackdrop.setAlpha(0f);
+                        liveAmbientBackdrop.setVisibility(View.VISIBLE);
+                        liveAmbientBackdrop.animate().alpha(1f)
+                                .setDuration(ShitTokAmbientSampling.CROSSFADE_MS).start();
+                    }
+                    currentAmbientFrame = slot;
+                    ambientFrameIndex = (slot + 1) % ambientFrames.length;
                 } catch (RuntimeException | OutOfMemoryError error) {
                     stopLiveAmbient(true);
                     return;
@@ -3355,9 +3379,9 @@ public final class ChaosFeedView extends FrameLayout {
                         dp(22), dp(22), android.graphics.Shader.TileMode.CLAMP));
             }
             mediaLayer.addView(ambientBackdrop, new FrameLayout.LayoutParams(-1, -1));
-            // Live frames overlay the same static thumbnail. Sampling is optional,
-            // at 96x54 and at most twice a second; a slow or unsupported capture
-            // leaves the original blurred thumbnail in place.
+            // Live frames overlay the static thumbnail. Sampling is optional:
+            // 96x54 at up to four samples/second, with a short crossfade.
+            // Slow or unsupported captures return to the static thumbnail.
             liveAmbientBackdrop = new ImageView(activity);
             liveAmbientBackdrop.setTag("shittok_horizontal_live_ambient");
             liveAmbientBackdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -4874,8 +4898,12 @@ public final class ChaosFeedView extends FrameLayout {
             root.removeCallbacks(ambientFrameTick);
             ambientTickScheduled = false;
             if (failure) ambientFailed = true;
+            liveAmbientBackdrop.animate().cancel();
+            liveAmbientBackdrop.setAlpha(1f);
             liveAmbientBackdrop.setVisibility(View.GONE);
             liveAmbientBackdrop.setImageDrawable(null);
+            currentAmbientFrame = -1;
+            ambientFrameIndex = 0;
         }
 
         private void syncLoading() {
