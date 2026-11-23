@@ -11,9 +11,6 @@ import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
-import android.graphics.drawable.TransitionDrawable;
 import android.os.SystemClock;
 import android.os.Build;
 import android.view.TextureView;
@@ -3188,7 +3185,7 @@ public final class ChaosFeedView extends FrameLayout {
         final ShitTokDynamicPinchController pinch;
         final FrameLayout mediaLayer;
         final ImageView ambientBackdrop;
-        final ImageView liveAmbientBackdrop;
+        final ShitTokGpuAmbientView liveAmbientBackdrop;
         final PlayerView playerView;
         final ImageView poster;
         final ProgressBar loading;
@@ -3269,72 +3266,6 @@ public final class ChaosFeedView extends FrameLayout {
         boolean maintenanceFailure;
         boolean horizontalVideo;
         String ambientUrl = "";
-        // Three buffers keep an outgoing fade frame immutable while the next
-        // texture sample is captured. The onscreen blur remains a single view.
-        private final Bitmap[] ambientFrames = new Bitmap[3];
-        private int ambientFrameIndex;
-        private int currentAmbientFrame = -1;
-        private int ambientSlowSamples;
-        private boolean ambientFailed;
-        private boolean ambientTickScheduled;
-        private final Runnable ambientFrameTick = new Runnable() {
-            @Override public void run() {
-                ambientTickScheduled = false;
-                if (!canSampleLiveAmbient()) return;
-                View surface = playerView.getVideoSurfaceView();
-                if (!(surface instanceof TextureView)) return;
-                TextureView texture = (TextureView) surface;
-                try {
-                    int slot = ambientFrameIndex;
-                    if (ambientFrames[slot] == null) {
-                        ambientFrames[slot] = Bitmap.createBitmap(
-                                ShitTokAmbientSampling.FRAME_WIDTH,
-                                ShitTokAmbientSampling.FRAME_HEIGHT, Bitmap.Config.ARGB_8888);
-                    }
-                    long started = SystemClock.uptimeMillis();
-                    Bitmap result = texture.getBitmap(ambientFrames[slot]);
-                    long elapsed = SystemClock.uptimeMillis() - started;
-                    if (result == null) {
-                        stopLiveAmbient(true);
-                        return;
-                    }
-                    int precedingSlowFrames = ambientSlowSamples;
-                    ambientSlowSamples = elapsed > ShitTokAmbientSampling.SLOW_SAMPLE_MS
-                            ? precedingSlowFrames + 1 : 0;
-                    if (ShitTokAmbientSampling.tooSlow(elapsed, precedingSlowFrames)) {
-                        stopLiveAmbient(true);
-                        return;
-                    }
-                    if (currentAmbientFrame >= 0) {
-                        BitmapDrawable from = new BitmapDrawable(getResources(),
-                                ambientFrames[currentAmbientFrame]);
-                        BitmapDrawable to = new BitmapDrawable(getResources(), result);
-                        from.setFilterBitmap(true);
-                        to.setFilterBitmap(true);
-                        // Crossfade both frames in one ImageView, so the full-screen
-                        // blur render pass runs once rather than twice.
-                        TransitionDrawable fade = new TransitionDrawable(
-                                new Drawable[]{from, to});
-                        fade.setCrossFadeEnabled(true);
-                        liveAmbientBackdrop.setImageDrawable(fade);
-                        liveAmbientBackdrop.setVisibility(View.VISIBLE);
-                        fade.startTransition(ShitTokAmbientSampling.CROSSFADE_MS);
-                    } else {
-                        liveAmbientBackdrop.setImageBitmap(result);
-                        liveAmbientBackdrop.setAlpha(0f);
-                        liveAmbientBackdrop.setVisibility(View.VISIBLE);
-                        liveAmbientBackdrop.animate().alpha(1f)
-                                .setDuration(ShitTokAmbientSampling.CROSSFADE_MS).start();
-                    }
-                    currentAmbientFrame = slot;
-                    ambientFrameIndex = (slot + 1) % ambientFrames.length;
-                } catch (RuntimeException | OutOfMemoryError error) {
-                    stopLiveAmbient(true);
-                    return;
-                }
-                scheduleLiveAmbient();
-            }
-        };
         boolean aspectSampleRecorded;
         String videoLikeOwner;
         String commentCountOwner;
@@ -3379,19 +3310,9 @@ public final class ChaosFeedView extends FrameLayout {
                         dp(22), dp(22), android.graphics.Shader.TileMode.CLAMP));
             }
             mediaLayer.addView(ambientBackdrop, new FrameLayout.LayoutParams(-1, -1));
-            // Live frames overlay the static thumbnail. Sampling is optional:
-            // 96x54 at up to four samples/second, with a short crossfade.
-            // Slow or unsupported captures return to the static thumbnail.
-            liveAmbientBackdrop = new ImageView(activity);
-            liveAmbientBackdrop.setTag("shittok_horizontal_live_ambient");
-            liveAmbientBackdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            liveAmbientBackdrop.setImageAlpha(135);
-            liveAmbientBackdrop.setVisibility(View.GONE);
-            liveAmbientBackdrop.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            if (Build.VERSION.SDK_INT >= 31) {
-                liveAmbientBackdrop.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
-                        dp(22), dp(22), android.graphics.Shader.TileMode.CLAMP));
-            }
+            // GPU-mirror of the same texture, no CPU readback or second player.
+            // Static thumbnail remains the fallback on unsupported devices.
+            liveAmbientBackdrop = new ShitTokGpuAmbientView(activity);
             mediaLayer.addView(liveAmbientBackdrop, new FrameLayout.LayoutParams(-1, -1));
 
             poster = new ImageView(activity);
@@ -4352,8 +4273,7 @@ public final class ChaosFeedView extends FrameLayout {
         void bind(NativeContentItem next, int position) {
             resetVisualMotion();
             detachLease();
-            ambientFailed = false;
-            ambientSlowSamples = 0;
+            liveAmbientBackdrop.reset();
             playerHolders.add(this);
             root.removeCallbacks(skipFailedClipRunnable);
             root.removeCallbacks(progressTick);
@@ -4862,8 +4782,6 @@ public final class ChaosFeedView extends FrameLayout {
 
         private boolean canSampleLiveAmbient() {
             View surface = playerView.getVideoSurfaceView();
-            boolean textureAvailable = surface instanceof TextureView
-                    && ((TextureView) surface).isAvailable();
             boolean selected = !closed && boundPosition == selectedPosition
                     && item != null && holderAt(boundPosition) == this
                     && !isPaging() && !searchCoverActive;
@@ -4871,39 +4789,24 @@ public final class ChaosFeedView extends FrameLayout {
                     selected, active, hostResumed,
                     player != null && player.isPlaying(), horizontalVideo,
                     landscapeFullscreen(), clearDisplay || pinch.isActive(),
-                    textureAvailable && root.isAttachedToWindow(),
-                    Build.VERSION.SDK_INT >= 31, ambientFailed);
-        }
-
-        private void scheduleLiveAmbient() {
-            if (ambientTickScheduled || !canSampleLiveAmbient()) return;
-            ambientTickScheduled = true;
-            root.postDelayed(ambientFrameTick, ShitTokAmbientSampling.FRAME_INTERVAL_MS);
+                    surface instanceof TextureView
+                            && ((TextureView) surface).isAvailable()
+                            && root.isAttachedToWindow(),
+                    Build.VERSION.SDK_INT >= 31,
+                    liveAmbientBackdrop.hasFailed());
         }
 
         private void updateLiveAmbientSampling() {
-            if (canSampleLiveAmbient()) {
-                scheduleLiveAmbient();
-            } else {
-                root.removeCallbacks(ambientFrameTick);
-                ambientTickScheduled = false;
-                if (!horizontalVideo || landscapeFullscreen() || boundPosition != selectedPosition
-                        || !active || !hostResumed || closed) {
-                    liveAmbientBackdrop.setVisibility(View.GONE);
-                }
+            View surface = playerView.getVideoSurfaceView();
+            if (surface instanceof TextureView) {
+                liveAmbientBackdrop.bind((TextureView) surface);
             }
+            liveAmbientBackdrop.setMotionEnabled(canSampleLiveAmbient());
         }
 
         private void stopLiveAmbient(boolean failure) {
-            root.removeCallbacks(ambientFrameTick);
-            ambientTickScheduled = false;
-            if (failure) ambientFailed = true;
-            liveAmbientBackdrop.animate().cancel();
-            liveAmbientBackdrop.setAlpha(1f);
-            liveAmbientBackdrop.setVisibility(View.GONE);
-            liveAmbientBackdrop.setImageDrawable(null);
-            currentAmbientFrame = -1;
-            ambientFrameIndex = 0;
+            if (failure) liveAmbientBackdrop.reset();
+            else liveAmbientBackdrop.stop();
         }
 
         private void syncLoading() {
