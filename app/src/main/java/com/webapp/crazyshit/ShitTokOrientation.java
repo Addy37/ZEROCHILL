@@ -8,6 +8,11 @@ final class ShitTokOrientation {
         return Float.isFinite(aspect) && aspect > 0f && aspect <= 1f;
     }
 
+    /** Landscape Chaos clips are fitted to a larger viewport, never stretched. */
+    static boolean immersiveEligible(float aspect) {
+        return Float.isFinite(aspect) && aspect > 0f && aspect <= 2.4f;
+    }
+
     static float effectiveAspect(int width, int height, float pixelRatio, int rotationDegrees) {
         if (width <= 0 || height <= 0 || !(pixelRatio > 0f) || !Float.isFinite(pixelRatio)) return 0f;
         int rotation = ((rotationDegrees % 360) + 360) % 360;

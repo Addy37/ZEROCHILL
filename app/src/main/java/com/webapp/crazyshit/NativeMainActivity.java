@@ -76,6 +76,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private FrameLayout overlayRoot;
     private LinearLayout shell;
     private View topBar;
+    private ShitTokCategoryStrip shitTokCategoryStrip;
+    private boolean shitTokStripPinched;
     private HeaderProfileAvatar headerProfileAvatar;
     private TextView headerTitle;
     private TextView headerSubtitle;
@@ -285,6 +287,21 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 -1,
                 ZeroChillUi.dimension(this, R.dimen.zc_top_bar_height)
         ));
+        shitTokCategoryStrip = new ShitTokCategoryStrip(this);
+        shitTokCategoryStrip.setVisibility(View.GONE);
+        shitTokCategoryStrip.setOnSearchClickListener(v -> {
+            haptic(v);
+            openContextualSearchFrom(v);
+        });
+        shitTokCategoryStrip.setOnMoreClickListener(v -> {
+            haptic(v);
+            showMoreSheet(v);
+        });
+        // An overlay instead of a LinearLayout row: the active ShitTok video reaches
+        // the Android status bar while the tabs render on top without reserving height.
+        FrameLayout.LayoutParams categoryOverlay = new FrameLayout.LayoutParams(
+                -1, dp(48), Gravity.TOP);
+        overlayRoot.addView(shitTokCategoryStrip, categoryOverlay);
 
         FrameLayout content = new FrameLayout(this);
         legacyContent = content;
@@ -338,6 +355,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             public void onChaosTemporaryPinchChanged(boolean pinching) {
                 // Alpha preserves the fitted viewport and shell insets during the gesture.
                 if (topBar != null) topBar.setAlpha(pinching ? 0f : 1f);
+                shitTokStripPinched = pinching;
+                // Since the tabs no longer reserve layout height, fully hide them
+                // during pinch so transparent controls cannot steal video touches.
+                updateShitTokCategoryStrip();
                 if (bottomNavigation != null) bottomNavigation.setAlpha(pinching ? 0f : 1f);
             }
 
@@ -567,10 +588,27 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         shitTokSourceSelectorVisible = visible;
         if (shitTokSourceSelector == null) return;
         shitTokSourceSelector.refresh(false);
-        boolean showSelector = screen == Screen.CHAOS && visible
-                && ContentPreference.get(this) == ContentPreference.ALL;
+        // The former All / OnlyFap source selector is retired from ShitTok.
+        // Source selection now belongs to the five category tabs in the overlay.
+        boolean showSelector = false;
         shitTokSourceSelector.setVisibility(showSelector ? View.VISIBLE : View.GONE);
         if (headerProfileAvatar != null) headerProfileAvatar.setReserveSpaceWhenSignedOut(showSelector);
+    }
+
+    private void updateShitTokCategoryStrip() {
+        if (shitTokCategoryStrip == null) return;
+        // Keep categories pinned at a constant height during all normal video swipes.
+        // Only the existing immersive/landscape/pinch flows may hide this row.
+        boolean show = screen == Screen.CHAOS
+                && !chaosClearDisplay && !shitTokStripPinched
+                && primaryPager != null && primaryPager.getVisibility() == View.VISIBLE
+                && getResources().getConfiguration().orientation !=
+                        android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        shitTokCategoryStrip.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show) {
+            shitTokCategoryStrip.refresh(false);
+            shitTokCategoryStrip.setAlpha(1f);
+        }
     }
 
     private View buildTopBar() {
@@ -792,13 +830,17 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         // restore below can reach here again for the same destination.
         if (renderedPrimaryPage == position && primaryPager != null
                 && primaryPager.getVisibility() == View.VISIBLE
-                && (legacyContent == null || legacyContent.getVisibility() == View.GONE)) return;
+                && (legacyContent == null || legacyContent.getVisibility() == View.GONE)) {
+            // Rotation can cause late shared-style callbacks without a page change.
+            // Reassert the headerless ShitTok layout on this idempotent path.
+            syncRetiredShitTokHeader();
+            return;
+        }
         renderedPrimaryPage = position;
         // Library already presents the current account in its profile header.
         if (headerProfileAvatar != null) headerProfileAvatar.setProfileInContent(
                 position == MainPagerAdapter.PAGE_LIBRARY);
-        ((GlassHeaderView) topBar).setGlassEnabled(position == MainPagerAdapter.PAGE_SERIES
-                || position == MainPagerAdapter.PAGE_CHAOS || position == MainPagerAdapter.PAGE_LIBRARY);
+        setPrimaryHeaderMaterial(position);
         // Preserve the current compact/expanded nav state across tab switches.
         // Vertical content movement, not primary-tab selection, owns this animation.
         if (navigationMotion != null) navigationMotion.setActivePage(position);
@@ -870,6 +912,14 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (position == MainPagerAdapter.PAGE_CHAOS) scheduleRatingPromptCheck();
     }
 
+    /** ShitTok uses no traditional header; other pages retain approved glass. */
+    private void setPrimaryHeaderMaterial(int position) {
+        if (!(topBar instanceof GlassHeaderView)) return;
+        boolean glass = position == MainPagerAdapter.PAGE_SERIES
+                || position == MainPagerAdapter.PAGE_LIBRARY;
+        ((GlassHeaderView) topBar).setGlassEnabled(glass);
+    }
+
     private void setZeroChillWordmark() {
         SpannableString wordmark = new SpannableString("ZEROCHILL");
         wordmark.setSpan(
@@ -913,20 +963,39 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         applyChaosFullscreenChrome();
     }
 
+    private void syncRetiredShitTokHeader() {
+        if (topBar == null) return;
+        ViewGroup.LayoutParams params = topBar.getLayoutParams();
+        if (params == null) return;
+        int height = screen == Screen.CHAOS ? 0
+                : ZeroChillUi.dimension(this, R.dimen.zc_top_bar_height);
+        if (params.height != height) {
+            params.height = height;
+            topBar.setLayoutParams(params);
+        }
+        if (screen == Screen.CHAOS) topBar.setVisibility(View.GONE);
+    }
+
     private void setChaosFullscreenChrome(boolean fullscreen) {
         boolean immersiveOnlyFap =
                 !fullscreen &&
                 screen == Screen.ONLYFAP &&
                 primaryPager != null &&
                 primaryPager.getVisibility() == View.VISIBLE;
+        // ShitTok has its own over-video navigation, so its retired header must
+        // occupy zero height even if another lifecycle/style pass makes it visible.
+        // Other primary tabs retain their existing header geometry.
+        syncRetiredShitTokHeader();
         if (topBar != null) {
             topBar.setVisibility(
-                    fullscreen || immersiveOnlyFap || showsOwnsHeader() ? View.GONE : View.VISIBLE
+                    fullscreen || screen == Screen.CHAOS ||
+                            immersiveOnlyFap || showsOwnsHeader() ? View.GONE : View.VISIBLE
             );
         }
         if (bottomNavigation != null) {
             bottomNavigation.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
         }
+        updateShitTokCategoryStrip();
 
         if (Build.VERSION.SDK_INT >= 30) {
             android.view.WindowInsetsController controller = getWindow().getInsetsController();
@@ -978,7 +1047,23 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             bottom = insets.getSystemWindowInsetBottom();
         }
         view.setPadding(left, top, right, bottom);
+        updateShitTokOverlayInsets(left, top, right);
         cachePortraitShellInsets(left, top, right, bottom);
+    }
+
+    private void updateShitTokOverlayInsets(int left, int top, int right) {
+        if (shitTokCategoryStrip == null ||
+                !(shitTokCategoryStrip.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams lp =
+                (FrameLayout.LayoutParams) shitTokCategoryStrip.getLayoutParams();
+        // Position the labels close to the status icons without putting text
+        // into the status bar. Relative to the original overlay this is 18dp up.
+        int desiredTop = Math.max(0, top - dp(14));
+        if (lp.topMargin == desiredTop && lp.leftMargin == left && lp.rightMargin == right) return;
+        lp.topMargin = desiredTop;
+        lp.leftMargin = left;
+        lp.rightMargin = right;
+        shitTokCategoryStrip.setLayoutParams(lp);
     }
 
     private void cachePortraitShellInsets(int left, int top, int right, int bottom) {
@@ -1049,6 +1134,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             old.height = 0;
             legacyContent.setLayoutParams(old);
         }
+        updateShitTokCategoryStrip();
     }
 
     private void showSearch(String query) {
@@ -1620,6 +1706,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     protected void onResume() {
         super.onResume();
         setShitTokSourceSelectorVisible(shitTokSourceSelectorVisible);
+        if (shitTokCategoryStrip != null) shitTokCategoryStrip.refresh(false);
         // Rebuild native colors once after returning from Appearance, never per glass slider tick.
         // The existing adapter saves the selected page when the Activity is recreated.
         if (!AppearanceTheme.colorSignature(this).equals(appliedAppearanceColors)) {

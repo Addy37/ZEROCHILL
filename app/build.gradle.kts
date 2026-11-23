@@ -159,6 +159,9 @@ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
     maxHeapSize = "1g"
     maxParallelForks = 2
     forkEvery = 1
+    // Android SDK fixtures must come from Maven Central. The default Robolectric
+    // artifact endpoint intermittently fails on clean CI runners.
+    systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
 }
 
 kotlin { jvmToolchain(17) }

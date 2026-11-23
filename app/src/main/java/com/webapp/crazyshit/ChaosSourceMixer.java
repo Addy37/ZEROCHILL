@@ -95,7 +95,7 @@ final class ChaosSourceMixer {
         requestPreference(context, available, true);
     }
     synchronized void requestPreference(Context context, Runnable available, boolean demand) {
-        ContentPreference mode = ContentPreference.get(context);
+        ContentPreference mode = ShitTokContentPreference.get(context);
         ShitTokSourceMode sources = ShitTokSourceMode.get(context);
         if (poolMode != mode || poolSources != sources) {
             sourcePool.pause(); shitShow.stop(); poolMode = mode; poolSources = sources;
@@ -104,7 +104,12 @@ final class ChaosSourceMixer {
         SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
         if (!sources.creatorInventory(mode)) {
             for (int source = 1; source <= 8; source++) {
-                boolean shittokEligible = source != BATCH_EFUKT && source != BATCH_XMEGADRIVE;
+                // Chaos is exclusively wild-content providers. Creator feeds live
+                // behind Ladies / Guys / Trans / Groups, not the broad pool.
+                boolean shittokEligible = source == BATCH_REGULAR
+                        || source == BATCH_EFUKT
+                        || source == BATCH_KAOTIC
+                        || source == BATCH_SHIT_SHOW;
                 sourcePool.setEligibility(source, shittokEligible,
                         shittokEligible && sourceAvailable(source, config));
             }
@@ -235,7 +240,7 @@ final class ChaosSourceMixer {
 
     List<NativeContentItem> loadRandomBatch(Context context, boolean continuityOnly,
             java.util.function.Consumer<List<NativeContentItem>> onCandidates, long budgetMs) {
-        ContentPreference mode = ContentPreference.get(context);
+        ContentPreference mode = ShitTokContentPreference.get(context);
         if (ShitTokSourceMode.get(context).creatorInventory(mode)) {
             // Only the authoritative category loader can produce a filtered candidate.
             return takePreference(mode);
@@ -266,18 +271,18 @@ final class ChaosSourceMixer {
     List<NativeContentItem> takeReadyCandidates() { return sourcePool.take(16); }
 
     void recoverSources(Context context) {
-        if (ShitTokSourceMode.get(context).creatorInventory(ContentPreference.get(context))) return;
+        if (ShitTokSourceMode.get(context).creatorInventory(ShitTokContentPreference.get(context))) return;
         if (context instanceof android.app.Activity) {
             ShitShowPlayableResolver.rememberHost((android.app.Activity) context);
         }
         requestPreference(context, () -> {});
         SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
-        sourcePool.request(BATCH_KAOTIC, true, sourceAvailable(BATCH_KAOTIC, config), () -> source(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
-        sourcePool.request(BATCH_FAPELLO, true, sourceAvailable(BATCH_FAPELLO, config), () -> source(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
         sourcePool.request(BATCH_REGULAR, true, true, () -> source(BATCH_REGULAR, () -> loadRegularBatch(context, null)));
-        sourcePool.request(BATCH_BADDIEHUB, true, sourceAvailable(BATCH_BADDIEHUB, config), () -> source(BATCH_BADDIEHUB, () -> loadBaddieHubBatch(context)));
+        sourcePool.request(BATCH_KAOTIC, true, sourceAvailable(BATCH_KAOTIC, config), () -> source(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
+        // Existing eFukt regional failure handling remains intact. A failed
+        // provider cannot delay the other three Chaos sources.
+        sourcePool.request(BATCH_EFUKT, true, sourceAvailable(BATCH_EFUKT, config), () -> source(BATCH_EFUKT, () -> loadEfuktBatch(context)));
         if (explorationAllowed) {
-            sourcePool.request(BATCH_ONLY_HAVEN, true, sourceAvailable(BATCH_ONLY_HAVEN, config), () -> source(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
             sourcePool.request(BATCH_SHIT_SHOW, true, true, () -> source(BATCH_SHIT_SHOW,
                     () -> shitShow.takeBatchOrWarm(context, SHIT_SHOW_PER_BATCH)));
         }

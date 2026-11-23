@@ -82,6 +82,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         searchCovered = value
         endSpeedBoost()
         if (value) {
+            cancelSilentReturnPrebuffer()
             acquisition?.cancel()
             window = listOfNotNull(selected)
             immediateNext = null
@@ -147,6 +148,8 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     }
     private fun selectWindow(current: String, next: String?, previous: String?, neighbors: Boolean) {
         if (searchCovered) return
+        // A new tab invalidates any silent preparation for the previous category.
+        if (selected != current) cancelSilentReturnPrebuffer()
         val wanted = listOfNotNull(current, next.takeIf { neighbors }, previous.takeIf { neighbors })
             .distinct().take(preparedLimit)
         if (selected == current && window == wanted && pool != null) { syncAudio(); return }
@@ -267,6 +270,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         revokeAudio()
         permitted = visibleResumedSettled
         muted = isMuted
+        control.silentReturnId = null
         control.networkPaused = !permitted
         syncAudio()
         manager?.invalidate()
@@ -376,10 +380,35 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         lease.view = null
         lease.renderedFrame = false
     }
-    fun source(url: String, stream: CrazyShitRepository.StreamInfo, token: Int): Boolean {
+    /**
+     * Buffer the already-remembered video *before* a category slide finishes.
+     * Playback permission remains false: no audio or playWhenReady is granted.
+     * This uses only the existing selected player's slot, not an extra decoder.
+     */
+    fun prebufferSelectedReturn(url: String, stream: CrazyShitRepository.StreamInfo): Boolean {
+        if (permitted || searchCovered || selected != url || stream.mediaUrl.isNullOrEmpty()) return false
+        val lease = leases[url] ?: return false
+        control.silentReturnId = url
+        control.networkPaused = false
+        val ready = setSource(url, stream, lease.token, true)
+        if (!ready) cancelSilentReturnPrebuffer()
+        return ready
+    }
+
+    fun cancelSilentReturnPrebuffer() {
+        control.silentReturnId = null
+        if (!permitted) control.networkPaused = true
+    }
+
+    fun source(url: String, stream: CrazyShitRepository.StreamInfo, token: Int): Boolean =
+        setSource(url, stream, token, false)
+
+    private fun setSource(url: String, stream: CrazyShitRepository.StreamInfo,
+                          token: Int, silentReturn: Boolean): Boolean {
         if (searchCovered) return leases[url]?.stream?.mediaUrl == stream.mediaUrl
         val lease = leases[url]
-        if (lease == null || !accepts(url, token) || !permitted) {
+        if (lease == null || !accepts(url, token)
+            || (!permitted && !(silentReturn && url == selected && control.silentReturnId == url))) {
             ShitTokPoolDiagnostics.record("staleSource", url); return false
         }
         if (lease.stream?.mediaUrl == stream.mediaUrl) { syncAudio(); return true }
@@ -467,6 +496,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     }
     private fun removeSource(url: String) { sources.remove(url)?.let { manager?.remove(it.mediaItem) } }
     fun release() {
+        cancelSilentReturnPrebuffer()
         permission(false, muted)
         healthCheck?.cancel(); healthCheck = null
         speculationNotification?.cancel(); speculationNotification = null
@@ -509,6 +539,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         @Volatile var currentId: String? = null
         @Volatile var continuityId: String? = null
         @Volatile var networkPaused = false
+        @Volatile var silentReturnId: String? = null
         @Volatile var currentNeedsBuffer = true
         @Volatile var starving = false
         @Volatile var recoveryTargetUs = 0L

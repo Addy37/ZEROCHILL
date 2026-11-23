@@ -7,7 +7,7 @@ import java.util.function.LongSupplier;
 
 /** Bounded session inventories keyed by source mode and gender. OnlyHaven owns category evidence. */
 final class ShitTokFilteredInventory {
-    static final int HAVEN = 6, FAPELLO = 5, BUNKR = 9, SHOW = 4;
+    static final int HAVEN = 6, FAPELLO = 5, BUNKR = 9, SHOW = 4, BADDIEHUB = 7;
     static final int PAGE_SIZE = 12, MAX_CREATORS = 48, MEDIA_PAGE = 36;
     private final Map<String, Session> sessions = new LinkedHashMap<>();
     private ShitTokSourceMode sourceMode = ShitTokSourceMode.ALL;
@@ -21,6 +21,10 @@ final class ShitTokFilteredInventory {
         List<NativeContentItem> media(int source, Cursor cursor) throws Exception;
         List<NativeContentItem> show() throws Exception;
         boolean available(int source);
+        default boolean supportsBaddieHub() { return false; }
+        default List<NativeContentItem> baddieHub(ContentPreference mode, int page) throws Exception {
+            return Collections.emptyList();
+        }
         default List<OnlyHavenRepository.Creator> known(ContentPreference mode) { return Collections.emptyList(); }
     }
 
@@ -48,6 +52,7 @@ final class ShitTokFilteredInventory {
         final LinkedHashMap<String, OnlyHavenRepository.Creator> creators = new LinkedHashMap<>();
         final LinkedHashMap<String, Integer> evidence = new LinkedHashMap<>();
         int offset;
+        int baddiePage = 1;
         boolean hasMore = true, seeded;
         long accepted, categoryRetryAt;
         int categoryFailures;
@@ -97,6 +102,34 @@ final class ShitTokFilteredInventory {
             session.pool.request(source, true, backend.available(source),
                     () -> source == SHOW ? loadShow(session) : load(session, source, available), available);
         }
+        // BaddieHub is confined to the owner-approved categories. Never funnel
+        // its unclassified videos into Men, Trans, or the Groups feed.
+        boolean baddieEligible = backend.supportsBaddieHub()
+                && (mode == ContentPreference.WOMEN || mode == ContentPreference.GROUPS);
+        if (baddieEligible) {
+            session.pool.setEligibility(BADDIEHUB, true, backend.available(BADDIEHUB));
+            session.pool.request(BADDIEHUB, true, backend.available(BADDIEHUB),
+                    () -> loadBaddieHub(session), available);
+        }
+    }
+
+    private List<NativeContentItem> loadBaddieHub(Session session) throws Exception {
+        final int page;
+        synchronized (session) { page = session.baddiePage; }
+        List<NativeContentItem> candidates = backend.baddieHub(session.mode, page);
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+        ArrayList<NativeContentItem> accepted = new ArrayList<>();
+        synchronized (session) {
+            // Do not advance failed pages; source health handles retries/backoff.
+            session.baddiePage = page + 1;
+            for (NativeContentItem item : candidates) {
+                if (item == null || !item.isVideo() || item.url.isEmpty()) continue;
+                session.evidence.put(item.url, BADDIEHUB);
+                trimEvidence(session);
+                if (accepted.size() < ShitTokSourcePool.MAX_READY_PER_SOURCE) accepted.add(item);
+            }
+        }
+        return accepted;
     }
 
     private List<NativeContentItem> loadShow(Session session) throws Exception {
@@ -272,7 +305,8 @@ final class ShitTokFilteredInventory {
     synchronized boolean hasReady(ContentPreference mode) {
         Session session = session(mode);
         if (active != mode || session == null) return false;
-        for (int source : new int[]{HAVEN, FAPELLO, BUNKR, SHOW}) if (session.pool.hasReady(source)) return true;
+        for (int source : new int[]{HAVEN, FAPELLO, BUNKR, SHOW, BADDIEHUB})
+            if (session.pool.hasReady(source)) return true;
         return false;
     }
 
@@ -332,10 +366,59 @@ final class ShitTokFilteredInventory {
         OnlyHavenRepository haven = new OnlyHavenRepository();
         FapelloRepository fapello = new FapelloRepository();
         BunkrRepository bunkr = new BunkrRepository();
+        BaddieHubRepository baddie = new BaddieHubRepository();
         return new Backend() {
+            private List<NativeContentItem> groupCategories;
+
+            @Override public boolean supportsBaddieHub() { return true; }
+
+            @Override public List<NativeContentItem> baddieHub(ContentPreference mode, int page)
+                    throws Exception {
+                if (mode == ContentPreference.WOMEN) return baddie.fetchPortraitFeed(app, page);
+                if (mode != ContentPreference.GROUPS) return Collections.emptyList();
+                // Groups must originate from an explicitly named BaddieHub group
+                // category, rather than being guessed from a random clip title.
+                if (groupCategories == null) {
+                    ArrayList<NativeContentItem> verified = new ArrayList<>();
+                    for (NativeContentItem category : baddie.fetchCategories(app)) {
+                        String label = category.title.toLowerCase(java.util.Locale.US)
+                                .replace('-', ' ').replace('_', ' ');
+                        if (label.contains("group") || label.contains("threesome")
+                                || label.contains("orgy") || label.contains("gangbang")) {
+                            verified.add(category);
+                        }
+                    }
+                    groupCategories = verified;
+                }
+                ArrayList<NativeContentItem> result = new ArrayList<>();
+                for (NativeContentItem category : groupCategories) {
+                    for (NativeContentItem item : baddie.fetchCategory(app, category.url, page)) {
+                        if (item != null && item.isVideo()) result.add(item);
+                        if (result.size() >= ShitTokSourcePool.MAX_READY_PER_SOURCE) return result;
+                    }
+                }
+                return result;
+            }
             public OnlyHavenRepository.CategoryPage creators(ContentPreference mode, int offset) throws Exception {
                 if (mode == ContentPreference.ALL)
                     return haven.fetchTrendingPage(app, PAGE_SIZE, offset);
+                if (mode == ContentPreference.TRANS_WOMEN) {
+                    // In ShitTok, one Trans tab merges two independently verified
+                    // provider categories. OnlyFap's original filters stay separate.
+                    int half = PAGE_SIZE / 2;
+                    OnlyHavenRepository.CategoryPage women = haven.fetchCategoryPage(
+                            app, ContentPreference.TRANS_WOMEN, half, offset / 2);
+                    OnlyHavenRepository.CategoryPage men = haven.fetchCategoryPage(
+                            app, ContentPreference.TRANS_MEN, half, offset / 2);
+                    ArrayList<OnlyHavenRepository.Creator> mixed = new ArrayList<>();
+                    int longest = Math.max(women.creators.size(), men.creators.size());
+                    for (int i = 0; i < longest; i++) {
+                        if (i < women.creators.size()) mixed.add(women.creators.get(i));
+                        if (i < men.creators.size()) mixed.add(men.creators.get(i));
+                    }
+                    return new OnlyHavenRepository.CategoryPage(
+                            mixed, women.hasMore || men.hasMore);
+                }
                 return haven.fetchCategoryPage(app, mode, PAGE_SIZE, offset);
             }
             public List<NativeContentItem> media(int source, Cursor cursor) throws Exception {
@@ -380,7 +463,10 @@ final class ShitTokFilteredInventory {
             public List<OnlyHavenRepository.Creator> known(ContentPreference mode) {
                 ArrayList<OnlyHavenRepository.Creator> result = new ArrayList<>();
                 for (NativeContentItem item : CreatorCatalog.all(app)) {
-                    if (!CreatorCategoryIndex.includes(app, mode, item)) continue;
+                    if (!CreatorCategoryIndex.includes(app, mode, item)
+                            && !(mode == ContentPreference.TRANS_WOMEN
+                                && CreatorCategoryIndex.includes(app, ContentPreference.TRANS_MEN, item)))
+                        continue;
                     try {
                         String path = new java.net.URI(item.url).getPath();
                         if (path == null || !path.matches("/creators/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/?")) continue;
@@ -397,6 +483,7 @@ final class ShitTokFilteredInventory {
                 if (source == HAVEN) return config.onlyHaven.enabled;
                 if (source == FAPELLO) return !config.sourceKillSwitchesEnabled || config.fapello.enabled;
                 if (source == BUNKR) return !config.sourceKillSwitchesEnabled || config.bunkr.enabled;
+                if (source == BADDIEHUB) return !config.sourceKillSwitchesEnabled || config.baddieHub.enabled;
                 return true;
             }
         };
