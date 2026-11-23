@@ -1868,7 +1868,9 @@ public final class ChaosFeedView extends FrameLayout {
 
     private boolean eligiblePreference(NativeContentItem item, ContentPreference mode) {
         ShitTokSourceMode sources = ShitTokSourceMode.get(activity);
-        return sources.allowsSource(ShitTokAspectPriority.sourceKey(item))
+        String provider = ShitTokAspectPriority.sourceKey(item);
+        return ShitTokFeedSources.allows(ShitTokCategoryStrip.Tab.selected(activity), provider)
+                && sources.allowsSource(provider)
                 && (!sources.creatorInventory(mode) || sourceMixer.matchesPreference(item, mode));
     }
 
