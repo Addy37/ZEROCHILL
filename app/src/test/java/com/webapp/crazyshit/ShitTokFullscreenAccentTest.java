@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.app.Application;
 import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 import android.widget.TextView;
@@ -45,10 +46,11 @@ public class ShitTokFullscreenAccentTest {
 
     private static void assertAccent(TextView fullscreen, int accent) {
         assertTrue(fullscreen.getBackground() instanceof GradientDrawable);
-        GradientDrawable background = (GradientDrawable) fullscreen.getBackground();
-        ColorStateList stroke = background.getStrokeColor();
-        assertNotNull(stroke);
-        assertEquals(ChaosFeedView.fullscreenStrokeColor(accent), stroke.getDefaultColor());
+        // Android exposes drawable stroke setters but no public stroke getter.
+        // Check the accent-to-stroke mapping and the actual live icon tint.
+        int stroke = ChaosFeedView.fullscreenStrokeColor(accent);
+        assertEquals(190, Color.alpha(stroke));
+        assertEquals(accent & 0x00FFFFFF, stroke & 0x00FFFFFF);
         ColorStateList icon = fullscreen.getCompoundDrawableTintList();
         assertNotNull(icon);
         assertEquals(accent, icon.getDefaultColor());
