@@ -37,6 +37,35 @@ public class ShitTokCategoryHandoffTest {
                 item -> item == abandoned));
     }
 
+    @Test public void remembersLadiesClipEarlierInQueueInsteadOfChoosingNewOne() {
+        NativeContentItem ladiesSaved = clip("ladies-original");
+        NativeContentItem chaos = clip("chaos-current");
+        NativeContentItem ladiesNew = clip("ladies-new");
+        List<NativeContentItem> queue = Arrays.asList(ladiesSaved, chaos, ladiesNew);
+        assertEquals(0, ChaosFeedView.savedCategoryReturnIndex(queue, ladiesSaved.url,
+                item -> item == ladiesSaved || item == ladiesNew));
+        assertEquals(2, ChaosFeedView.firstReadyCategoryIndex(queue, 1,
+                item -> item == ladiesSaved || item == ladiesNew,
+                item -> true));
+        // The saved bookmark takes priority even when another eligible clip is
+        // immediately ready after the Chaos page.
+    }
+
+    @Test public void currentAndLaterBookmarksAreValidButWrongCategoryIsNot() {
+        NativeContentItem ladies = clip("ladies");
+        NativeContentItem chaos = clip("chaos");
+        NativeContentItem otherLadies = clip("other-ladies");
+        List<NativeContentItem> queue = Arrays.asList(ladies, chaos, otherLadies);
+        assertEquals(1, ChaosFeedView.savedCategoryReturnIndex(queue, chaos.url,
+                item -> item == chaos));
+        assertEquals(2, ChaosFeedView.savedCategoryReturnIndex(queue, otherLadies.url,
+                item -> item == otherLadies));
+        assertEquals(-1, ChaosFeedView.savedCategoryReturnIndex(queue, chaos.url,
+                item -> item == ladies || item == otherLadies));
+        assertEquals(-1, ChaosFeedView.savedCategoryReturnIndex(queue, "missing",
+                item -> true));
+    }
+
     @Test public void emptyAndOnlyOutgoingQueuesNeverActivate() {
         NativeContentItem old = clip("old");
         assertEquals(-1, ChaosFeedView.firstReadyCategoryIndex(Collections.emptyList(), 0,
