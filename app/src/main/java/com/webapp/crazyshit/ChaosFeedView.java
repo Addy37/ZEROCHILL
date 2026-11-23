@@ -1280,6 +1280,8 @@ public final class ChaosFeedView extends FrameLayout {
         beginQueueUpdate();
         try {
             ContentPreference previous = queuePreference;
+            String outgoingSelectedForParking = !pendingCategoryActivation && hasSelectedPage()
+                    ? items.get(selectedPosition).url : null;
             // A rapid tap whose feed never activated must not overwrite its earlier checkpoint.
             if (!pendingCategoryActivation && hasSelectedPage()) {
                 String outgoingUrl = items.get(selectedPosition).url;
@@ -1299,6 +1301,10 @@ public final class ChaosFeedView extends FrameLayout {
                         playbackOwner.isUserPaused(outgoingUrl), streamCache);
             }
             beginHorizontalCategorySlide(previous, current);
+            // Preserve a READY outgoing player's media buffer after the transition snapshot.
+            // This player stays muted and borrows the third slot until a swipe or short timeout.
+            if (outgoingSelectedForParking != null)
+                playbackOwner.parkSelectedForCategoryReturn(outgoingSelectedForParking);
             ShitTokFeedSessionStore.Session saved = feedSessions.get(currentSources, current);
             queuePreference = current;
             queueSources = currentSources;
@@ -1401,9 +1407,13 @@ public final class ChaosFeedView extends FrameLayout {
         if (indexOfUrl(url) < 0) return;
         CrazyShitRepository.StreamInfo stream = streamCache.get(url);
         if (stream == null || stream.mediaUrl == null || stream.mediaUrl.isEmpty()) return;
+        // Reusing a retained READY lease is cheaper than even silent re-preparation.
+        boolean reused = playbackOwner.hasPreparedReturnLease(url);
         // One selected lease, no preloaded neighbors. The regular vertical
         // playlist neighbors are acquired when the category becomes active.
         playbackOwner.select(url, null, null, false);
+        if (reused) ShitTokPoolDiagnostics.record("categoryRetainedReturnHit", "url=" + url
+                + " bufferedMs=" + playbackOwner.selectedBufferedMs());
         if (playbackOwner.prebufferSelectedReturn(url, stream)) {
             ShitTokPoolDiagnostics.record("categoryReturnPrebuffer", url);
         }
