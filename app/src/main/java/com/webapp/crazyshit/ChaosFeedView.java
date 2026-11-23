@@ -3292,9 +3292,10 @@ public final class ChaosFeedView extends FrameLayout {
                         stopLiveAmbient(true);
                         return;
                     }
+                    int precedingSlowFrames = ambientSlowSamples;
                     ambientSlowSamples = elapsed > ShitTokAmbientSampling.SLOW_SAMPLE_MS
-                            ? ambientSlowSamples + 1 : 0;
-                    if (ambientSlowSamples >= ShitTokAmbientSampling.MAX_SLOW_SAMPLES) {
+                            ? precedingSlowFrames + 1 : 0;
+                    if (ShitTokAmbientSampling.tooSlow(elapsed, precedingSlowFrames)) {
                         stopLiveAmbient(true);
                         return;
                     }
