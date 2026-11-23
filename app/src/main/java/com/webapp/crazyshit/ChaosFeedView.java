@@ -336,6 +336,8 @@ public final class ChaosFeedView extends FrameLayout {
         ShitTokPoolDiagnostics.beginMode(ShitTokSourceMode.get(activity), ShitTokContentPreference.get(activity));
         orientationAdmission = new ShitTokOrientationAdmission(activity.getApplicationContext());
         orientationAdmission.setCreatorFocused(creatorInventory());
+        orientationAdmission.setLandscapeAllowed(
+                ShitTokCategoryStrip.Tab.selected(activity) == ShitTokCategoryStrip.Tab.CHAOS);
         buildUi();
         ShitTokPoolDiagnostics.record("feedInit", "at=" + initializedAt);
         initialUiDrawn = !sourceRequestsEnabled;
@@ -527,7 +529,7 @@ public final class ChaosFeedView extends FrameLayout {
             NativeContentItem item = items.get(i);
             CrazyShitRepository.StreamInfo stream = streamCache.get(item.url);
             if (hiddenUrls.contains(item.url) || isBlockedCreator(item) || unplayable.contains(item.url)
-                    || !ShitTokOrientation.eligible(item.aspectRatioHint)
+                    || !eligibleVideoAspect(item.aspectRatioHint)
                     || stream == null || stream.mediaUrl == null || stream.mediaUrl.isEmpty()) break;
             ready++;
         }
@@ -1132,6 +1134,8 @@ public final class ChaosFeedView extends FrameLayout {
                 android.os.SystemClock.elapsedRealtime());
         queuePreference = current; queueSources = currentSources;
         orientationAdmission.setCreatorFocused(currentSources.creatorInventory(current));
+        orientationAdmission.setLandscapeAllowed(
+                ShitTokCategoryStrip.Tab.selected(activity) == ShitTokCategoryStrip.Tab.CHAOS);
         invalidatedSelection = null;
         ShitTokPoolDiagnostics.beginMode(currentSources, current);
         modeTailHits = modeRefills = modeDryRefills = 0;
@@ -1473,7 +1477,8 @@ public final class ChaosFeedView extends FrameLayout {
         }
         if (inventoryBatch == work) inventoryCandidateCount = 0;
         harvest.cancel(true);
-        List<NativeContentItem> prioritizedFresh = aspectPriority.order(verified.items, random);
+        List<NativeContentItem> prioritizedFresh = aspectPriority.order(verified.items, random,
+                ShitTokCategoryStrip.Tab.selected(activity) == ShitTokCategoryStrip.Tab.CHAOS);
 
         activity.runOnUiThread(() -> deferUiApply(() -> timedAdmissionApply("final", () -> {
             if (closed || work.cancelled || inventoryBatch != work || batchGeneration != feedGeneration) return;
@@ -1815,7 +1820,7 @@ public final class ChaosFeedView extends FrameLayout {
         for (NativeContentItem item : candidates) {
             if (!hasReservoirRoom(items.size(), selectedPosition)) break;
             if (!eligiblePreference(item, ShitTokContentPreference.get(activity))) continue;
-            if (!ShitTokOrientation.eligible(item.aspectRatioHint)) continue;
+            if (!eligibleVideoAspect(item.aspectRatioHint)) continue;
             if (isBlockedCreator(item)) continue;
             if (discoveryExcluded(item, streamCache.get(item.url))) continue;
             String identity = ShitTokContentIdentity.page(item.url);
@@ -1864,6 +1869,12 @@ public final class ChaosFeedView extends FrameLayout {
 
     private boolean creatorInventory() {
         return ShitTokSourceMode.get(activity).creatorInventory(ShitTokContentPreference.get(activity));
+    }
+
+    private boolean eligibleVideoAspect(float aspect) {
+        return ShitTokCategoryStrip.Tab.selected(activity) == ShitTokCategoryStrip.Tab.CHAOS
+                ? ShitTokOrientation.immersiveEligible(aspect)
+                : ShitTokOrientation.eligible(aspect);
     }
 
     private boolean eligiblePreference(NativeContentItem item, ContentPreference mode) {
