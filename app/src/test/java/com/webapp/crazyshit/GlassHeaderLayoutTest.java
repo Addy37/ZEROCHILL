@@ -21,9 +21,8 @@ public class GlassHeaderLayoutTest {
         var controller = BottomNavigationInsetsTest.createActivity();
         NativeMainActivity activity = controller.get();
         View headerView = ReflectionHelpers.getField(activity, "topBar");
-        // ShitTok now intentionally has a solid OLED-black header.
-        assertEquals(android.graphics.Color.BLACK,
-                ((android.graphics.drawable.ColorDrawable) headerView.getBackground()).getColor());
+        // ShitTok now uses an overlay; its shared traditional header must be gone.
+        assertEquals(View.GONE, headerView.getVisibility());
         MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
         ViewPager2 pager = ReflectionHelpers.getField(activity, "primaryPager");
         int header = ZeroChillUi.dimension(activity, R.dimen.zc_top_bar_height);
