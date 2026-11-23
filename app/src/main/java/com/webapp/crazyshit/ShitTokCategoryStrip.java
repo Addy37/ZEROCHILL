@@ -28,7 +28,8 @@ final class ShitTokCategoryStrip extends HorizontalScrollView {
         setHorizontalScrollBarEnabled(false);
         setOverScrollMode(OVER_SCROLL_NEVER);
         setFillViewport(false);
-        setBackgroundColor(ZeroChillUi.background(context));
+        // Plain text tabs on a fixed OLED-black row, without glass or pill backgrounds.
+        setBackgroundColor(Color.BLACK);
         setContentDescription("ShitTok content categories");
         tabs = new LinearLayout(context);
         tabs.setGravity(Gravity.CENTER_VERTICAL);
