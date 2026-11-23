@@ -125,6 +125,7 @@ jobs:
             gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest \
               --tests com.webapp.crazyshit.ShitTokCategoryStripTest \
               --tests com.webapp.crazyshit.ShitTokHeaderStyleTest \
+              --tests com.webapp.crazyshit.ShitTokAmbientSamplingTest \
               --tests com.webapp.crazyshit.ShitTokFullscreenAccentTest \
               --tests com.webapp.crazyshit.NavigationIaTest \
               --tests com.webapp.crazyshit.NavigationResponsivenessTest \
