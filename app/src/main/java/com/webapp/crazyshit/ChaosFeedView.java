@@ -313,7 +313,7 @@ public final class ChaosFeedView extends FrameLayout {
                 if (pendingCategoryActivation) {
                     // No pending tab may bind/play a surface before handoff.
                     // A newly acquired selected lease can start silent buffering.
-                    if (url.equals(pendingCategoryReturnUrl)) post(this::prebufferReturningCategory);
+                    if (url.equals(pendingCategoryReturnUrl)) post(ChaosFeedView.this::prebufferReturningCategory);
                     return;
                 }
                 for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
