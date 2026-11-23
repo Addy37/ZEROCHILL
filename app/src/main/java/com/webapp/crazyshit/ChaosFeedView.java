@@ -203,6 +203,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final Set<ChaosHolder> playerHolders =
             Collections.newSetFromMap(new IdentityHashMap<>());
     private ShitTokPlaybackOwner playbackOwner;
+    private ShitTokBackgroundCategoryWarmup categoryWarmup;
     private final ShitTokFrameDiagnostics frameDiagnostics = new ShitTokFrameDiagnostics();
     private final Deque<Runnable> deferredUiApplies = new ArrayDeque<>();
     private volatile int feedGeneration;
@@ -349,6 +350,11 @@ public final class ChaosFeedView extends FrameLayout {
             sourceMixer.onFirstFrame();
             post(this::requestPreferenceCandidates);
         });
+        if (sourceRequestsEnabled) categoryWarmup = new ShitTokBackgroundCategoryWarmup(
+                activity.getApplicationContext(), warm -> {
+                    if (!closed) sourceMixer.offerBackgroundStarter(
+                            activity, warm.sources, warm.preference, warm.item);
+                });
         ShitTokPoolDiagnostics.beginMode(ShitTokSourceMode.get(activity), ShitTokContentPreference.get(activity));
         orientationAdmission = new ShitTokOrientationAdmission(activity.getApplicationContext());
         orientationAdmission.setCreatorFocused(creatorInventory());
@@ -871,6 +877,10 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void setActive(boolean value) {
         if (value) applyContentPreference();
+        if (!value) {
+            removeCallbacks(backgroundWarmupTick);
+            if (categoryWarmup != null) categoryWarmup.pause();
+        }
         if (!value && active) { recordRunway("leavingFeed"); pauseRunwayClock(); }
         if (!value) {
             creatorMetadata.select(null);
@@ -891,6 +901,7 @@ public final class ChaosFeedView extends FrameLayout {
         playbackOwner.permission(value && hostResumed && !isPaging() && !closed
                 && !pendingCategoryActivation, chaosMuted);
         if (active && hostResumed && !searchCoverActive) {
+            scheduleBackgroundWarmupTick();
             /* Category changes are shown by the ShitTok strip, not the OnlyFap notice. */
             pager.setUserInputEnabled(true);
             reconcilePlaybackWindow();
@@ -929,6 +940,7 @@ public final class ChaosFeedView extends FrameLayout {
             resetCreatorSwipePreview();
         }
         if (active && !searchCoverActive) {
+            scheduleBackgroundWarmupTick();
             reconcilePlaybackWindow();
             resolveAhead(selectedPosition);
             post(this::activatePendingCategory);
@@ -953,6 +965,8 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void onHostPause() {
+        removeCallbacks(backgroundWarmupTick);
+        if (categoryWarmup != null) categoryWarmup.pause();
         ChaosStartupPreloader.stopPreparation();
         if (active) { recordRunway("hostPause"); pauseRunwayClock(); }
         resetTemporaryPinch();
@@ -1083,6 +1097,8 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void close() {
+        removeCallbacks(backgroundWarmupTick);
+        if (categoryWarmup != null) categoryWarmup.close();
         returnCategories.clear();
         feedSessions.clear();
         cancelHorizontalCategorySlide();
@@ -1138,6 +1154,29 @@ public final class ChaosFeedView extends FrameLayout {
     private String pendingCategoryReturnUrl = "";
     private volatile int categorySelectionVersion;
     private boolean categoryWaitingVisible;
+    /** Background discovery runs only after the selected clip has buffered comfortably. */
+    private final Runnable backgroundWarmupTick = new Runnable() {
+        @Override public void run() {
+            if (categoryWarmup == null || closed || !active || !hostResumed) return;
+            boolean healthy = sourceRequestsEnabled && !searchCoverActive
+                    && !pendingCategoryActivation && !isPaging() && hasSelectedPage()
+                    && ChaosPreloadPolicy.allowsLookAhead(activity)
+                    && playbackOwner.selectedPlaybackState() == Player.STATE_READY
+                    && playbackOwner.selectedBufferedMs() >= 4_000L
+                    && playbackOwner.allowsSpeculativeWork()
+                    && !playbackOwner.isStarvationProtected();
+            categoryWarmup.update(queueSources,
+                    queuePreference == null ? ShitTokContentPreference.get(activity) : queuePreference, healthy);
+            postDelayed(this, 900L);
+        }
+    };
+
+    private void scheduleBackgroundWarmupTick() {
+        if (categoryWarmup == null || closed || !active || !hostResumed) return;
+        removeCallbacks(backgroundWarmupTick);
+        postDelayed(backgroundWarmupTick, 900L);
+    }
+
     private final Runnable showCategoryWait = () -> {
         if (!closed && pendingCategoryActivation && active && hostResumed) {
             categoryWaitingVisible = true;
@@ -1275,6 +1314,7 @@ public final class ChaosFeedView extends FrameLayout {
             cancelInventoryBatch();
         }
         if (isPaging()) { deferUiApply(this::applyContentPreference); return; }
+        if (categoryWarmup != null) categoryWarmup.pause();
         resetDeferredReturnDiscovery();
         categoryTapAtMs = android.os.SystemClock.elapsedRealtime();
         beginQueueUpdate();
@@ -2503,6 +2543,12 @@ public final class ChaosFeedView extends FrameLayout {
     private CrazyShitRepository.StreamInfo resolvePlayable(NativeContentItem item)
             throws Exception {
         if (item == null || item.url == null || item.url.isEmpty()) return null;
+        CrazyShitRepository.StreamInfo prepared = categoryWarmup == null
+                ? null : categoryWarmup.streamFor(item.url);
+        if (prepared != null) {
+            ShitTokPoolDiagnostics.record("categoryWarmStreamHit", item.url);
+            return prepared;
+        }
         return ChaosStartupPreloader.resolveForFeed(activity.getApplicationContext(), item);
     }
 
@@ -5006,6 +5052,7 @@ public final class ChaosFeedView extends FrameLayout {
                             releaseDeferredReturnDiscovery();
                         }
                         sourceMixer.onFirstFrame();
+                        scheduleBackgroundWarmupTick();
                         requestPreferenceCandidates();
                         ShitTokPoolDiagnostics.record("selectedFrame", "position=" + boundPosition);
                     });
