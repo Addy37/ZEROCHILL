@@ -131,6 +131,7 @@ jobs:
               --tests com.webapp.crazyshit.NavigationResponsivenessTest \
               --tests com.webapp.crazyshit.VisualRefreshTest \
               --tests com.webapp.crazyshit.ShitTokContentPreferenceTest \
+              --tests com.webapp.crazyshit.ShitTokCategoryHandoffTest \
               --tests com.webapp.crazyshit.ShitTokFeedSourcesTest \
               --tests com.webapp.crazyshit.ShitTokFiveFeedInventoryTest \
               --tests com.webapp.crazyshit.ShitTokFilteredInventoryTest \
