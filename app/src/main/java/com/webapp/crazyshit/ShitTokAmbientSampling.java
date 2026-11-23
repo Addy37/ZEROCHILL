@@ -1,18 +1,15 @@
 package com.webapp.crazyshit;
 
 /**
- * Conservative frame sampling for the optional ShitTok horizontal-video ambient.
- * Samples only the selected, playing TextureView. All other states keep the
- * existing static thumbnail backdrop without extra video decoders or requests.
+ * Admission and performance limits for the ShitTok GPU ambient reflection.
+ * No CPU bitmap screenshots, timed sampling loop or crossfades remain.
  */
 final class ShitTokAmbientSampling {
-    // 4 small samples/sec, with a crossfade that finishes before the next sample.
-    static final long FRAME_INTERVAL_MS = 250L;
-    static final int CROSSFADE_MS = 210;
-    static final int FRAME_WIDTH = 96;
-    static final int FRAME_HEIGHT = 54;
-    static final long SLOW_SAMPLE_MS = 24L;
-    static final int MAX_SLOW_SAMPLES = 3;
+    static final int DOWNSCALE = 4;
+    static final int BLUR_RADIUS_LOW_RES = 6;
+    static final long MAX_FRAME_RECORD_NS = 12_000_000L;
+    static final long MISSED_VSYNC_NS = 80_000_000L;
+    static final int MAX_SLOW_FRAMES = 3;
 
     private ShitTokAmbientSampling() { }
 
@@ -24,7 +21,9 @@ final class ShitTokAmbientSampling {
                 && !interactionBlocked && textureAvailable && supported && !failed;
     }
 
-    static boolean tooSlow(long durationMs, int previousSlowSamples) {
-        return durationMs > SLOW_SAMPLE_MS && previousSlowSamples + 1 >= MAX_SLOW_SAMPLES;
+    static boolean shouldDisable(long recordNs, long frameGapNs, int previousSlowFrames) {
+        boolean slow = recordNs > MAX_FRAME_RECORD_NS ||
+                frameGapNs > MISSED_VSYNC_NS;
+        return slow && previousSlowFrames + 1 >= MAX_SLOW_FRAMES;
     }
 }
