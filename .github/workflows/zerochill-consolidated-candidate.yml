@@ -119,9 +119,9 @@ jobs:
         if: startsWith(github.ref_name, 'test-apk/')
         run: |
           set -euo pipefail
-          # ShitTok design probes need one signed APK but not the full 1,700+ class
-          # suite every time. Other test branches retain the normal full run.
-          if [[ "$GITHUB_REF_NAME" == "test-apk/shittok-five-feeds" ]]; then
+          # Five-feed and buffering experiments share one focused ShitTok suite.
+          # Full legacy suite runs remain separate and are not silently waived.
+          if [[ "$GITHUB_REF_NAME" == "test-apk/shittok-five-feeds" || "$GITHUB_REF_NAME" == "test-apk/shittok-buffering-pass-1" ]]; then
             gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest \
               --tests com.webapp.crazyshit.ShitTokCategoryStripTest \
               --tests com.webapp.crazyshit.ShitTokHeaderStyleTest \
@@ -135,6 +135,8 @@ jobs:
               --tests com.webapp.crazyshit.ShitTokPosterFramingTest \
               --tests com.webapp.crazyshit.ShitTokFeedSessionStoreTest \
               --tests com.webapp.crazyshit.ShitTokCategoryPrebufferTest \
+              --tests com.webapp.crazyshit.ShitTokBufferProtectionTest \
+              --tests com.webapp.crazyshit.ShitTokReturnBufferPriorityTest \
               --tests com.webapp.crazyshit.ShitTokPlayerPoolTest \
               --tests com.webapp.crazyshit.ShitTokAudioOwnershipTest \
               --tests com.webapp.crazyshit.ShitTokCategoryReturnCacheTest \
