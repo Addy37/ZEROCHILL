@@ -63,7 +63,7 @@ final class ShitTokCategoryStrip extends LinearLayout {
         setTag("shittok_category_strip");
         setOrientation(HORIZONTAL);
         setGravity(Gravity.CENTER_VERTICAL);
-        setPadding(dp(3), 0, dp(5), 0);
+        setPadding(dp(9), 0, dp(7), 0);
         setClipChildren(false);
         setClipToPadding(false);
         setContentDescription("ShitTok content feeds");
@@ -79,11 +79,13 @@ final class ShitTokCategoryStrip extends LinearLayout {
         scroller = new HorizontalScrollView(context);
         scroller.setHorizontalScrollBarEnabled(false);
         scroller.setOverScrollMode(OVER_SCROLL_NEVER);
-        scroller.setFillViewport(false);
+        // Center the tabs when they fit, but still allow scrolling on compact phones.
+        scroller.setFillViewport(true);
         scroller.setClipToPadding(false);
         tabs = new LinearLayout(context);
-        tabs.setGravity(Gravity.CENTER_VERTICAL);
+        tabs.setGravity(Gravity.CENTER);
         tabs.setOrientation(HORIZONTAL);
+        tabs.setPadding(dp(2), 0, dp(2), 0);
         scroller.addView(tabs, new HorizontalScrollView.LayoutParams(
                 LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT));
         addView(scroller, new LinearLayout.LayoutParams(0, LayoutParams.MATCH_PARENT, 1f));
@@ -93,14 +95,16 @@ final class ShitTokCategoryStrip extends LinearLayout {
             cell.setOrientation(VERTICAL);
             cell.setGravity(Gravity.CENTER);
             cell.setMinimumHeight(dp(46));
-            cell.setPadding(dp(7), 0, dp(7), 0);
+            cell.setMinimumWidth(dp(48));
+            cell.setPadding(dp(9), 0, dp(9), 0);
             cell.setTag("shittok_category_cell_" + option.value);
             cell.setClickable(true);
             cell.setFocusable(true);
             TextView title = new TextView(context);
             title.setTag("shittok_category_" + option.value);
             title.setText(option.label);
-            title.setTextSize(13);
+            title.setTextSize(14);
+            title.setShadowLayer(dp(2), 0f, dp(1), 0xB9000000);
             title.setSingleLine(true);
             title.setGravity(Gravity.CENTER);
             title.setContentDescription("ShitTok feed: " + option.label);
