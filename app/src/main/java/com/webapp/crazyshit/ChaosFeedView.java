@@ -1160,6 +1160,7 @@ public final class ChaosFeedView extends FrameLayout {
             cancelInventoryBatch();
         }
         if (isPaging()) { deferUiApply(this::applyContentPreference); return; }
+        boolean sameSelected = false;
         beginQueueUpdate();
         try {
         ContentPreference previous = queuePreference;
@@ -1225,7 +1226,7 @@ public final class ChaosFeedView extends FrameLayout {
         sourceMixer.requestPreference(activity, () -> post(this::loadMorePool), false);
         ShitTokCategoryReturnCache.Checkpoint savedCategory =
                 returnCategories.take(currentSources, current, categoryAt);
-        boolean sameSelected = restoreCategoryCheckpoint(savedCategory);
+        sameSelected = restoreCategoryCheckpoint(savedCategory);
         if (!sameSelected && savedCategory != null)
             pendingCategoryReturnUrl = savedCategory.selectedUrl;
         ArrayList<NativeContentItem> warm = new ArrayList<>();
