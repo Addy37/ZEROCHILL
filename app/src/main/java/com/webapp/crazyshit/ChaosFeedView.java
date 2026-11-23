@@ -11,6 +11,9 @@ import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.os.SystemClock;
+import android.os.Build;
+import android.view.TextureView;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -3182,6 +3185,7 @@ public final class ChaosFeedView extends FrameLayout {
         final ShitTokDynamicPinchController pinch;
         final FrameLayout mediaLayer;
         final ImageView ambientBackdrop;
+        final ImageView liveAmbientBackdrop;
         final PlayerView playerView;
         final ImageView poster;
         final ProgressBar loading;
@@ -3262,6 +3266,50 @@ public final class ChaosFeedView extends FrameLayout {
         boolean maintenanceFailure;
         boolean horizontalVideo;
         String ambientUrl = "";
+        private final Bitmap[] ambientFrames = new Bitmap[2];
+        private int ambientFrameIndex;
+        private int ambientSlowSamples;
+        private boolean ambientFailed;
+        private boolean ambientTickScheduled;
+        private final Runnable ambientFrameTick = new Runnable() {
+            @Override public void run() {
+                ambientTickScheduled = false;
+                if (!canSampleLiveAmbient()) return;
+                View surface = playerView.getVideoSurfaceView();
+                if (!(surface instanceof TextureView)) return;
+                TextureView texture = (TextureView) surface;
+                try {
+                    int slot = ambientFrameIndex;
+                    if (ambientFrames[slot] == null) {
+                        ambientFrames[slot] = Bitmap.createBitmap(
+                                ShitTokAmbientSampling.FRAME_WIDTH,
+                                ShitTokAmbientSampling.FRAME_HEIGHT, Bitmap.Config.ARGB_8888);
+                    }
+                    long started = SystemClock.uptimeMillis();
+                    Bitmap result = texture.getBitmap(ambientFrames[slot]);
+                    long elapsed = SystemClock.uptimeMillis() - started;
+                    if (result == null) {
+                        stopLiveAmbient(true);
+                        return;
+                    }
+                    ambientSlowSamples = elapsed > ShitTokAmbientSampling.SLOW_SAMPLE_MS
+                            ? ambientSlowSamples + 1 : 0;
+                    if (ambientSlowSamples >= ShitTokAmbientSampling.MAX_SLOW_SAMPLES) {
+                        stopLiveAmbient(true);
+                        return;
+                    }
+                    // Two tiny reusable frames prevent the displayed bitmap from
+                    // being written while Android is drawing it.
+                    liveAmbientBackdrop.setImageBitmap(result);
+                    liveAmbientBackdrop.setVisibility(View.VISIBLE);
+                    ambientFrameIndex = 1 - slot;
+                } catch (RuntimeException | OutOfMemoryError error) {
+                    stopLiveAmbient(true);
+                    return;
+                }
+                scheduleLiveAmbient();
+            }
+        };
         boolean aspectSampleRecorded;
         String videoLikeOwner;
         String commentCountOwner;
@@ -3306,6 +3354,20 @@ public final class ChaosFeedView extends FrameLayout {
                         dp(22), dp(22), android.graphics.Shader.TileMode.CLAMP));
             }
             mediaLayer.addView(ambientBackdrop, new FrameLayout.LayoutParams(-1, -1));
+            // Live frames overlay the same static thumbnail. Sampling is optional,
+            // at 96x54 and at most twice a second; a slow or unsupported capture
+            // leaves the original blurred thumbnail in place.
+            liveAmbientBackdrop = new ImageView(activity);
+            liveAmbientBackdrop.setTag("shittok_horizontal_live_ambient");
+            liveAmbientBackdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            liveAmbientBackdrop.setImageAlpha(135);
+            liveAmbientBackdrop.setVisibility(View.GONE);
+            liveAmbientBackdrop.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            if (Build.VERSION.SDK_INT >= 31) {
+                liveAmbientBackdrop.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
+                        dp(22), dp(22), android.graphics.Shader.TileMode.CLAMP));
+            }
+            mediaLayer.addView(liveAmbientBackdrop, new FrameLayout.LayoutParams(-1, -1));
 
             poster = new ImageView(activity);
             poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -4265,6 +4327,8 @@ public final class ChaosFeedView extends FrameLayout {
         void bind(NativeContentItem next, int position) {
             resetVisualMotion();
             detachLease();
+            ambientFailed = false;
+            ambientSlowSamples = 0;
             playerHolders.add(this);
             root.removeCallbacks(skipFailedClipRunnable);
             root.removeCallbacks(progressTick);
@@ -4634,6 +4698,7 @@ public final class ChaosFeedView extends FrameLayout {
                         syncPoster();
                         if (boundPosition != selectedPosition) return;
                         syncLoading();
+                        updateLiveAmbientSampling();
                         sourceMixer.onFirstFrame();
                         requestPreferenceCandidates();
                         ShitTokPoolDiagnostics.record("selectedFrame", "position=" + boundPosition);
@@ -4692,6 +4757,7 @@ public final class ChaosFeedView extends FrameLayout {
                         silencePlayer(createdPlayer);
                         return;
                     }
+                    updateLiveAmbientSampling();
                     if (isPlaying) {
                         if(!analyticsViewed && boundPosition==selectedPosition) {analyticsViewed=true; AnalyticsTracker.event(activity,"shittok_videos");}
                         playbackSuspended = false;
@@ -4769,6 +4835,48 @@ public final class ChaosFeedView extends FrameLayout {
             ambientBackdrop.setVisibility(landscapeFullscreen() ? View.GONE : View.VISIBLE);
         }
 
+        private boolean canSampleLiveAmbient() {
+            View surface = playerView.getVideoSurfaceView();
+            boolean textureAvailable = surface instanceof TextureView
+                    && ((TextureView) surface).isAvailable();
+            boolean selected = !closed && boundPosition == selectedPosition
+                    && item != null && holderAt(boundPosition) == this
+                    && !isPaging() && !searchCoverActive;
+            return ShitTokAmbientSampling.shouldSample(
+                    selected, active, hostResumed,
+                    player != null && player.isPlaying(), horizontalVideo,
+                    landscapeFullscreen(), clearDisplay || pinch.isActive(),
+                    textureAvailable && root.isAttachedToWindow(),
+                    Build.VERSION.SDK_INT >= 31, ambientFailed);
+        }
+
+        private void scheduleLiveAmbient() {
+            if (ambientTickScheduled || !canSampleLiveAmbient()) return;
+            ambientTickScheduled = true;
+            root.postDelayed(ambientFrameTick, ShitTokAmbientSampling.FRAME_INTERVAL_MS);
+        }
+
+        private void updateLiveAmbientSampling() {
+            if (canSampleLiveAmbient()) {
+                scheduleLiveAmbient();
+            } else {
+                root.removeCallbacks(ambientFrameTick);
+                ambientTickScheduled = false;
+                if (!horizontalVideo || landscapeFullscreen() || boundPosition != selectedPosition
+                        || !active || !hostResumed || closed) {
+                    liveAmbientBackdrop.setVisibility(View.GONE);
+                }
+            }
+        }
+
+        private void stopLiveAmbient(boolean failure) {
+            root.removeCallbacks(ambientFrameTick);
+            ambientTickScheduled = false;
+            if (failure) ambientFailed = true;
+            liveAmbientBackdrop.setVisibility(View.GONE);
+            liveAmbientBackdrop.setImageDrawable(null);
+        }
+
         private void syncLoading() {
             boolean selected = !closed && active && hostResumed && item != null
                     && boundPosition == selectedPosition && hasSelectedPage()
@@ -4807,6 +4915,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void detachLease() {
+            stopLiveAmbient(false);
             endScrubPreview(false, false);
             cancelInteractionUi();
             pinch.reset();
@@ -5165,6 +5274,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void syncOrientationChrome() {
+            updateLiveAmbientSampling();
             if (pinch.suppressesFeedChrome()) return;
             updateAmbientBackdrop();
             applyViewportInset();
