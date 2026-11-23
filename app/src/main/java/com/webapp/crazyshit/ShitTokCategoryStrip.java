@@ -67,6 +67,11 @@ final class ShitTokCategoryStrip extends LinearLayout {
         setClipChildren(false);
         setClipToPadding(false);
         setContentDescription("ShitTok content feeds");
+        // Normalize older test-build selections to the new five-feed model.
+        // OnlyFap's own saved gender preference remains untouched.
+        ShitTokSourceMode.set(context, ShitTokSourceMode.ALL);
+        if (ShitTokContentPreference.get(context) == ContentPreference.TRANS_MEN)
+            ShitTokContentPreference.set(context, ContentPreference.TRANS_WOMEN);
         GradientDrawable fade = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{0x99000000, 0x48000000, 0x00000000});
         setBackground(fade);
