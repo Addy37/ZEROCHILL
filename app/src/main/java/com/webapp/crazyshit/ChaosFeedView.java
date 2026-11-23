@@ -1258,8 +1258,12 @@ public final class ChaosFeedView extends FrameLayout {
                         : Math.max(0L, outgoingPlayer.getCurrentPosition());
                 // Keep a remembered position if the returning player is still at
                 // zero or not yet prepared. Never replace it with an empty lease.
+                ShitTokFeedSessionStore.Session earlier =
+                        feedSessions.get(queueSources, previous);
+                long remembered = earlier != null && outgoingUrl.equals(earlier.selectedUrl)
+                        ? earlier.positionMs : 0L;
                 long position = currentTime > 0L
-                        ? currentTime : sessionResume.positionFor(outgoingUrl);
+                        ? currentTime : Math.max(sessionResume.positionFor(outgoingUrl), remembered);
                 if (outgoingPlayer != null) playbackOwner.remember(outgoingUrl, position);
                 feedSessions.save(queueSources, previous, items, selectedPosition, position,
                         playbackOwner.isUserPaused(outgoingUrl), streamCache);
