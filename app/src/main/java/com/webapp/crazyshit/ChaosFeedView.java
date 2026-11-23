@@ -1265,7 +1265,8 @@ public final class ChaosFeedView extends FrameLayout {
             ShitTokFeedSessionStore.Session saved = feedSessions.get(currentSources, current);
             queuePreference = current;
             queueSources = currentSources;
-            pendingCategoryActivation = !items.isEmpty() || saved != null;
+            // A brand-new tab still needs a handoff gate until its first clip is ready.
+            pendingCategoryActivation = true;
             pendingCategoryReturnUrl = saved == null ? "" : saved.selectedUrl;
             categorySelectionVersion++;
             resolving.clear();
