@@ -125,6 +125,11 @@ public final class ChaosFeedView extends FrameLayout {
         }
     }
 
+    /** A legible accent border on the dark fullscreen pill, for every appearance preset. */
+    static int fullscreenStrokeColor(int accent) {
+        return Color.argb(190, Color.red(accent), Color.green(accent), Color.blue(accent));
+    }
+
     private static final String PREFS = "chaos_feed";
     private static final String KEY_RECENT = "recent_urls";
     private static final String KEY_HIDDEN = "hidden_urls";
@@ -3475,11 +3480,7 @@ public final class ChaosFeedView extends FrameLayout {
             fullscreen.setCompoundDrawablesWithIntrinsicBounds(
                     R.drawable.ic_action_fullscreen, 0, 0, 0);
             fullscreen.setCompoundDrawablePadding(dp(5));
-            GradientDrawable fullScreenBackground = new GradientDrawable();
-            fullScreenBackground.setColor(Color.argb(195, 9, 13, 20));
-            fullScreenBackground.setCornerRadius(dp(18));
-            fullScreenBackground.setStroke(dp(1), Color.argb(100, 8, 146, 208));
-            fullscreen.setBackground(fullScreenBackground);
+            refreshFullscreenAccent(AppearanceTheme.accent(activity));
             fullscreen.setPadding(dp(12), 0, dp(12), 0);
             fullscreen.setVisibility(View.GONE);
             FrameLayout.LayoutParams fullscreenParams =
@@ -4196,8 +4197,18 @@ public final class ChaosFeedView extends FrameLayout {
             );
         }
 
+        private void refreshFullscreenAccent(int accent) {
+            GradientDrawable background = new GradientDrawable();
+            background.setColor(Color.argb(195, 9, 13, 20));
+            background.setCornerRadius(dp(18));
+            background.setStroke(dp(1), fullscreenStrokeColor(accent));
+            fullscreen.setBackground(background);
+            fullscreen.setCompoundDrawableTintList(ColorStateList.valueOf(accent));
+        }
+
         void refreshVisualTheme() {
             int accent = AppearanceTheme.accent(activity);
+            refreshFullscreenAccent(accent);
             avatarRing.setBackground(circleDrawable(Color.BLACK, accent, 2));
             creatorFavoriteBadge.setBackground(circleDrawable(accent, Color.BLACK, 2));
             creatorFavoriteBadge.setTextColor(AppearanceTheme.onAccent(activity));
