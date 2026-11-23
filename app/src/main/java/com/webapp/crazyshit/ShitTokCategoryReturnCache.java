@@ -47,8 +47,14 @@ final class ShitTokCategoryReturnCache {
 
     Checkpoint take(ShitTokSourceMode sources, ContentPreference preference, long now) {
         if (sources == null || preference == null) return null;
-        Checkpoint checkpoint = saved.remove(sources.key(preference));
-        if (checkpoint == null || now - checkpoint.at > MAX_AGE_MS) return null;
+        String key = sources.key(preference);
+        Checkpoint checkpoint = saved.get(key);
+        if (checkpoint == null) return null;
+        if (now - checkpoint.at > MAX_AGE_MS) {
+            saved.remove(key);
+            return null;
+        }
+        // A rapid A-B-A-C tap must not consume A's bookmark before A ever plays.
         return checkpoint;
     }
 
