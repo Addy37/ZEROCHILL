@@ -25,6 +25,7 @@ final class ShitTokGpuAmbientView extends View {
     private TextureView source;
     private RenderNode node;
     private boolean enabled;
+    private boolean frozen;
     private boolean failed;
     private int slowFrames;
     private long previousDrawNs;
@@ -54,15 +55,26 @@ final class ShitTokGpuAmbientView extends View {
         previousDrawNs = 0L;
     }
 
-    void setMotionEnabled(boolean requested) {
-        boolean canRender = requested && !failed && source != null
+    void setMotionEnabled(boolean requested) { setMotionEnabled(requested, false); }
+
+    /** A user pause keeps the last GPU image; offscreen/unsupported states still stop it. */
+    void setMotionEnabled(boolean requested, boolean holdPausedFrame) {
+        boolean available = !failed && source != null
                 && supported(Build.VERSION.SDK_INT, isHardwareAccelerated(),
                         source.isAvailable() && source.isAttachedToWindow());
-        if (!canRender) {
+        if (!requested || !available) {
+            if (holdPausedFrame && available && node != null
+                    && node.hasDisplayList() && getVisibility() == VISIBLE) {
+                enabled = false;
+                frozen = true;
+                previousDrawNs = 0L;
+                return;
+            }
             stop();
             return;
         }
         if (!enabled) {
+            frozen = false;
             enabled = true;
             setVisibility(VISIBLE);
             postInvalidateOnAnimation();
@@ -71,6 +83,7 @@ final class ShitTokGpuAmbientView extends View {
 
     void stop() {
         enabled = false;
+        frozen = false;
         previousDrawNs = 0L;
         if (getVisibility() != GONE) setVisibility(GONE);
         if (node != null) node.discardDisplayList();
@@ -90,8 +103,12 @@ final class ShitTokGpuAmbientView extends View {
 
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if (!enabled || !canvas.isHardwareAccelerated() || source == null
+        if ((!enabled && !frozen) || !canvas.isHardwareAccelerated() || source == null
                 || !source.isAvailable() || !source.isAttachedToWindow()) return;
+        if (frozen) {
+            if (node != null && node.hasDisplayList()) drawCachedFrame(canvas);
+            return;
+        }
         int viewWidth = getWidth(), viewHeight = getHeight();
         int sourceWidth = source.getWidth(), sourceHeight = source.getHeight();
         if (viewWidth <= 0 || viewHeight <= 0 || sourceWidth <= 0 || sourceHeight <= 0) {
@@ -127,10 +144,7 @@ final class ShitTokGpuAmbientView extends View {
             } finally {
                 node.endRecording();
             }
-            canvas.save();
-            canvas.scale((float) viewWidth / renderWidth, (float) viewHeight / renderHeight);
-            canvas.drawRenderNode(node);
-            canvas.restore();
+            drawCachedFrame(canvas);
         } catch (RuntimeException | OutOfMemoryError ex) {
             fail();
             return;
@@ -146,6 +160,16 @@ final class ShitTokGpuAmbientView extends View {
         // Schedule on display vsync, not an arbitrary 250ms timer. The texture
         // layer always contains the latest video frame when the UI composites it.
         if (enabled) postInvalidateOnAnimation();
+    }
+
+    private void drawCachedFrame(Canvas canvas) {
+        if (node == null || !node.hasDisplayList()) return;
+        int nodeWidth = Math.max(1, node.getWidth());
+        int nodeHeight = Math.max(1, node.getHeight());
+        canvas.save();
+        canvas.scale((float) getWidth() / nodeWidth, (float) getHeight() / nodeHeight);
+        canvas.drawRenderNode(node);
+        canvas.restore();
     }
 
     @Override protected void onDetachedFromWindow() {
