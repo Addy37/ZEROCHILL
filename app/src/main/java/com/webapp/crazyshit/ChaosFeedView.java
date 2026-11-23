@@ -1309,10 +1309,12 @@ public final class ChaosFeedView extends FrameLayout {
             queueSelectedPosition = 0;
             if (saved != null) {
                 for (NativeContentItem item : saved.queue) {
+                    // These videos were already admitted to THIS category when saved.
+                    // Re-running the current discovery filters would silently remove
+                    // previously watched clips and shift the saved page index.
+                    // User-hidden videos and newly blocked creators remain excluded.
                     if (item == null || item.url == null || hiddenUrls.contains(item.url)
-                            || ShitTokBlockedCreatorStore.isBlocked(blockedCreatorKeys, item)
-                            || !eligiblePreference(item, current)
-                            || !eligibleVideoAspect(item.aspectRatioHint)) continue;
+                            || ShitTokBlockedCreatorStore.isBlocked(blockedCreatorKeys, item)) continue;
                     items.add(item);
                     sessionUrls.add(item.url);
                     sessionIdentities.add(ShitTokContentIdentity.page(item.url));
