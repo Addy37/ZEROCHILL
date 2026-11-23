@@ -1029,6 +1029,8 @@ public final class ChaosFeedView extends FrameLayout {
         returnCategories.clear();
         feedSessions.clear();
         cancelHorizontalCategorySlide();
+        resetDeferredReturnDiscovery();
+        categoryTapAtMs = 0L;
         pendingCategoryReturnUrl = "";
         pendingCategoryActivation = false;
         categoryWaitingVisible = false;
@@ -1084,6 +1086,8 @@ public final class ChaosFeedView extends FrameLayout {
         returnCategories.clear();
         feedSessions.clear();
         cancelHorizontalCategorySlide();
+        resetDeferredReturnDiscovery();
+        categoryTapAtMs = 0L;
         pendingCategoryReturnUrl = "";
         pendingCategoryActivation = false;
         categoryWaitingVisible = false;
@@ -1140,6 +1144,24 @@ public final class ChaosFeedView extends FrameLayout {
             syncLoadingIndicators();
         }
     };
+    private long categoryTapAtMs;
+    private long deferredReturnDiscoveryUntilMs;
+    private String deferredReturnDiscoveryUrl = "";
+    private final Runnable resumeReturnDiscovery = this::releaseDeferredReturnDiscovery;
+
+    private void releaseDeferredReturnDiscovery() {
+        if (deferredReturnDiscoveryUntilMs == 0L) return;
+        deferredReturnDiscoveryUntilMs = 0L;
+        deferredReturnDiscoveryUrl = "";
+        removeCallbacks(resumeReturnDiscovery);
+        if (!closed && active && hostResumed) post(this::loadMorePool);
+    }
+
+    private void resetDeferredReturnDiscovery() {
+        deferredReturnDiscoveryUntilMs = 0L;
+        deferredReturnDiscoveryUrl = "";
+        removeCallbacks(resumeReturnDiscovery);
+    }
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener preferenceListener =
             (preferences, key) -> { if (ShitTokContentPreference.KEY.equals(key) || ShitTokSourceMode.KEY.equals(key)) post(this::applyContentPreference); };
     private final Runnable sourceRecoveryTick = new Runnable() {
@@ -1253,6 +1275,8 @@ public final class ChaosFeedView extends FrameLayout {
             cancelInventoryBatch();
         }
         if (isPaging()) { deferUiApply(this::applyContentPreference); return; }
+        resetDeferredReturnDiscovery();
+        categoryTapAtMs = android.os.SystemClock.elapsedRealtime();
         beginQueueUpdate();
         try {
             ContentPreference previous = queuePreference;
@@ -1340,6 +1364,23 @@ public final class ChaosFeedView extends FrameLayout {
                     pendingCategoryReturnUrl = "";
                 }
             }
+            int returnIndex = indexOfUrl(pendingCategoryReturnUrl);
+            CrazyShitRepository.StreamInfo returningStream = returnIndex < 0 ? null
+                    : streamCache.get(pendingCategoryReturnUrl);
+            boolean cachedReturn = returningStream != null
+                    && returningStream.mediaUrl != null && !returningStream.mediaUrl.isEmpty();
+            int queuedAhead = returnIndex < 0 ? 0 : items.size() - returnIndex - 1;
+            if (ShitTokReturnBufferPriority.shouldDeferDiscovery(cachedReturn, queuedAhead)) {
+                // Let the selected video buffer before starting optional catalog / orientation work.
+                // The deadline runs even if a paused clip never renders a first frame.
+                deferredReturnDiscoveryUrl = pendingCategoryReturnUrl;
+                deferredReturnDiscoveryUntilMs = android.os.SystemClock.elapsedRealtime()
+                        + ShitTokReturnBufferPriority.DISCOVERY_GRACE_MS;
+                postDelayed(resumeReturnDiscovery, ShitTokReturnBufferPriority.DISCOVERY_GRACE_MS);
+            }
+            ShitTokPoolDiagnostics.record("categoryTap",
+                    "cached=" + cachedReturn + " queuedAhead=" + queuedAhead
+                            + " priority=" + (deferredReturnDiscoveryUntilMs != 0L));
             publishQueueChange(() -> adapter.notifyDataSetChanged());
             sourceMixer.requestPreference(activity, () -> post(this::loadMorePool), false);
             // Allow the remembered video to open the already-cached stream before
@@ -1462,6 +1503,10 @@ public final class ChaosFeedView extends FrameLayout {
         }
         pendingCategoryActivation = false;
         pendingCategoryReturnUrl = "";
+        if (categoryTapAtMs != 0L) {
+            ShitTokPoolDiagnostics.record("categoryActivated",
+                    "elapsedMs=" + (android.os.SystemClock.elapsedRealtime() - categoryTapAtMs));
+        }
         removeCallbacks(showCategoryWait);
         categoryWaitingVisible = false;
         syncLoadingIndicators();
@@ -1529,6 +1574,10 @@ public final class ChaosFeedView extends FrameLayout {
     applyContentPreference();
     if (queuePreference == null) queuePreference = ShitTokContentPreference.get(activity);
     if (queuePreference != ShitTokContentPreference.get(activity) || queueSources != ShitTokSourceMode.get(activity)) return;
+    if (deferredReturnDiscoveryUntilMs != 0L) {
+        if (android.os.SystemClock.elapsedRealtime() < deferredReturnDiscoveryUntilMs) return;
+        resetDeferredReturnDiscovery();
+    }
     requestPreferenceCandidates();
     // A late matching result gets a bounded turn through the SAME admission gates even
     // when normal providers already filled the runway or left an orientation reservoir.
@@ -4947,6 +4996,15 @@ public final class ChaosFeedView extends FrameLayout {
                         if (boundPosition != selectedPosition) return;
                         syncLoading();
                         updateLiveAmbientSampling();
+                        if (categoryTapAtMs != 0L) {
+                            ShitTokPoolDiagnostics.record("categoryFirstFrame",
+                                    "elapsedMs=" + (android.os.SystemClock.elapsedRealtime() - categoryTapAtMs)
+                                            + " bufferedMs=" + playbackOwner.selectedBufferedMs());
+                            categoryTapAtMs = 0L;
+                        }
+                        if (listenerUrl.equals(deferredReturnDiscoveryUrl)) {
+                            releaseDeferredReturnDiscovery();
+                        }
                         sourceMixer.onFirstFrame();
                         requestPreferenceCandidates();
                         ShitTokPoolDiagnostics.record("selectedFrame", "position=" + boundPosition);
