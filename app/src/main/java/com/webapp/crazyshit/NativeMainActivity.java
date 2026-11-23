@@ -77,7 +77,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
     private LinearLayout shell;
     private View topBar;
     private ShitTokCategoryStrip shitTokCategoryStrip;
-    private boolean shitTokCategoriesCollapsed;
     private boolean shitTokStripPinched;
     private HeaderProfileAvatar headerProfileAvatar;
     private TextView headerTitle;
@@ -360,9 +359,6 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
             @Override
             public void onNavigationScroll(int sourcePage, int dy, boolean atTop, boolean userDriven) {
-                if (sourcePage == MainPagerAdapter.PAGE_CHAOS && userDriven && dy != 0) {
-                    setShitTokCategoriesCollapsed(dy > 0);
-                }
                 if (navigationMotion != null) {
                     navigationMotion.onScroll(sourcePage, dy, atTop, userDriven);
                 }
@@ -589,15 +585,11 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (headerProfileAvatar != null) headerProfileAvatar.setReserveSpaceWhenSignedOut(showSelector);
     }
 
-    private void setShitTokCategoriesCollapsed(boolean collapsed) {
-        if (shitTokCategoriesCollapsed == collapsed) return;
-        shitTokCategoriesCollapsed = collapsed;
-        updateShitTokCategoryStrip();
-    }
-
     private void updateShitTokCategoryStrip() {
         if (shitTokCategoryStrip == null) return;
-        boolean show = screen == Screen.CHAOS && !shitTokCategoriesCollapsed
+        // Keep categories pinned at a constant height during all normal video swipes.
+        // Only the existing immersive/landscape/pinch flows may hide this row.
+        boolean show = screen == Screen.CHAOS
                 && !chaosClearDisplay && !shitTokStripPinched
                 && primaryPager != null && primaryPager.getVisibility() == View.VISIBLE
                 && getResources().getConfiguration().orientation !=
@@ -833,8 +825,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         // Library already presents the current account in its profile header.
         if (headerProfileAvatar != null) headerProfileAvatar.setProfileInContent(
                 position == MainPagerAdapter.PAGE_LIBRARY);
-        ((GlassHeaderView) topBar).setGlassEnabled(position == MainPagerAdapter.PAGE_SERIES
-                || position == MainPagerAdapter.PAGE_CHAOS || position == MainPagerAdapter.PAGE_LIBRARY);
+        setPrimaryHeaderMaterial(position);
         // Preserve the current compact/expanded nav state across tab switches.
         // Vertical content movement, not primary-tab selection, owns this animation.
         if (navigationMotion != null) navigationMotion.setActivePage(position);
@@ -884,10 +875,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
             selectNavSilently(NAV_HOME);
         }
 
-        if (position != MainPagerAdapter.PAGE_CHAOS) {
-            chaosClearDisplay = false;
-            shitTokCategoriesCollapsed = false;
-        }
+        if (position != MainPagerAdapter.PAGE_CHAOS) chaosClearDisplay = false;
         if (primaryPagerAdapter != null) primaryPagerAdapter.setPrimaryActive(position);
         if (headerTitle != null) {
             if (position == MainPagerAdapter.PAGE_HOME) {
@@ -907,6 +895,16 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         applyChaosFullscreenChrome();
         setShitTokSourceSelectorVisible(shitTokSourceSelectorVisible);
         if (position == MainPagerAdapter.PAGE_CHAOS) scheduleRatingPromptCheck();
+    }
+
+    /** ShitTok stays solid OLED black. Other pages retain their approved glass. */
+    private void setPrimaryHeaderMaterial(int position) {
+        if (!(topBar instanceof GlassHeaderView)) return;
+        boolean glass = position == MainPagerAdapter.PAGE_SERIES
+                || position == MainPagerAdapter.PAGE_LIBRARY;
+        ((GlassHeaderView) topBar).setGlassEnabled(glass);
+        if (position == MainPagerAdapter.PAGE_CHAOS)
+            topBar.setBackgroundColor(android.graphics.Color.BLACK);
     }
 
     private void setZeroChillWordmark() {
