@@ -157,15 +157,16 @@ public class ShitTokSourceModeTest {
                 assertTrue(cache.take(source, gender, 1).isEmpty());
             }
     }
-    @Test public void switchPrunesFutureKeepsCurrentAndRejectsStaleBroadPublicationWithoutResettingLearning() {
-        try (org.robolectric.android.controller.ActivityController<Activity> activity = Robolectric.buildActivity(Activity.class).setup()) {
+    @Test public void switchIsolatesFutureAndPreservesPreviousFeedAndLearning() {
+        try (org.robolectric.android.controller.ActivityController<Activity> activity =
+                     Robolectric.buildActivity(Activity.class).setup()) {
             ChaosFeedView feed = new ChaosFeedView(activity.get(), item -> {}, false);
             ReflectionHelpers.setField(feed, "queuePreference", ContentPreference.ALL);
             ArrayList<NativeContentItem> queue = ReflectionHelpers.getField(feed, "items");
-            NativeContentItem current = ShitTokInventoryAdmissionTest.item("current"), broad = new NativeContentItem("media", "broad", "https://kaotic.com/video/fixture", "", "", "Kaotic", "", "", "", 0, .5f);
+            NativeContentItem current = ShitTokInventoryAdmissionTest.item("current");
+            NativeContentItem broad = new NativeContentItem("media", "broad",
+                    "https://kaotic.com/video/fixture", "", "", "Kaotic", "", "", "", 0, .5f);
             queue.addAll(Arrays.asList(current, broad));
-            // Compare the same instant: normal wall-clock decay is independent
-            // of whether a source switch preserved the learned signal.
             long rankingInstant = 1_700_000_000_000L;
             ShitTokSmartRanker.actionAt(broad, ShitTokSmartRanker.Action.FAVORITE, rankingInstant);
             float learned = ShitTokSmartRanker.localScoreAt(broad, rankingInstant);
@@ -173,42 +174,52 @@ public class ShitTokSourceModeTest {
             long before = ShitTokPoolDiagnostics.modeToken();
             ShitTokSourceMode.set(activity.get(), ShitTokSourceMode.ONLY_FAP);
             ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
-            assertEquals(Arrays.asList(current), queue);
+            assertTrue("The new feed must not inherit a broad-mode page", queue.isEmpty());
+            ShitTokFeedSessionStore saved = ReflectionHelpers.getField(feed, "feedSessions");
+            ShitTokFeedSessionStore.Session earlier =
+                    saved.get(ShitTokSourceMode.ALL, ContentPreference.ALL);
+            assertEquals(Arrays.asList(current, broad), earlier.queue);
             assertEquals(generation, (int) ReflectionHelpers.getField(feed, "feedGeneration"));
             assertTrue(ShitTokPoolDiagnostics.modeToken() > before);
-            ReflectionHelpers.callInstanceMethod(feed, "appendUnique", from(List.class, Arrays.asList(broad)));
-            assertEquals(Arrays.asList(current), queue);
+            ReflectionHelpers.callInstanceMethod(feed, "appendUnique",
+                    from(List.class, Arrays.asList(broad)));
+            assertTrue("OnlyFap must reject broad source content", queue.isEmpty());
             assertEquals(learned, ShitTokSmartRanker.localScoreAt(broad, rankingInstant), 0f);
-            ShitTokSourceControl selector = new ShitTokSourceControl(activity.get());
-            assertTrue(selector.findViewWithTag("shittok_source_onlyfap").isSelected());
+            assertTrue(new ShitTokSourceControl(activity.get())
+                    .findViewWithTag("shittok_source_onlyfap").isSelected());
             feed.close();
         }
     }
-    @Test public void sourceSwitchPreservesPlayerFocusMuteSpeedAndReturningRestoresBroadWarmClips() {
+    @Test public void sourceSwitchRestoresItsOwnQueueWithoutChangingMuteAndSpeed() {
         try (ShitTokAudioOwnershipTest.Fixture f = new ShitTokAudioOwnershipTest.Fixture()) {
             f.install(f.selected, f.selectedPlayer);
             ReflectionHelpers.setField(f.feed, "queuePreference", ContentPreference.ALL);
             ReflectionHelpers.setField(f.feed, "clearDisplay", true);
             ArrayList<NativeContentItem> items = ReflectionHelpers.getField(f.feed, "items");
-            NativeContentItem current = items.get(0), future = ShitTokInventoryAdmissionTest.item("warm");
-            items.subList(1, items.size()).clear(); items.add(future);
-            Map<String, CrazyShitRepository.StreamInfo> streams = ReflectionHelpers.getField(f.feed, "streamCache");
-            CrazyShitRepository.StreamInfo stream = new CrazyShitRepository.StreamInfo(future.url, future.url, "warm");
+            NativeContentItem current = items.get(0);
+            NativeContentItem future = ShitTokInventoryAdmissionTest.item("warm");
+            items.subList(1, items.size()).clear();
+            items.add(future);
+            Map<String, CrazyShitRepository.StreamInfo> streams =
+                    ReflectionHelpers.getField(f.feed, "streamCache");
+            CrazyShitRepository.StreamInfo stream =
+                    new CrazyShitRepository.StreamInfo(future.url, future.url, "warm");
             streams.put(future.url, stream);
             boolean muted = ReflectionHelpers.getField(f.feed, "chaosMuted");
-            Object player = ReflectionHelpers.getField(f.selected, "player");
             float speed = f.selectedPlayer.speed.speed;
+
             ShitTokSourceMode.set(f.host.get(), ShitTokSourceMode.ONLY_FAP);
             ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
-            assertEquals(Arrays.asList(current), items);
-            assertSame(player, ReflectionHelpers.getField(f.selected, "player"));
+            assertTrue(items.isEmpty());
             assertTrue((boolean) ReflectionHelpers.getField(f.feed, "clearDisplay"));
             assertEquals(muted, (boolean) ReflectionHelpers.getField(f.feed, "chaosMuted"));
             assertEquals(speed, f.selectedPlayer.speed.speed, 0f);
+
             ShitTokSourceMode.set(f.host.get(), ShitTokSourceMode.ALL);
             ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
             assertEquals(Arrays.asList(current, future), items);
             assertSame(stream, streams.get(future.url));
+            assertEquals(current.url, ReflectionHelpers.getField(f.feed, "selectedUrl"));
         }
     }
     @Test public void modeDiagnosticsRejectOldEpochCompletionsAndKeepWholeSessionTotals() {
@@ -238,30 +249,33 @@ public class ShitTokSourceModeTest {
         ReflectionHelpers.callInstanceMethod(callbacks, "onPageSelected", from(int.class, position));
     }
 
-    @Test @Config(sdk = {29, 35}) public void deepCategorySwitchKeepsSelectedUrlWhenOldLayoutReportsPageTenDuringPrune() {
+    @Test @Config(sdk = {29, 35}) public void oldPagerCallbackCannotSelectVideoFromDepartedTab() {
         try (DeepFeed f = new DeepFeed()) {
             NativeContentItem selected = f.items.get(10);
-            int token = f.owner.token(selected.url);
-            androidx.recyclerview.widget.RecyclerView.Adapter<?> adapter = ReflectionHelpers.getField(f.feed, "adapter");
+            androidx.recyclerview.widget.RecyclerView.Adapter<?> adapter =
+                    ReflectionHelpers.getField(f.feed, "adapter");
             boolean[] delivered = {false};
             adapter.registerAdapterDataObserver(new androidx.recyclerview.widget.RecyclerView.AdapterDataObserver() {
-                @Override public void onItemRangeRemoved(int first, int count) {
-                    if (!delivered[0] && f.items.size() == 1) {
+                @Override public void onChanged() {
+                    if (!delivered[0] && f.items.isEmpty()) {
                         delivered[0] = true;
-                        pageCallback(f.feed, 10); // old ViewPager layout; i=9 against the six-row model
+                        pageCallback(f.feed, 10);
                     }
                 }
             });
             ShitTokContentPreference.set(f.host.get(), ContentPreference.WOMEN);
             ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
-            ReflectionHelpers.callInstanceMethod(f.feed, "settleSelectedPage");
             assertTrue(delivered[0]);
-            assertEquals(1, f.items.size());
-            assertSame(selected, f.items.get(0));
-            assertEquals(0, (int) ReflectionHelpers.getField(f.feed, "selectedPosition"));
-            assertEquals(0, f.pager.getCurrentItem());
-            assertEquals(selected.url, ReflectionHelpers.getField(f.owner, "selected"));
-            assertEquals(token, f.owner.token(selected.url));
+            assertTrue(f.items.isEmpty());
+            ShitTokFeedSessionStore sessions = ReflectionHelpers.getField(f.feed, "feedSessions");
+            assertEquals(selected.url,
+                    sessions.get(ShitTokSourceMode.ALL, ContentPreference.ALL).selectedUrl);
+            ShitTokContentPreference.set(f.host.get(), ContentPreference.ALL);
+            ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
+            assertEquals(11, f.items.size());
+            assertSame(selected, f.items.get(10));
+            assertEquals(10, (int) ReflectionHelpers.getField(f.feed, "selectedPosition"));
+            assertEquals(selected.url, ReflectionHelpers.getField(f.feed, "selectedUrl"));
         }
     }
 
@@ -302,37 +316,33 @@ public class ShitTokSourceModeTest {
         }
     }
 
-    @Test public void oldLayoutCallbackCannotResetLeaseOrResumeAfterCategorySwitch() {
+    @Test public void oldLayoutCallbackCannotReplaceIndependentSessionCheckpoint() {
         try (DeepFeed f = new DeepFeed()) {
             NativeContentItem current = f.items.get(10);
             ShitTokSessionResume resume = ReflectionHelpers.getField(f.feed, "sessionResume");
             resume.remember(current.url, 12_000, 60_000);
             androidx.recyclerview.widget.RecyclerView.Adapter adapter = f.pager.getAdapter();
-            androidx.recyclerview.widget.RecyclerView recycler = (androidx.recyclerview.widget.RecyclerView) f.pager.getChildAt(0);
-            androidx.recyclerview.widget.RecyclerView.ViewHolder removedHolder = adapter.createViewHolder(recycler, 0);
+            androidx.recyclerview.widget.RecyclerView recycler =
+                    (androidx.recyclerview.widget.RecyclerView) f.pager.getChildAt(0);
+            androidx.recyclerview.widget.RecyclerView.ViewHolder removedHolder =
+                    adapter.createViewHolder(recycler, 0);
             adapter.bindViewHolder(removedHolder, 2);
             ((Set<Object>) ReflectionHelpers.getField(f.feed, "playerHolders")).add(removedHolder);
-            boolean[] delivered = {false};
-            adapter.registerAdapterDataObserver(new androidx.recyclerview.widget.RecyclerView.AdapterDataObserver() {
-                @Override public void onItemRangeRemoved(int first, int count) {
-                    if (!delivered[0] && f.items.size() == 1) {
-                        delivered[0] = true;
-                        pageCallback(f.feed, 0); // a recycled old-layout callback during prune
-                    }
-                }
-            });
             ShitTokContentPreference.set(f.host.get(), ContentPreference.WOMEN);
             ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
-            assertTrue(delivered[0]);
-            consistent(f, current);
-            assertEquals(12_000, resume.positionFor(current.url));
-            assertEquals(androidx.recyclerview.widget.RecyclerView.NO_POSITION,
-                    (int) ReflectionHelpers.getField(removedHolder, "boundPosition"));
-            assertNull(ReflectionHelpers.getField(removedHolder, "player"));
-            pageCallback(f.feed, 10); // delayed invalid callback after the synchronous update
-            consistent(f, current);
-            f.layout();
-            consistent(f, current); // same lease remains selected until verified new feed content arrives
+            assertTrue(f.items.isEmpty());
+            ShitTokFeedSessionStore sessions = ReflectionHelpers.getField(f.feed, "feedSessions");
+            ShitTokFeedSessionStore.Session saved =
+                    sessions.get(ShitTokSourceMode.ALL, ContentPreference.ALL);
+            assertEquals(current.url, saved.selectedUrl);
+            assertEquals(12_000L, saved.positionMs);
+            pageCallback(f.feed, 10); // obsolete callback from the departed feed
+            assertEquals(current.url,
+                    sessions.get(ShitTokSourceMode.ALL, ContentPreference.ALL).selectedUrl);
+            assertTrue(f.engines.stream().noneMatch(e -> e.play && e.volume > 0f));
+            ShitTokContentPreference.set(f.host.get(), ContentPreference.ALL);
+            ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
+            assertEquals(current.url, ReflectionHelpers.getField(f.feed, "selectedUrl"));
         }
     }
 
@@ -357,16 +367,25 @@ public class ShitTokSourceModeTest {
         }
     }
 
-    @Test public void genderPruneToOneRetainsTheCurrentLeaseAndPosition() {
+    @Test public void genderSwitchStoresDeepPositionAndRestoresFullOriginalPlaylist() {
         try (DeepFeed f = new DeepFeed()) {
             NativeContentItem current = f.items.get(10);
-            int token = f.owner.token(current.url);
             ShitTokContentPreference.set(f.host.get(), ContentPreference.MEN);
             ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
-            ReflectionHelpers.callInstanceMethod(f.feed, "settleSelectedPage");
-            assertEquals(1, f.items.size());
-            consistent(f, current);
-            assertEquals(token, f.owner.token(current.url));
+            assertTrue(f.items.isEmpty());
+            ShitTokFeedSessionStore sessions = ReflectionHelpers.getField(f.feed, "feedSessions");
+            ShitTokFeedSessionStore.Session saved =
+                    sessions.get(ShitTokSourceMode.ALL, ContentPreference.ALL);
+            assertEquals(10, saved.selectedIndex);
+            assertEquals(current.url, saved.selectedUrl);
+            assertEquals(11, saved.queue.size());
+
+            ShitTokContentPreference.set(f.host.get(), ContentPreference.ALL);
+            ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
+            assertEquals(11, f.items.size());
+            assertSame(current, f.items.get(10));
+            assertEquals(10, (int) ReflectionHelpers.getField(f.feed, "selectedPosition"));
+            assertEquals(current.url, ReflectionHelpers.getField(f.feed, "selectedUrl"));
         }
     }
 
@@ -405,23 +424,28 @@ public class ShitTokSourceModeTest {
         }
     }
 
-    @Test public void backgroundAndSearchReturnReconcilePrunedSelectionWithoutGhostAudio() {
+    @Test public void searchAndBackgroundChangesDoNotOverwriteUnactivatedFeedsOrCreateGhostAudio() {
         try (DeepFeed f = new DeepFeed()) {
             NativeContentItem current = f.items.get(10);
             f.feed.onSearchOpened();
             ShitTokSourceMode.set(f.host.get(), ShitTokSourceMode.ONLY_FAP);
             ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
-            consistent(f, current);
+            assertTrue(f.items.isEmpty());
             f.feed.onSearchClosed();
-            consistent(f, current);
             f.feed.onHostPause();
             ShitTokContentPreference.set(f.host.get(), ContentPreference.MEN);
             ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
-            consistent(f, current);
+            assertTrue(f.items.isEmpty());
             assertTrue(f.engines.stream().noneMatch(e -> e.play));
             f.feed.onHostResume();
-            consistent(f, current);
-            assertEquals(1, f.items.size());
+            ShitTokFeedSessionStore sessions = ReflectionHelpers.getField(f.feed, "feedSessions");
+            assertEquals(current.url,
+                    sessions.get(ShitTokSourceMode.ALL, ContentPreference.ALL).selectedUrl);
+            ShitTokContentPreference.set(f.host.get(), ContentPreference.ALL);
+            ShitTokSourceMode.set(f.host.get(), ShitTokSourceMode.ALL);
+            ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
+            assertEquals(current.url, ReflectionHelpers.getField(f.feed, "selectedUrl"));
+            assertEquals(11, f.items.size());
         }
     }
 
