@@ -914,6 +914,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (active && !searchCoverActive) {
             reconcilePlaybackWindow();
             resolveAhead(selectedPosition);
+            post(this::activatePendingCategory);
             playSelected();
             syncVisibleChrome();
             refreshVisibleAppearance();
@@ -1095,6 +1096,7 @@ public final class ChaosFeedView extends FrameLayout {
     private ContentPreference queuePreference;
     private ShitTokSourceMode queueSources = ShitTokSourceMode.ALL;
     private String invalidatedSelection;
+    private boolean pendingCategoryActivation;
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener preferenceListener =
             (preferences, key) -> { if (ShitTokContentPreference.KEY.equals(key) || ShitTokSourceMode.KEY.equals(key)) post(this::applyContentPreference); };
     private final Runnable sourceRecoveryTick = new Runnable() {
@@ -1133,6 +1135,10 @@ public final class ChaosFeedView extends FrameLayout {
                 Math.min(items.size(), selectedPosition + 1), items.size())), streamCache,
                 android.os.SystemClock.elapsedRealtime());
         queuePreference = current; queueSources = currentSources;
+        // Keep the current playback lease until the next category has a
+        // verified candidate, then switch automatically. Never show an
+        // unrelated Chaos clip indefinitely under the Ladies label.
+        pendingCategoryActivation = !items.isEmpty();
         orientationAdmission.setCreatorFocused(currentSources.creatorInventory(current));
         orientationAdmission.setLandscapeAllowed(
                 ShitTokCategoryStrip.Tab.selected(activity) == ShitTokCategoryStrip.Tab.CHAOS);
@@ -1172,11 +1178,26 @@ public final class ChaosFeedView extends FrameLayout {
             publishQueueChange(() -> adapter.notifyItemRangeInserted(warmStart, items.size() - warmStart));
             sequenceFilteredFuture();
             reconcilePlaybackWindow();
+            post(this::activatePendingCategory);
         }
         refillDeferred = true;
         continuityWorkNeeded = true;
         post(this::loadMorePool);
         } finally { endQueueUpdate(); }
+    }
+
+    private void activatePendingCategory() {
+        if (!pendingCategoryActivation || closed || !active || !hostResumed
+                || searchCoverActive || isPaging() || queueUpdateDepth > 0) return;
+        int next = selectedPosition + 1;
+        if (next >= items.size() || !eligiblePreference(items.get(next), queuePreference)) return;
+        RecyclerView recycler = pagerRecycler();
+        if (recycler != null && recycler.hasPendingAdapterUpdates()) {
+            pager.postOnAnimation(this::activatePendingCategory);
+            return;
+        }
+        pendingCategoryActivation = false;
+        pager.setCurrentItem(next, false);
     }
 
     private void pruneIncompatibleHistory() {
@@ -1464,6 +1485,7 @@ public final class ChaosFeedView extends FrameLayout {
                         reconcilePlaybackWindow();
                         resolveAhead(selectedPosition);
                         if (active && hostResumed) playSelected();
+                        post(this::activatePendingCategory);
                         tryPendingAutoAdvance();
                         requestContinuity();
                     })));
@@ -1513,6 +1535,7 @@ public final class ChaosFeedView extends FrameLayout {
                 reconcilePlaybackWindow();
                 resolveAhead(selectedPosition);
                 if (active && hostResumed) playSelected();
+                post(this::activatePendingCategory);
                 tryPendingAutoAdvance();
             }
 
