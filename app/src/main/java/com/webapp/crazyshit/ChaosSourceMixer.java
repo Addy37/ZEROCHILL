@@ -104,7 +104,12 @@ final class ChaosSourceMixer {
         SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
         if (!sources.creatorInventory(mode)) {
             for (int source = 1; source <= 8; source++) {
-                boolean shittokEligible = source != BATCH_EFUKT && source != BATCH_XMEGADRIVE;
+                // Chaos is exclusively wild-content providers. Creator feeds live
+                // behind Ladies / Guys / Trans / Groups, not the broad pool.
+                boolean shittokEligible = source == BATCH_REGULAR
+                        || source == BATCH_EFUKT
+                        || source == BATCH_KAOTIC
+                        || source == BATCH_SHIT_SHOW;
                 sourcePool.setEligibility(source, shittokEligible,
                         shittokEligible && sourceAvailable(source, config));
             }
@@ -272,12 +277,12 @@ final class ChaosSourceMixer {
         }
         requestPreference(context, () -> {});
         SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
-        sourcePool.request(BATCH_KAOTIC, true, sourceAvailable(BATCH_KAOTIC, config), () -> source(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
-        sourcePool.request(BATCH_FAPELLO, true, sourceAvailable(BATCH_FAPELLO, config), () -> source(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
         sourcePool.request(BATCH_REGULAR, true, true, () -> source(BATCH_REGULAR, () -> loadRegularBatch(context, null)));
-        sourcePool.request(BATCH_BADDIEHUB, true, sourceAvailable(BATCH_BADDIEHUB, config), () -> source(BATCH_BADDIEHUB, () -> loadBaddieHubBatch(context)));
+        sourcePool.request(BATCH_KAOTIC, true, sourceAvailable(BATCH_KAOTIC, config), () -> source(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
+        // Existing eFukt regional failure handling remains intact. A failed
+        // provider cannot delay the other three Chaos sources.
+        sourcePool.request(BATCH_EFUKT, true, sourceAvailable(BATCH_EFUKT, config), () -> source(BATCH_EFUKT, () -> loadEfuktBatch(context)));
         if (explorationAllowed) {
-            sourcePool.request(BATCH_ONLY_HAVEN, true, sourceAvailable(BATCH_ONLY_HAVEN, config), () -> source(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
             sourcePool.request(BATCH_SHIT_SHOW, true, true, () -> source(BATCH_SHIT_SHOW,
                     () -> shitShow.takeBatchOrWarm(context, SHIT_SHOW_PER_BATCH)));
         }
