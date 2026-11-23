@@ -135,6 +135,8 @@ jobs:
               --tests com.webapp.crazyshit.ShitTokPosterFramingTest \
               --tests com.webapp.crazyshit.ShitTokFeedSessionStoreTest \
               --tests com.webapp.crazyshit.ShitTokCategoryPrebufferTest \
+              --tests com.webapp.crazyshit.ShitTokPlayerPoolTest \
+              --tests com.webapp.crazyshit.ShitTokAudioOwnershipTest \
               --tests com.webapp.crazyshit.ShitTokCategoryReturnCacheTest \
               --tests com.webapp.crazyshit.ShitTokWarmCategoryCacheTest \
               --tests com.webapp.crazyshit.ShitTokFeedSourcesTest \
