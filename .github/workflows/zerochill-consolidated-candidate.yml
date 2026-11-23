@@ -119,7 +119,26 @@ jobs:
         if: startsWith(github.ref_name, 'test-apk/')
         run: |
           set -euo pipefail
-          gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest :app:assembleDebug
+          # ShitTok design probes need one signed APK but not the full 1,700+ class
+          # suite every time. Other test branches retain the normal full run.
+          if [[ "$GITHUB_REF_NAME" == "test-apk/shittok-five-feeds" ]]; then
+            gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest \
+              --tests com.webapp.crazyshit.ShitTokCategoryStripTest \
+              --tests com.webapp.crazyshit.ShitTokHeaderStyleTest \
+              --tests com.webapp.crazyshit.ShitTokContentPreferenceTest \
+              --tests com.webapp.crazyshit.ShitTokFeedSourcesTest \
+              --tests com.webapp.crazyshit.ShitTokFiveFeedInventoryTest \
+              --tests com.webapp.crazyshit.ShitTokFilteredInventoryTest \
+              --tests com.webapp.crazyshit.ShitTokSourceModeTest \
+              --tests com.webapp.crazyshit.ShitTokOrientationTest \
+              --tests com.webapp.crazyshit.ShitTokOrientationAdmissionTest \
+              --tests com.webapp.crazyshit.ShitTokAspectPriorityTest \
+              --tests com.webapp.crazyshit.GlassHeaderLayoutTest \
+              --tests com.webapp.crazyshit.BottomNavigationInsetsTest
+            gradle --no-daemon --console=plain --max-workers=3 :app:assembleDebug
+          else
+            gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest :app:assembleDebug
+          fi
           mkdir -p candidate
           bash tools/verify-android-build-lineage.sh candidate/APK-LINEAGE.txt
           apk="candidate/ZeroChill-Beta-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA:0:8}.apk"
