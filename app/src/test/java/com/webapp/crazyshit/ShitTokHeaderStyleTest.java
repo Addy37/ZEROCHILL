@@ -34,6 +34,16 @@ public class ShitTokHeaderStyleTest {
                 from(boolean.class, false));
         assertEquals(View.GONE, header.getVisibility());
         assertEquals(View.GONE, header.getChildAt(0).getVisibility());
+        assertEquals(0, header.getLayoutParams().height);
+
+        // A late appearance pass after landscape fullscreen must not restore
+        // the old ShitTok wordmark/search row above the floating category tabs.
+        header.setVisibility(View.VISIBLE);
+        header.getLayoutParams().height = ZeroChillUi.dimension(activity, R.dimen.zc_top_bar_height);
+        ReflectionHelpers.callStaticMethod(OledImmersiveUiController.class,
+                "applyMain", from(NativeMainActivity.class, activity));
+        assertEquals(View.GONE, header.getVisibility());
+        assertEquals(0, header.getLayoutParams().height);
 
         ReflectionHelpers.setField(activity, "screen", Enum.valueOf(screenClass, "LIBRARY"));
         ReflectionHelpers.callInstanceMethod(activity, "setPrimaryHeaderMaterial",
@@ -42,6 +52,8 @@ public class ShitTokHeaderStyleTest {
                 from(boolean.class, false));
         assertEquals(View.VISIBLE, header.getVisibility());
         assertEquals(View.VISIBLE, header.getChildAt(0).getVisibility());
+        assertEquals(ZeroChillUi.dimension(activity, R.dimen.zc_top_bar_height),
+                header.getLayoutParams().height);
         assertEquals(Color.TRANSPARENT, ((ColorDrawable) header.getBackground()).getColor());
     }
 
