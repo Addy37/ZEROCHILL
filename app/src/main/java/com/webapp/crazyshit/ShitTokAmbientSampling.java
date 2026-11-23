@@ -6,7 +6,9 @@ package com.webapp.crazyshit;
  * existing static thumbnail backdrop without extra video decoders or requests.
  */
 final class ShitTokAmbientSampling {
-    static final long FRAME_INTERVAL_MS = 500L;
+    // 4 small samples/sec, with a crossfade that finishes before the next sample.
+    static final long FRAME_INTERVAL_MS = 250L;
+    static final int CROSSFADE_MS = 210;
     static final int FRAME_WIDTH = 96;
     static final int FRAME_HEIGHT = 54;
     static final long SLOW_SAMPLE_MS = 24L;
