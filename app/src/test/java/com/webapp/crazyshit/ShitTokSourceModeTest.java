@@ -274,8 +274,16 @@ public class ShitTokSourceModeTest {
         assertEquals(selected.url, ReflectionHelpers.getField(f.owner, "selected"));
         if ((boolean) ReflectionHelpers.getField(f.feed, "hostResumed")
                 && !(boolean) ReflectionHelpers.getField(f.feed, "searchCoverActive")) {
-            assertEquals(position, (int) ReflectionHelpers.getField(f.feed, "plannedPosition"));
-            assertEquals(selected.url, ReflectionHelpers.getField(f.feed, "plannedUrl"));
+            boolean awaitingNewCategory = ReflectionHelpers.getField(f.feed, "pendingCategoryActivation");
+            if (awaitingNewCategory) {
+                // The outgoing URL remains the selected lease, but is no longer
+                // planned for playback while the new category resolves.
+                assertEquals(-1, (int) ReflectionHelpers.getField(f.feed, "plannedPosition"));
+                assertEquals("", ReflectionHelpers.getField(f.feed, "plannedUrl"));
+            } else {
+                assertEquals(position, (int) ReflectionHelpers.getField(f.feed, "plannedPosition"));
+                assertEquals(selected.url, ReflectionHelpers.getField(f.feed, "plannedUrl"));
+            }
         }
         assertTrue(f.engines.stream().filter(e -> e.play && e.volume > 0f).count() <= 1);
         for (ShitTokPlayerPoolTest.Engine engine : f.engines)
