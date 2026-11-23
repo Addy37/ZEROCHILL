@@ -1115,7 +1115,7 @@ public final class ChaosFeedView extends FrameLayout {
     private ShitTokSourceMode queueSources = ShitTokSourceMode.ALL;
     private String invalidatedSelection;
     private boolean pendingCategoryActivation;
-    private int categorySelectionVersion;
+    private volatile int categorySelectionVersion;
     private boolean categoryWaitingVisible;
     private final Runnable showCategoryWait = () -> {
         if (!closed && pendingCategoryActivation && active && hostResumed) {
@@ -2170,6 +2170,8 @@ public final class ChaosFeedView extends FrameLayout {
         final int leaseToken = playbackOwner.token(item.url);
         ShitTokPoolDiagnostics.record("sourceStart", item.url);
         io.execute(() -> {
+            if (resolutionGeneration != feedGeneration
+                    || resolutionCategoryVersion != categorySelectionVersion || closed) return;
             if (position != selectedPosition && !orientationWorkAllowed && !continuity) {
                 activity.runOnUiThread(() -> {
                     if (resolutionGeneration == feedGeneration
@@ -2189,6 +2191,8 @@ public final class ChaosFeedView extends FrameLayout {
                     inventoryResolutionSlots.acquire();
                     acquired = true;
                 }
+                if (resolutionGeneration != feedGeneration
+                        || resolutionCategoryVersion != categorySelectionVersion || closed) return;
                 if (stream == null) stream = resolvePlayable(item);
             } catch (Exception error) {
                 resolveError = error;
