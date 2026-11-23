@@ -14,18 +14,18 @@ public class ShitTokAmbientSamplingTest {
                 supported, failed);
     }
 
-    @Test public void selectedHorizontalVideoCanSampleWithoutAnotherDecoder() {
+    @Test public void gpuReflectionHasSmallSourceAndNoFrameSamplingTimer() {
         assertTrue(allowed(true, true, true, true, true, false,
                 false, true, true, false));
-        assertEquals(250L, ShitTokAmbientSampling.FRAME_INTERVAL_MS);
-        assertEquals(210, ShitTokAmbientSampling.CROSSFADE_MS);
-        assertTrue(ShitTokAmbientSampling.CROSSFADE_MS
-                < ShitTokAmbientSampling.FRAME_INTERVAL_MS);
-        assertTrue(ShitTokAmbientSampling.FRAME_WIDTH <= 128);
-        assertTrue(ShitTokAmbientSampling.FRAME_HEIGHT <= 72);
+        assertEquals(4, ShitTokAmbientSampling.DOWNSCALE);
+        assertTrue(ShitTokAmbientSampling.BLUR_RADIUS_LOW_RES > 0);
+        assertFalse(ShitTokGpuAmbientView.supported(30, true, true));
+        assertFalse(ShitTokGpuAmbientView.supported(35, false, true));
+        assertFalse(ShitTokGpuAmbientView.supported(35, true, false));
+        assertTrue(ShitTokGpuAmbientView.supported(35, true, true));
     }
 
-    @Test public void liveAmbientNeverRunsOffscreenOrWhenFullscreenOrPaused() {
+    @Test public void gpuReflectionNeverRunsOffscreenWhenPausedOrInFullscreen() {
         boolean[] baseline = {true, true, true, true, true, false, false, true, true, false};
         for (int i : new int[]{0, 1, 2, 3, 4, 7, 8}) {
             boolean[] state = baseline.clone();
@@ -41,10 +41,13 @@ public class ShitTokAmbientSamplingTest {
         }
     }
 
-    @Test public void repeatedSlowFrameCapturesTriggerFallback() {
-        assertFalse(ShitTokAmbientSampling.tooSlow(25L, 0));
-        assertFalse(ShitTokAmbientSampling.tooSlow(25L, 1));
-        assertTrue(ShitTokAmbientSampling.tooSlow(25L, 2));
-        assertFalse(ShitTokAmbientSampling.tooSlow(4L, 2));
+    @Test public void repeatedFrameStallsTurnOffOptionalEffect() {
+        long slow = ShitTokAmbientSampling.MAX_FRAME_RECORD_NS + 1;
+        long missed = ShitTokAmbientSampling.MISSED_VSYNC_NS + 1;
+        assertFalse(ShitTokAmbientSampling.shouldDisable(slow, 0, 0));
+        assertFalse(ShitTokAmbientSampling.shouldDisable(slow, 0, 1));
+        assertTrue(ShitTokAmbientSampling.shouldDisable(slow, 0, 2));
+        assertTrue(ShitTokAmbientSampling.shouldDisable(0, missed, 2));
+        assertFalse(ShitTokAmbientSampling.shouldDisable(10, 10, 2));
     }
 }
