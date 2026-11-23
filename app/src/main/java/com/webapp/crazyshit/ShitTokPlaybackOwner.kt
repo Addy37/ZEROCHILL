@@ -48,6 +48,18 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     private var epoch = 0
     private var window = emptyList<String>()
     private var selected: String? = null
+    // The last preference can temporarily retain one prepared, muted engine.
+    // It borrows the third pool slot from the backward vertical neighbor.
+    private var parkedReturnUrl: String? = null
+    private var parkedUntilMs = 0L
+    private var categoryArrivalPending = false
+    private var parkExpiry: Job? = null
+    private var requestedPrevious: String? = null
+    private var requestedNeighbors = false
+    private var parkHits = 0
+    private var parkEvictions = 0
+    private var parkTimeouts = 0
+    private val parkLifetimeMs = 20_000L
     private var immediateNext: String? = null
     private var continuityReady = false
     private var permitted = false
@@ -82,6 +94,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         searchCovered = value
         endSpeedBoost()
         if (value) {
+            clearParkedReference()
             cancelSilentReturnPrebuffer()
             acquisition?.cancel()
             window = listOfNotNull(selected)
@@ -141,6 +154,73 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         }
     }
 
+    /**
+     * Mark the outgoing selected category clip for one short return window.
+     * No new decoder or source: its existing prepared engine stays in the pool.
+     * Called after the outgoing screenshot has been captured, before the queue is replaced.
+     */
+    fun parkSelectedForCategoryReturn(url: String) {
+        val lease = leases[url]
+        if (searchCovered || preparedLimit < 3 || selected != url || lease?.stream == null ||
+            lease.player.playerError != null || lease.player.playbackState != Player.STATE_READY) {
+            clearParkedReference()
+            ShitTokPoolDiagnostics.record("categoryParkSkipped", "ready=false")
+            return
+        }
+        clearParkedReference()
+        parkedReturnUrl = url
+        categoryArrivalPending = true
+        parkedUntilMs = SystemClock.elapsedRealtime() + parkLifetimeMs
+        control.parkedId = url
+        silence(lease.player)
+        // The previous surface must not outlive its RecyclerView category.
+        callbacks.onLeaseRetired(url)
+        lease.view?.player = null
+        lease.view = null
+        lease.renderedFrame = false
+        val buffered = lease.player.totalBufferedDuration
+        ShitTokPoolDiagnostics.record("categoryParked",
+            "bufferedMs=$buffered expiresInMs=$parkLifetimeMs")
+        parkExpiry = scope.launch {
+            delay(parkLifetimeMs)
+            if (parkedReturnUrl == url && SystemClock.elapsedRealtime() >= parkedUntilMs) {
+                parkTimeouts++
+                evictParkedReturn("expired")
+                val nowSelected = selected
+                if (nowSelected != null && permitted && !searchCovered) {
+                    selectWindow(nowSelected, immediateNext, requestedPrevious, requestedNeighbors)
+                }
+            }
+        }
+    }
+
+    /** Used before rebuilding the outgoing category. Does not prepare or select anything. */
+    fun hasPreparedReturnLease(url: String): Boolean =
+        leases[url]?.let {
+            it.stream != null && it.player.playerError == null &&
+                    it.player.playbackState == Player.STATE_READY
+        } == true
+
+    private fun clearParkedReference() {
+        parkExpiry?.cancel()
+        parkExpiry = null
+        parkedReturnUrl = null
+        parkedUntilMs = 0L
+        categoryArrivalPending = false
+        control.parkedId = null
+    }
+
+    private fun evictParkedReturn(reason: String) {
+        val url = parkedReturnUrl ?: return
+        clearParkedReference()
+        parkEvictions++
+        if (url != selected) {
+            retire(url)
+            removeSource(url)
+        }
+        ShitTokPoolDiagnostics.record("categoryParkEvicted", "reason=$reason")
+    }
+
     /** No planning on scroll-state-only changes. Reconciliation uses settled IDs only. */
     fun select(current: String, next: String?, previous: String?, neighbors: Boolean) {
         Trace.beginSection("zc.shittok.pool_select")
@@ -148,11 +228,37 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     }
     private fun selectWindow(current: String, next: String?, previous: String?, neighbors: Boolean) {
         if (searchCovered) return
+        if (parkedReturnUrl != null && SystemClock.elapsedRealtime() >= parkedUntilMs) {
+            parkTimeouts++
+            evictParkedReturn("expiredOnSelect")
+        }
+        // First selection after a preference tap is a category arrival, not a vertical swipe.
+        // A subsequent change of selected clip spends the third slot on swipe continuity.
+        if (categoryArrivalPending) categoryArrivalPending = false
+        else if (parkedReturnUrl != null && selected != null && selected != current &&
+                parkedReturnUrl != current) evictParkedReturn("verticalSelection")
+        if (parkedReturnUrl == current) {
+            // The retained engine is foreground now. It must never expire as a background lease.
+            parkHits++
+            ShitTokPoolDiagnostics.record("categoryParkPromoted", "bufferedMs=${leases[current]?.player?.totalBufferedDuration ?: 0L}")
+            clearParkedReference()
+        }
+        requestedPrevious = previous
+        requestedNeighbors = neighbors
+        // Priority: selected, forward swipe, parked previous category, then backward swipe.
+        // Backward swipe uses the third slot as soon as the user changes pages.
+        val parkCandidate = parkedReturnUrl?.takeIf {
+            preparedLimit >= 3 && it != current && it in leases
+        }
+        val wanted = listOfNotNull(current, next.takeIf { neighbors }, parkCandidate,
+            previous.takeIf { neighbors }).distinct().take(preparedLimit)
+        if (selected == current && window == wanted && pool != null) { syncAudio(); return }
+        if (selected != current && hasPreparedReturnLease(current)) {
+            ShitTokPoolDiagnostics.record("categoryPreparedLeaseSelected",
+                "bufferedMs=${leases[current]?.player?.totalBufferedDuration ?: 0L}")
+        }
         // A new tab invalidates any silent preparation for the previous category.
         if (selected != current) cancelSilentReturnPrebuffer()
-        val wanted = listOfNotNull(current, next.takeIf { neighbors }, previous.takeIf { neighbors })
-            .distinct().take(preparedLimit)
-        if (selected == current && window == wanted && pool != null) { syncAudio(); return }
         if (selected != current) revokeAudio()
         else leases.filterKeys { it != current }.values.forEach { silence(it.player) }
         if (selected != current) {
@@ -468,6 +574,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         if (!permitted) { waitingErrors[player] = error; return true }
         revokeAudio()
         recoveryHandled[player] = error
+        if (parkedReturnUrl != null) evictParkedReturn("decoderPressure")
         preparedLimit = minOf(preparedLimit, leases.size) - 1
         val keep = window.take(preparedLimit)
         leases.keys.toList().filter { it !in keep }.forEach { retire(it) }
@@ -481,6 +588,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         return true
     }
     private fun retire(url: String) {
+        if (parkedReturnUrl == url) clearParkedReference()
         val lease = leases[url] ?: return
         silence(lease.player)
         runCatching { remember(url, if (lease.player.playbackState == Player.STATE_ENDED) 0L else lease.player.currentPosition) }
@@ -496,6 +604,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
     }
     private fun removeSource(url: String) { sources.remove(url)?.let { manager?.remove(it.mediaItem) } }
     fun release() {
+        clearParkedReference()
         cancelSilentReturnPrebuffer()
         permission(false, muted)
         healthCheck?.cancel(); healthCheck = null
@@ -516,7 +625,9 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         leases.entries.joinToString { "${it.key}:buffer=${it.value.player.totalBufferedDuration}" } +
         "\n" + protection.summary(SystemClock.elapsedRealtime()) +
         " speculativeWarming=$speculativeAllowed warmingSuppressedByStarvation=${protection.isProtected()}" +
-        " bandwidthEstimate=$bandwidthEstimate" + selected?.let { url ->
+        " bandwidthEstimate=$bandwidthEstimate parked=${parkedReturnUrl != null}" +
+        " parkHits=$parkHits parkEvictions=$parkEvictions parkTimeouts=$parkTimeouts" +
+        selected?.let { url ->
             leases[url]?.stream?.let { " pageHost=${Uri.parse(it.pageUrl).host} mediaHost=${Uri.parse(it.mediaUrl).host}" +
                 " format=${if(it.mediaUrl.contains(".m3u8", true) || it.mediaUrl.contains(".mpd", true)) "adaptive" else "direct"}" }
         }.orEmpty()
@@ -540,6 +651,7 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         @Volatile var continuityId: String? = null
         @Volatile var networkPaused = false
         @Volatile var silentReturnId: String? = null
+        @Volatile var parkedId: String? = null
         @Volatile var currentNeedsBuffer = true
         @Volatile var starving = false
         @Volatile var recoveryTargetUs = 0L
@@ -550,6 +662,8 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
             if (networkPaused) return false
             val id = if (parameters.timeline.isEmpty) null else parameters.timeline.getWindow(0, Timeline.Window()).mediaItem.mediaId
             if (id == currentId) return normal
+            // A parked player keeps already buffered bytes but never downloads in the background.
+            if (id == parkedId) return false
             if (currentNeedsBuffer) return false
             // A READY recovering current retains its recovery target. Give only the immediate
             // next clip a short startup buffer; every other neighbor remains blocked.
