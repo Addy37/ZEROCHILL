@@ -1274,13 +1274,10 @@ public final class ChaosFeedView extends FrameLayout {
             String url = entry.item.url;
             if (entry.stream != null) streamCache.put(url, entry.stream);
             int existing = indexOfUrl(url);
-            if (existing == selectedPosition) continue; // Same clip after a rapid A-B-A tap.
-            if (existing >= 0 && existing < selectedPosition) {
-                int destination = selectedPosition;
-                items.add(destination, items.remove(existing));
-                final int from = existing, to = destination;
-                publishQueueChange(() -> adapter.notifyItemMoved(from, to));
-            } else if (existing < 0) {
+            // Preserve existing queue positions. Moving an earlier bookmark
+            // into the active index can shift the old selection forward and
+            // cause the return handoff to skip the saved URL altogether.
+            if (existing < 0) {
                 // Only re-admit clips the user explicitly left in this category.
                 // Other unseen-first/anti-repeat rules are unchanged.
                 sessionUrls.remove(url);
@@ -1305,6 +1302,14 @@ public final class ChaosFeedView extends FrameLayout {
         return -1;
     }
 
+    static int savedCategoryReturnIndex(List<NativeContentItem> queue, String savedUrl,
+            java.util.function.Predicate<NativeContentItem> eligible) {
+        if (queue == null || savedUrl == null || savedUrl.isEmpty()) return -1;
+        for (int i = 0; i < queue.size(); i++)
+            if (savedUrl.equals(queue.get(i).url) && eligible.test(queue.get(i))) return i;
+        return -1;
+    }
+
     private void activatePendingCategory() {
         if (!pendingCategoryActivation || closed || !active || !hostResumed
                 || searchCoverActive || isPaging() || queueUpdateDepth > 0) return;
@@ -1312,9 +1317,9 @@ public final class ChaosFeedView extends FrameLayout {
         // Prefer a ready video from this category and prepare missing ones in the background.
         int next = -1;
         if (!pendingCategoryReturnUrl.isEmpty()) {
-            int savedIndex = indexOfUrl(pendingCategoryReturnUrl);
-            if (savedIndex > selectedPosition
-                    && eligiblePreference(items.get(savedIndex), queuePreference)) {
+            int savedIndex = savedCategoryReturnIndex(items, pendingCategoryReturnUrl,
+                    item -> eligiblePreference(item, queuePreference));
+            if (savedIndex >= 0) {
                 if (!unplayable.contains(pendingCategoryReturnUrl)) {
                     CrazyShitRepository.StreamInfo savedStream = streamCache.get(pendingCategoryReturnUrl);
                     if (savedStream == null || savedStream.mediaUrl == null || savedStream.mediaUrl.isEmpty()) {
@@ -1354,7 +1359,14 @@ public final class ChaosFeedView extends FrameLayout {
         categoryWaitingVisible = false;
         syncLoadingIndicators();
         pager.setUserInputEnabled(!searchCoverActive);
-        pager.setCurrentItem(next, false);
+        if (next == selectedPosition) {
+            // Returning to the same URL requires explicit permission restoration:
+            // ViewPager2 emits no selection callback for an unchanged index.
+            reconcilePlaybackWindow();
+            playSelected();
+        } else {
+            pager.setCurrentItem(next, false);
+        }
     }
 
     private void pruneIncompatibleHistory() {
@@ -2220,12 +2232,17 @@ public final class ChaosFeedView extends FrameLayout {
         if (searchCoverActive) return;
         if (closed) return;
         if (position < 0 || position >= items.size()) return;
+        NativeContentItem item = items.get(position);
+        boolean categoryReturn = pendingCategoryActivation
+                && item.url.equals(pendingCategoryReturnUrl);
         boolean continuity = active && hostResumed && position > selectedPosition
                 && position <= selectedPosition + desiredRunway() && continuityWorkNeeded;
-        if (isPaging() && !continuity) return;
-        if (position != selectedPosition && !playbackOwner.allowsSpeculativeWork() && !continuity) return;
-        if (continuity && resolving.size() >= 3) return;
-        NativeContentItem item = items.get(position);
+        if (isPaging() && !continuity && !categoryReturn) return;
+        // Bookmarked clips are foreground handoffs even if they sit behind the
+        // outgoing selection. They must not depend on speculative prefetch gates.
+        if (position != selectedPosition && !playbackOwner.allowsSpeculativeWork()
+                && !continuity && !categoryReturn) return;
+        if (continuity && resolving.size() >= 3 && !categoryReturn) return;
         if (streamCache.containsKey(item.url)) {
             prepareVisible(position);
             return;
@@ -2258,7 +2275,8 @@ public final class ChaosFeedView extends FrameLayout {
         io.execute(() -> {
             if (resolutionGeneration != feedGeneration
                     || resolutionCategoryVersion != categorySelectionVersion || closed) return;
-            if (position != selectedPosition && !orientationWorkAllowed && !continuity) {
+            if (position != selectedPosition && !orientationWorkAllowed
+                    && !continuity && !categoryReturn) {
                 activity.runOnUiThread(() -> {
                     if (resolutionGeneration == feedGeneration
                             && resolutionCategoryVersion == categorySelectionVersion) {
