@@ -574,8 +574,9 @@ class ShitTokPlaybackOwner(context: Context, private val callbacks: Callbacks) {
         if (!permitted) { waitingErrors[player] = error; return true }
         revokeAudio()
         recoveryHandled[player] = error
+        val reducedLimit = minOf(preparedLimit, leases.size) - 1
         if (parkedReturnUrl != null) evictParkedReturn("decoderPressure")
-        preparedLimit = minOf(preparedLimit, leases.size) - 1
+        preparedLimit = reducedLimit
         val keep = window.take(preparedLimit)
         leases.keys.toList().filter { it !in keep }.forEach { retire(it) }
         window = keep
