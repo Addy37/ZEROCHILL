@@ -30,6 +30,13 @@ public class ShitTokCategoryStripTest {
         HorizontalScrollView scroll = (HorizontalScrollView) strip.getChildAt(0);
         LinearLayout row = (LinearLayout) scroll.getChildAt(0);
         assertEquals(5, row.getChildCount());
+        assertTrue("Compact layouts should center tabs when they fit", scroll.isFillViewport());
+        assertEquals(android.view.Gravity.CENTER, row.getGravity());
+        assertTrue(strip.getPaddingLeft() >= dp(8));
+        View chaosCell = strip.findViewWithTag("shittok_category_cell_chaos");
+        assertTrue(chaosCell.getMinimumWidth() >= dp(48));
+        assertEquals(14f, ((TextView) strip.findViewWithTag("shittok_category_chaos"))
+                .getTextSize() / activity.getResources().getDisplayMetrics().scaledDensity, .1f);
         assertEquals("Chaos", ((TextView) strip.findViewWithTag("shittok_category_chaos"))
                 .getText().toString());
         assertTrue(((TextView) strip.findViewWithTag("shittok_category_chaos")).isSelected());
@@ -38,6 +45,10 @@ public class ShitTokCategoryStripTest {
         assertNotNull(strip.findViewWithTag("shittok_overlay_search"));
         assertNotNull(strip.findViewWithTag("shittok_overlay_more"));
         assertEquals(3, strip.getChildCount());
+    }
+
+    private int dp(int value) {
+        return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 
     @Test public void categorySwitchPreservesOnlyFapChoiceAndRetiresOldSelector() {
