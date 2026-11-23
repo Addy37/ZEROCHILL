@@ -3153,6 +3153,7 @@ public final class ChaosFeedView extends FrameLayout {
         final FrameLayout root;
         final ShitTokDynamicPinchController pinch;
         final FrameLayout mediaLayer;
+        final ImageView ambientBackdrop;
         final PlayerView playerView;
         final ImageView poster;
         final ProgressBar loading;
@@ -3232,6 +3233,7 @@ public final class ChaosFeedView extends FrameLayout {
         boolean failurePending;
         boolean maintenanceFailure;
         boolean horizontalVideo;
+        String ambientUrl = "";
         boolean aspectSampleRecorded;
         String videoLikeOwner;
         String commentCountOwner;
@@ -3263,6 +3265,20 @@ public final class ChaosFeedView extends FrameLayout {
             mediaLayer.setBackgroundColor(Color.BLACK);
             root.addView(mediaLayer, new FrameLayout.LayoutParams(-1, -1));
 
+            // A low-cost, blurred still fills the unused space behind FIT-sized
+            // horizontal video. This never captures or blurs live video frames.
+            ambientBackdrop = new ImageView(activity);
+            ambientBackdrop.setTag("shittok_horizontal_ambient");
+            ambientBackdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            ambientBackdrop.setImageAlpha(135);
+            ambientBackdrop.setVisibility(View.GONE);
+            ambientBackdrop.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            if (android.os.Build.VERSION.SDK_INT >= 31) {
+                ambientBackdrop.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
+                        dp(22), dp(22), android.graphics.Shader.TileMode.CLAMP));
+            }
+            mediaLayer.addView(ambientBackdrop, new FrameLayout.LayoutParams(-1, -1));
+
             poster = new ImageView(activity);
             poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
             poster.setBackgroundColor(Color.rgb(20, 20, 22));
@@ -3275,7 +3291,8 @@ public final class ChaosFeedView extends FrameLayout {
             playerView.hideController();
             playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER);
             playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
-            playerView.setBackgroundColor(Color.BLACK);
+            playerView.setBackgroundColor(Color.TRANSPARENT);
+            playerView.setShutterBackgroundColor(Color.TRANSPARENT);
             playerView.setContentDescription("Play or pause video");
             mediaLayer.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
             // The player's opaque background and shutter must stay behind the poster.
@@ -4235,9 +4252,10 @@ public final class ChaosFeedView extends FrameLayout {
             retryAttempted = false;
             failurePending = false;
             maintenanceFailure = false;
-            horizontalVideo = false;
+            horizontalVideo = shouldOfferLandscapeFullscreen(next.aspectRatioHint);
             aspectSampleRecorded = false;
-            videoAspectRatio = 0f;
+            videoAspectRatio = horizontalVideo ? next.aspectRatioHint : 0f;
+            updateAmbientBackdrop();
             videoLiked = false;
             videoLikePending = false;
             videoLikeCount = 0;
@@ -4563,6 +4581,7 @@ public final class ChaosFeedView extends FrameLayout {
                         videoAspectRatio = ShitTokOrientation.effectiveAspect(
                                 videoSize.width, videoSize.height, videoSize.pixelWidthHeightRatio, 0);
                         horizontalVideo = shouldOfferLandscapeFullscreen(videoAspectRatio);
+                        updateAmbientBackdrop();
                         updateFullscreenPromptPosition();
                         if (!aspectSampleRecorded) {
                             aspectSampleRecorded = true;
@@ -4696,6 +4715,24 @@ public final class ChaosFeedView extends FrameLayout {
         private void syncPoster() {
             boolean rendered = item != null && playbackOwner.hasRenderedFrame(item.url, playerView);
             poster.setVisibility(rendered && !failurePending ? View.GONE : View.VISIBLE);
+        }
+
+        private void updateAmbientBackdrop() {
+            boolean usable = horizontalVideo && item != null && item.imageUrl != null
+                    && !item.imageUrl.trim().isEmpty();
+            if (!usable) {
+                Glide.with(ambientBackdrop).clear(ambientBackdrop);
+                ambientUrl = "";
+                ambientBackdrop.setVisibility(View.GONE);
+                return;
+            }
+            if (!item.imageUrl.equals(ambientUrl)) {
+                ambientUrl = item.imageUrl;
+                Glide.with(ambientBackdrop).load(imageWithHeaders(item.imageUrl, item.url))
+                        .centerCrop().diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                        .dontAnimate().into(ambientBackdrop);
+            }
+            ambientBackdrop.setVisibility(landscapeFullscreen() ? View.GONE : View.VISIBLE);
         }
 
         private void syncLoading() {
@@ -5095,6 +5132,7 @@ public final class ChaosFeedView extends FrameLayout {
 
         void syncOrientationChrome() {
             if (pinch.suppressesFeedChrome()) return;
+            updateAmbientBackdrop();
             applyViewportInset();
             if (clearDisplay) {
                 applyClearDisplay(true);
