@@ -1177,7 +1177,10 @@ public final class ChaosFeedView extends FrameLayout {
             if (outgoing != null) silencePlayer(outgoing.player);
             pager.setUserInputEnabled(false);
             postDelayed(showCategoryWait, 160L);
+        } else {
+            pager.setUserInputEnabled(!searchCoverActive);
         }
+        syncLoadingIndicators();
         orientationAdmission.setCreatorFocused(currentSources.creatorInventory(current));
         orientationAdmission.setLandscapeAllowed(
                 ShitTokCategoryStrip.Tab.selected(activity) == ShitTokCategoryStrip.Tab.CHAOS);
@@ -1548,7 +1551,7 @@ public final class ChaosFeedView extends FrameLayout {
                         recordFirstAdmission();
                         publishQueueChange(() -> adapter.notifyItemRangeInserted(before, added));
                         sequenceFilteredFuture();
-                        initialProgress.setVisibility(View.GONE);
+                        syncLoadingIndicators();
                         empty.setVisibility(View.GONE);
                         reconcilePlaybackWindow();
                         resolveAhead(selectedPosition);
@@ -1598,7 +1601,7 @@ public final class ChaosFeedView extends FrameLayout {
                 publishQueueChange(() -> adapter.notifyItemRangeInserted(before, added));
                 sequenceFilteredFuture();
                 ShitTokPoolDiagnostics.record("adapterInsert", "count=" + added + " ms=" + (android.os.SystemClock.elapsedRealtime()-mutationAt));
-                initialProgress.setVisibility(View.GONE);
+                syncLoadingIndicators();
                 empty.setVisibility(View.GONE);
                 reconcilePlaybackWindow();
                 resolveAhead(selectedPosition);
@@ -2169,7 +2172,11 @@ public final class ChaosFeedView extends FrameLayout {
         io.execute(() -> {
             if (position != selectedPosition && !orientationWorkAllowed && !continuity) {
                 activity.runOnUiThread(() -> {
-                    if (resolutionGeneration == feedGeneration) { resolving.remove(item.url); requestContinuity(); }
+                    if (resolutionGeneration == feedGeneration
+                            && resolutionCategoryVersion == categorySelectionVersion) {
+                        resolving.remove(item.url);
+                        requestContinuity();
+                    }
                 });
                 return;
             }
