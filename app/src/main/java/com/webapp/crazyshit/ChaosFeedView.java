@@ -1020,6 +1020,7 @@ public final class ChaosFeedView extends FrameLayout {
     public void refresh() {
     if (isPaging()) { deferUiApply(this::refresh); return; }
         returnCategories.clear();
+        pendingCategoryReturnUrl = "";
         pendingCategoryActivation = false;
         categoryWaitingVisible = false;
         categorySelectionVersion++;
@@ -1072,6 +1073,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void close() {
         returnCategories.clear();
+        pendingCategoryReturnUrl = "";
         pendingCategoryActivation = false;
         categoryWaitingVisible = false;
         categorySelectionVersion++;
@@ -1118,6 +1120,7 @@ public final class ChaosFeedView extends FrameLayout {
     private ShitTokSourceMode queueSources = ShitTokSourceMode.ALL;
     private String invalidatedSelection;
     private boolean pendingCategoryActivation;
+    private String pendingCategoryReturnUrl = "";
     private volatile int categorySelectionVersion;
     private boolean categoryWaitingVisible;
     private final Runnable showCategoryWait = () -> {
@@ -1175,6 +1178,7 @@ public final class ChaosFeedView extends FrameLayout {
         // verified candidate, then switch automatically. Never show an
         // unrelated Chaos clip indefinitely under the Ladies label.
         pendingCategoryActivation = !items.isEmpty();
+        pendingCategoryReturnUrl = "";
         categorySelectionVersion++;
         // Retire old, in-flight URL resolutions as well as inventory requests.
         // A rapid second tap must never revive the earlier category.
@@ -1222,6 +1226,8 @@ public final class ChaosFeedView extends FrameLayout {
         ShitTokCategoryReturnCache.Checkpoint savedCategory =
                 returnCategories.take(currentSources, current, categoryAt);
         boolean sameSelected = restoreCategoryCheckpoint(savedCategory);
+        if (!sameSelected && savedCategory != null)
+            pendingCategoryReturnUrl = savedCategory.selectedUrl;
         ArrayList<NativeContentItem> warm = new ArrayList<>();
         for (ShitTokWarmCategoryCache.Entry entry : warmCategories.take(currentSources, current, android.os.SystemClock.elapsedRealtime())) {
             streamCache.put(entry.item.url, entry.stream);
@@ -1236,6 +1242,7 @@ public final class ChaosFeedView extends FrameLayout {
             post(this::activatePendingCategory);
         }
         if (sameSelected) {
+            pendingCategoryReturnUrl = "";
             pendingCategoryActivation = false;
             categoryWaitingVisible = false;
             removeCallbacks(showCategoryWait);
@@ -1301,7 +1308,23 @@ public final class ChaosFeedView extends FrameLayout {
                 || searchCoverActive || isPaging() || queueUpdateDepth > 0) return;
         // Waiting for an admitted page alone can flash black while its URL still resolves.
         // Prefer a ready video from this category and prepare missing ones in the background.
-        int next = firstReadyCategoryIndex(items, selectedPosition,
+        int next = -1;
+        if (!pendingCategoryReturnUrl.isEmpty()) {
+            int savedIndex = indexOfUrl(pendingCategoryReturnUrl);
+            if (savedIndex > selectedPosition
+                    && eligiblePreference(items.get(savedIndex), queuePreference)) {
+                if (!unplayable.contains(pendingCategoryReturnUrl)) {
+                    CrazyShitRepository.StreamInfo savedStream = streamCache.get(pendingCategoryReturnUrl);
+                    if (savedStream == null || savedStream.mediaUrl == null || savedStream.mediaUrl.isEmpty()) {
+                        resolveAt(savedIndex);
+                        return;
+                    }
+                    next = savedIndex;
+                }
+            }
+            if (next < 0) pendingCategoryReturnUrl = "";
+        }
+        if (next < 0) next = firstReadyCategoryIndex(items, selectedPosition,
                 item -> eligiblePreference(item, queuePreference),
                 item -> {
                     CrazyShitRepository.StreamInfo stream = streamCache.get(item.url);
@@ -1324,6 +1347,7 @@ public final class ChaosFeedView extends FrameLayout {
             return;
         }
         pendingCategoryActivation = false;
+        pendingCategoryReturnUrl = "";
         removeCallbacks(showCategoryWait);
         categoryWaitingVisible = false;
         syncLoadingIndicators();
