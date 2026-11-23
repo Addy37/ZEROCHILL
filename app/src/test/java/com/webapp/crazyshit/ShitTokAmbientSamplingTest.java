@@ -17,7 +17,10 @@ public class ShitTokAmbientSamplingTest {
     @Test public void selectedHorizontalVideoCanSampleWithoutAnotherDecoder() {
         assertTrue(allowed(true, true, true, true, true, false,
                 false, true, true, false));
-        assertEquals(500L, ShitTokAmbientSampling.FRAME_INTERVAL_MS);
+        assertEquals(250L, ShitTokAmbientSampling.FRAME_INTERVAL_MS);
+        assertEquals(210, ShitTokAmbientSampling.CROSSFADE_MS);
+        assertTrue(ShitTokAmbientSampling.CROSSFADE_MS
+                < ShitTokAmbientSampling.FRAME_INTERVAL_MS);
         assertTrue(ShitTokAmbientSampling.FRAME_WIDTH <= 128);
         assertTrue(ShitTokAmbientSampling.FRAME_HEIGHT <= 72);
     }
