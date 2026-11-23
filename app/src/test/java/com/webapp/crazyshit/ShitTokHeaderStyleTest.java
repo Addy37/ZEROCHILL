@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import androidx.viewpager2.widget.ViewPager2;
 import org.junit.Test;
@@ -55,6 +56,20 @@ public class ShitTokHeaderStyleTest {
         assertEquals(ZeroChillUi.dimension(activity, R.dimen.zc_top_bar_height),
                 header.getLayoutParams().height);
         assertEquals(Color.TRANSPARENT, ((ColorDrawable) header.getBackground()).getColor());
+    }
+
+    @Test public void floatingTabsLiftEightDpWhileRespectingStatusInset() {
+        NativeMainActivity activity = Robolectric.buildActivity(NativeMainActivity.class).setup().get();
+        ShitTokCategoryStrip strip = ReflectionHelpers.getField(activity, "shitTokCategoryStrip");
+        int densityTop = Math.round(32 * activity.getResources().getDisplayMetrics().density);
+        int lift = Math.round(4 * activity.getResources().getDisplayMetrics().density);
+        ReflectionHelpers.callInstanceMethod(activity, "updateShitTokOverlayInsets",
+                from(int.class, 0), from(int.class, densityTop), from(int.class, 0));
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) strip.getLayoutParams();
+        assertEquals(densityTop - lift, lp.topMargin);
+        ReflectionHelpers.callInstanceMethod(activity, "updateShitTokOverlayInsets",
+                from(int.class, 0), from(int.class, 0), from(int.class, 0));
+        assertEquals(0, ((FrameLayout.LayoutParams) strip.getLayoutParams()).topMargin);
     }
 
     @Test public void navigationStaysVisibleNormallyButHidesDuringFocusMode() throws Exception {
