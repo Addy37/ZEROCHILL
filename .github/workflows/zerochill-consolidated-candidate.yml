@@ -12,7 +12,8 @@ permissions:
 jobs:
   signed-candidate:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Full Robolectric suite plus APK packaging can exceed 25 minutes on CI.
+    timeout-minutes: 40
     env:
       ZEROCHILL_V7_TRAFFIC: 'true'
       SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
