@@ -830,7 +830,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         // restore below can reach here again for the same destination.
         if (renderedPrimaryPage == position && primaryPager != null
                 && primaryPager.getVisibility() == View.VISIBLE
-                && (legacyContent == null || legacyContent.getVisibility() == View.GONE)) return;
+                && (legacyContent == null || legacyContent.getVisibility() == View.GONE)) {
+            // Rotation can cause late shared-style callbacks without a page change.
+            // Reassert the headerless ShitTok layout on this idempotent path.
+            syncRetiredShitTokHeader();
+            return;
+        }
         renderedPrimaryPage = position;
         // Library already presents the current account in its profile header.
         if (headerProfileAvatar != null) headerProfileAvatar.setProfileInContent(
@@ -958,12 +963,29 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         applyChaosFullscreenChrome();
     }
 
+    private void syncRetiredShitTokHeader() {
+        if (topBar == null) return;
+        ViewGroup.LayoutParams params = topBar.getLayoutParams();
+        if (params == null) return;
+        int height = screen == Screen.CHAOS ? 0
+                : ZeroChillUi.dimension(this, R.dimen.zc_top_bar_height);
+        if (params.height != height) {
+            params.height = height;
+            topBar.setLayoutParams(params);
+        }
+        if (screen == Screen.CHAOS) topBar.setVisibility(View.GONE);
+    }
+
     private void setChaosFullscreenChrome(boolean fullscreen) {
         boolean immersiveOnlyFap =
                 !fullscreen &&
                 screen == Screen.ONLYFAP &&
                 primaryPager != null &&
                 primaryPager.getVisibility() == View.VISIBLE;
+        // ShitTok has its own over-video navigation, so its retired header must
+        // occupy zero height even if another lifecycle/style pass makes it visible.
+        // Other primary tabs retain their existing header geometry.
+        syncRetiredShitTokHeader();
         if (topBar != null) {
             topBar.setVisibility(
                     fullscreen || screen == Screen.CHAOS ||
