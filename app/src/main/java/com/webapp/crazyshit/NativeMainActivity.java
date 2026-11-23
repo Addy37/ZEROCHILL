@@ -1056,8 +1056,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 !(shitTokCategoryStrip.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
         FrameLayout.LayoutParams lp =
                 (FrameLayout.LayoutParams) shitTokCategoryStrip.getLayoutParams();
-        // Move floating preferences up 8dp while retaining the status-bar inset.
-        int desiredTop = Math.max(0, top - dp(4));
+        // Position the labels close to the status icons without putting text
+        // into the status bar. Relative to the original overlay this is 18dp up.
+        int desiredTop = Math.max(0, top - dp(14));
         if (lp.topMargin == desiredTop && lp.leftMargin == left && lp.rightMargin == right) return;
         lp.topMargin = desiredTop;
         lp.leftMargin = left;
