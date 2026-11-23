@@ -22,16 +22,12 @@ import android.view.View;
  * the static thumbnail remains underneath this optional layer.
  */
 final class ShitTokGpuAmbientView extends View {
-    private static final int DOWNSCALE = 4;
-    private static final int BLUR_RADIUS_LOW_RES = 6;
-    private static final long MAX_FRAME_NS = 12_000_000L;
-    private static final int MAX_SLOW_FRAMES = 3;
-
     private TextureView source;
     private RenderNode node;
     private boolean enabled;
     private boolean failed;
     private int slowFrames;
+    private long previousDrawNs;
 
     ShitTokGpuAmbientView(Context context) {
         super(context);
@@ -55,6 +51,7 @@ final class ShitTokGpuAmbientView extends View {
         source = view;
         failed = false;
         slowFrames = 0;
+        previousDrawNs = 0L;
     }
 
     void setMotionEnabled(boolean requested) {
@@ -74,6 +71,7 @@ final class ShitTokGpuAmbientView extends View {
 
     void stop() {
         enabled = false;
+        previousDrawNs = 0L;
         if (getVisibility() != GONE) setVisibility(GONE);
         if (node != null) node.discardDisplayList();
     }
@@ -101,13 +99,18 @@ final class ShitTokGpuAmbientView extends View {
             return;
         }
         long started = SystemClock.elapsedRealtimeNanos();
+        long gap = previousDrawNs == 0 ? 0 : started - previousDrawNs;
+        previousDrawNs = started;
         try {
-            int renderWidth = Math.max(1, viewWidth / DOWNSCALE);
-            int renderHeight = Math.max(1, viewHeight / DOWNSCALE);
-            if (node == null) node = new RenderNode("shittok_live_ambient");
+            int renderWidth = Math.max(1, viewWidth / ShitTokAmbientSampling.DOWNSCALE);
+            int renderHeight = Math.max(1, viewHeight / ShitTokAmbientSampling.DOWNSCALE);
+            if (node == null) {
+                node = new RenderNode("shittok_live_ambient");
+                node.setRenderEffect(RenderEffect.createBlurEffect(
+                        ShitTokAmbientSampling.BLUR_RADIUS_LOW_RES,
+                        ShitTokAmbientSampling.BLUR_RADIUS_LOW_RES, Shader.TileMode.CLAMP));
+            }
             node.setPosition(0, 0, renderWidth, renderHeight);
-            node.setRenderEffect(RenderEffect.createBlurEffect(
-                    BLUR_RADIUS_LOW_RES, BLUR_RADIUS_LOW_RES, Shader.TileMode.CLAMP));
 
             RecordingCanvas recording = node.beginRecording(renderWidth, renderHeight);
             try {
@@ -133,11 +136,13 @@ final class ShitTokGpuAmbientView extends View {
             return;
         }
         long elapsed = SystemClock.elapsedRealtimeNanos() - started;
-        slowFrames = elapsed > MAX_FRAME_NS ? slowFrames + 1 : 0;
-        if (slowFrames >= MAX_SLOW_FRAMES) {
+        if (ShitTokAmbientSampling.shouldDisable(elapsed, gap, slowFrames)) {
             fail();
             return;
         }
+        slowFrames = elapsed > ShitTokAmbientSampling.MAX_FRAME_RECORD_NS
+                || gap > ShitTokAmbientSampling.MISSED_VSYNC_NS
+                ? slowFrames + 1 : 0;
         // Schedule on display vsync, not an arbitrary 250ms timer. The texture
         // layer always contains the latest video frame when the UI composites it.
         if (enabled) postInvalidateOnAnimation();
