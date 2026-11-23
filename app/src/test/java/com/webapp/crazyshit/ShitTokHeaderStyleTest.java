@@ -3,6 +3,7 @@ package com.webapp.crazyshit;
 import android.app.Application;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 import android.widget.LinearLayout;
 import androidx.viewpager2.widget.ViewPager2;
@@ -19,28 +20,37 @@ import static org.robolectric.util.ReflectionHelpers.ClassParameter.from;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class ShitTokHeaderStyleTest {
-
-    @Test public void shittokIsOpaqueBlackWhileOtherTabsKeepTheirGlass() {
+    @Test public void traditionalHeaderIsHiddenOnlyForShitTok() throws Exception {
         NativeMainActivity activity = Robolectric.buildActivity(NativeMainActivity.class).get();
         LinearLayout controls = ReflectionHelpers.callInstanceMethod(activity, "buildTopBar");
         GlassHeaderView header = new GlassHeaderView(activity, controls);
         ReflectionHelpers.setField(activity, "topBar", header);
 
+        @SuppressWarnings("unchecked")
+        Class<Enum> screenClass = (Class<Enum>) Class.forName(
+                "com.webapp.crazyshit.NativeMainActivity$Screen");
+        ReflectionHelpers.setField(activity, "screen", Enum.valueOf(screenClass, "CHAOS"));
         ReflectionHelpers.callInstanceMethod(activity, "setPrimaryHeaderMaterial",
                 from(int.class, MainPagerAdapter.PAGE_CHAOS));
-        assertEquals(Color.BLACK, ((ColorDrawable) header.getBackground()).getColor());
+        ReflectionHelpers.callInstanceMethod(activity, "setChaosFullscreenChrome",
+                from(boolean.class, false));
+        assertEquals(View.GONE, header.getVisibility());
         assertEquals(View.GONE, header.getChildAt(0).getVisibility());
 
+        ReflectionHelpers.setField(activity, "screen", Enum.valueOf(screenClass, "LIBRARY"));
         ReflectionHelpers.callInstanceMethod(activity, "setPrimaryHeaderMaterial",
                 from(int.class, MainPagerAdapter.PAGE_LIBRARY));
+        ReflectionHelpers.callInstanceMethod(activity, "setChaosFullscreenChrome",
+                from(boolean.class, false));
+        assertEquals(View.VISIBLE, header.getVisibility());
         assertEquals(View.VISIBLE, header.getChildAt(0).getVisibility());
         assertEquals(Color.TRANSPARENT, ((ColorDrawable) header.getBackground()).getColor());
     }
 
-    @Test public void categoryStripRemainsVisibleUntilAnImmersiveStateActuallyHidesIt() throws Exception {
+    @Test public void navigationStaysVisibleNormallyButHidesDuringFocusMode() throws Exception {
         NativeMainActivity activity = Robolectric.buildActivity(NativeMainActivity.class).get();
-        ShitTokCategoryStrip categories = new ShitTokCategoryStrip(activity);
-        ReflectionHelpers.setField(activity, "shitTokCategoryStrip", categories);
+        ShitTokCategoryStrip tabs = new ShitTokCategoryStrip(activity);
+        ReflectionHelpers.setField(activity, "shitTokCategoryStrip", tabs);
         ReflectionHelpers.setField(activity, "primaryPager", new ViewPager2(activity));
         @SuppressWarnings("unchecked")
         Class<Enum> screenClass = (Class<Enum>) Class.forName(
@@ -48,18 +58,17 @@ public class ShitTokHeaderStyleTest {
         ReflectionHelpers.setField(activity, "screen", Enum.valueOf(screenClass, "CHAOS"));
 
         ReflectionHelpers.callInstanceMethod(activity, "updateShitTokCategoryStrip");
-        assertEquals(View.VISIBLE, categories.getVisibility());
-        assertEquals(Color.BLACK, ((ColorDrawable) categories.getBackground()).getColor());
-
-        // No normal swipe state is allowed to collapse this row.
+        assertEquals(View.VISIBLE, tabs.getVisibility());
+        assertTrue(tabs.getBackground() instanceof GradientDrawable);
+        assertEquals(View.VISIBLE, tabs.findViewWithTag("shittok_overlay_search").getVisibility());
         ReflectionHelpers.callInstanceMethod(activity, "updateShitTokCategoryStrip");
-        assertEquals(View.VISIBLE, categories.getVisibility());
+        assertEquals(View.VISIBLE, tabs.getVisibility());
 
         ReflectionHelpers.setField(activity, "chaosClearDisplay", true);
         ReflectionHelpers.callInstanceMethod(activity, "updateShitTokCategoryStrip");
-        assertEquals(View.GONE, categories.getVisibility());
+        assertEquals(View.GONE, tabs.getVisibility());
         ReflectionHelpers.setField(activity, "chaosClearDisplay", false);
         ReflectionHelpers.callInstanceMethod(activity, "updateShitTokCategoryStrip");
-        assertEquals(View.VISIBLE, categories.getVisibility());
+        assertEquals(View.VISIBLE, tabs.getVisibility());
     }
 }
