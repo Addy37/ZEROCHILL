@@ -12,7 +12,9 @@ final class ShitTokFeedSources {
         switch (tab) {
             case CHAOS:
                 return source.contains("crazyshit") || source.equals("kaotic")
-                        || source.equals("efukt") || source.equals("shit-show");
+                        || source.endsWith("kaotic.com")
+                        || source.equals("efukt") || source.contains("efukt.")
+                        || source.equals("shit-show");
             case LADIES:
                 return creatorSource(source) || source.equals("baddiehub")
                         || source.equals("shit-show");
