@@ -291,6 +291,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         shitTokCategoryStrip = new ShitTokCategoryStrip(this);
         shitTokCategoryStrip.setVisibility(View.GONE);
         shell.addView(shitTokCategoryStrip, new LinearLayout.LayoutParams(-1, dp(40)));
+        ((FrostedNavigationLayout) shell).setShitTokCategoryStripView(shitTokCategoryStrip);
 
         FrameLayout content = new FrameLayout(this);
         legacyContent = content;
