@@ -58,11 +58,11 @@ public class ShitTokHeaderStyleTest {
         assertEquals(Color.TRANSPARENT, ((ColorDrawable) header.getBackground()).getColor());
     }
 
-    @Test public void floatingTabsLiftEightDpWhileRespectingStatusInset() {
+    @Test public void floatingTabsMoveCloserToStatusIconsWithoutNegativeMargin() {
         NativeMainActivity activity = Robolectric.buildActivity(NativeMainActivity.class).setup().get();
         ShitTokCategoryStrip strip = ReflectionHelpers.getField(activity, "shitTokCategoryStrip");
         int densityTop = Math.round(32 * activity.getResources().getDisplayMetrics().density);
-        int lift = Math.round(4 * activity.getResources().getDisplayMetrics().density);
+        int lift = Math.round(14 * activity.getResources().getDisplayMetrics().density);
         ReflectionHelpers.callInstanceMethod(activity, "updateShitTokOverlayInsets",
                 from(int.class, 0), from(int.class, densityTop), from(int.class, 0));
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) strip.getLayoutParams();
