@@ -27,6 +27,8 @@ final class ShitTokFeedSources {
     }
 
     private static boolean creatorSource(String source) {
-        return source.equals("onlyhaven") || source.equals("fapello") || source.equals("bunkr");
+        return source.equals("onlyhaven") || source.contains("cum.st")
+                || source.equals("fapello") || source.endsWith("fapello.com")
+                || source.equals("bunkr") || source.contains("bunkr");
     }
 }
