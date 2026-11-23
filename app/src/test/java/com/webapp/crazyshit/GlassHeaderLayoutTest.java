@@ -21,7 +21,8 @@ public class GlassHeaderLayoutTest {
         var controller = BottomNavigationInsetsTest.createActivity();
         NativeMainActivity activity = controller.get();
         View headerView = ReflectionHelpers.getField(activity, "topBar");
-        assertEquals(android.graphics.Color.TRANSPARENT,
+        // ShitTok now intentionally has a solid OLED-black header.
+        assertEquals(android.graphics.Color.BLACK,
                 ((android.graphics.drawable.ColorDrawable) headerView.getBackground()).getColor());
         MainPagerAdapter adapter = ReflectionHelpers.getField(activity, "primaryPagerAdapter");
         ViewPager2 pager = ReflectionHelpers.getField(activity, "primaryPager");
