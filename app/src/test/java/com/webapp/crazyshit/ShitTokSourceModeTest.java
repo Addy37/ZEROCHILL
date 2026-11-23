@@ -14,7 +14,7 @@ import static org.robolectric.util.ReflectionHelpers.ClassParameter.from;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class ShitTokSourceModeTest {
-    @Test public void selectorOnlyAppearsForAllAndRestoresWithoutChangingCategory() {
+    @Test public void selectorRemainsAvailableForEveryIndependentCategory() {
         try (org.robolectric.android.controller.ActivityController<Activity> activity = Robolectric.buildActivity(Activity.class).setup()) {
             java.util.concurrent.atomic.AtomicBoolean visible = new java.util.concurrent.atomic.AtomicBoolean();
             ChaosFeedView feed = new ChaosFeedView(activity.get(), new ChaosFeedView.Host() {
@@ -23,13 +23,13 @@ public class ShitTokSourceModeTest {
             }, false);
             try {
                 for (ContentPreference mode : ContentPreference.values()) {
-                    ContentPreference.set(activity.get(), mode);
+                    ShitTokContentPreference.set(activity.get(), mode);
                     ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
-                    assertEquals(mode == ContentPreference.ALL, visible.get());
-                    assertEquals(mode, ContentPreference.get(activity.get()));
+                    assertTrue(visible.get());
+                    assertEquals(mode, ShitTokContentPreference.get(activity.get()));
                     assertNull(feed.findViewWithTag("shittok_source_control"));
                 }
-                ContentPreference.set(activity.get(), ContentPreference.ALL);
+                ShitTokContentPreference.set(activity.get(), ContentPreference.ALL);
                 ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
                 assertTrue(visible.get());
             } finally { feed.close(); }
@@ -336,9 +336,9 @@ public class ShitTokSourceModeTest {
                 ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState",
                         from(int.class, androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_DRAGGING));
                 ShitTokSourceMode.set(f.host.get(), ShitTokSourceMode.ONLY_FAP);
-                ContentPreference.set(f.host.get(), ContentPreference.MEN);
+                ShitTokContentPreference.set(f.host.get(), ContentPreference.MEN);
                 ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
-                ContentPreference.set(f.host.get(), ContentPreference.ALL);
+                ShitTokContentPreference.set(f.host.get(), ContentPreference.ALL);
                 ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
                 ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState",
                         from(int.class, androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_IDLE));
@@ -355,7 +355,7 @@ public class ShitTokSourceModeTest {
         try (DeepFeed f = new DeepFeed()) {
             NativeContentItem current = f.items.get(10);
             int token = f.owner.token(current.url);
-            ContentPreference.set(f.host.get(), ContentPreference.MEN);
+            ShitTokContentPreference.set(f.host.get(), ContentPreference.MEN);
             ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
             ReflectionHelpers.callInstanceMethod(f.feed, "settleSelectedPage");
             assertEquals(1, f.items.size());
@@ -409,7 +409,7 @@ public class ShitTokSourceModeTest {
             f.feed.onSearchClosed();
             consistent(f, current);
             f.feed.onHostPause();
-            ContentPreference.set(f.host.get(), ContentPreference.MEN);
+            ShitTokContentPreference.set(f.host.get(), ContentPreference.MEN);
             ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
             consistent(f, current);
             assertTrue(f.engines.stream().noneMatch(e -> e.play));
