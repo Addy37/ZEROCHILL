@@ -1056,7 +1056,8 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 !(shitTokCategoryStrip.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
         FrameLayout.LayoutParams lp =
                 (FrameLayout.LayoutParams) shitTokCategoryStrip.getLayoutParams();
-        int desiredTop = top + dp(4);
+        // Move floating preferences up 8dp while retaining the status-bar inset.
+        int desiredTop = Math.max(0, top - dp(4));
         if (lp.topMargin == desiredTop && lp.leftMargin == left && lp.rightMargin == right) return;
         lp.topMargin = desiredTop;
         lp.leftMargin = left;
