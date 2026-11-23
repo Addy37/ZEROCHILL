@@ -36,7 +36,9 @@ public class ShitTokCategoryReturnCacheTest {
         assertSame(streams.get(chaos.url), backToChaos.entries.get(0).stream);
         assertEquals(ladies.url, cache.take(ShitTokSourceMode.ALL,
                 ContentPreference.WOMEN, 30L).selectedUrl);
-        assertNull(cache.take(ShitTokSourceMode.ALL, ContentPreference.ALL, 30L));
+        // Reading the bookmark must not consume it before a quick second tab switch.
+        assertEquals(chaos.url, cache.take(ShitTokSourceMode.ALL,
+                ContentPreference.ALL, 30L).selectedUrl);
     }
 
     @Test public void returnsOnlyValidRecentCheckpointAndLimitsNextQueue() {
