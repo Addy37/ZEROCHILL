@@ -356,10 +356,9 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 // Alpha preserves the fitted viewport and shell insets during the gesture.
                 if (topBar != null) topBar.setAlpha(pinching ? 0f : 1f);
                 shitTokStripPinched = pinching;
-                if (shitTokCategoryStrip != null) {
-                    shitTokCategoryStrip.setAlpha(pinching ? 0f : 1f);
-                    shitTokCategoryStrip.setClickable(!pinching);
-                }
+                // Since the tabs no longer reserve layout height, fully hide them
+                // during pinch so transparent controls cannot steal video touches.
+                updateShitTokCategoryStrip();
                 if (bottomNavigation != null) bottomNavigation.setAlpha(pinching ? 0f : 1f);
             }
 
