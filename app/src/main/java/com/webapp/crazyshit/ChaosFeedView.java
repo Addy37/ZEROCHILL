@@ -1169,8 +1169,9 @@ public final class ChaosFeedView extends FrameLayout {
                 Math.min(items.size(), selectedPosition + 1), items.size()));
         warmCategories.save(queueSources, previous, outgoingFuture, streamCache, categoryAt);
         if (hasSelectedPage() && !pendingCategoryActivation) {
-            // Do not bookmark the old clip as the category we only tapped briefly.
-            rememberSelectedPosition();
+            // Bookmark the clip/queue only. The playback owner already retains the
+            // exact timestamp on lease retirement, including user pause.
+            // Do not overwrite a remembered position with an unprepared player's zero.
             returnCategories.remember(queueSources, previous, items.get(selectedPosition),
                     outgoingFuture, streamCache, categoryAt);
         }
