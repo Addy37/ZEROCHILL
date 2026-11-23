@@ -2877,6 +2877,14 @@ public final class ChaosFeedView extends FrameLayout {
         return aspectRatio > 1.1f;
     }
 
+    static void configurePosterPresentation(ImageView image, boolean horizontal) {
+        // Horizontal posters match the FIT-sized video instead of cropping fullscreen.
+        // Transparent unused space leaves the approved ambient backdrop visible.
+        image.setScaleType(horizontal ? ImageView.ScaleType.FIT_CENTER
+                : ImageView.ScaleType.CENTER_CROP);
+        image.setBackgroundColor(horizontal ? Color.TRANSPARENT : Color.rgb(20, 20, 22));
+    }
+
     private void enterManualFullscreen(ChaosHolder holder) {
         resetTemporaryPinch();
         if (manualFullscreen || holder == null || !holder.horizontalVideo) return;
@@ -4924,14 +4932,6 @@ public final class ChaosFeedView extends FrameLayout {
             syncPoster();
             syncLoading();
             if (autoplay && !userPaused && ownsPlayback()) playOwnedPlayer();
-        }
-
-        static void configurePosterPresentation(ImageView image, boolean horizontal) {
-            // Horizontal posters must match the FIT-sized video they precede.
-            // Transparent unused space shows the ambient backdrop behind them.
-            image.setScaleType(horizontal ? ImageView.ScaleType.FIT_CENTER
-                    : ImageView.ScaleType.CENTER_CROP);
-            image.setBackgroundColor(horizontal ? Color.TRANSPARENT : Color.rgb(20, 20, 22));
         }
 
         private void syncPoster() {
