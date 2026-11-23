@@ -317,6 +317,26 @@ final class ShitTokFilteredInventory {
         Session session = session(mode);
         return mode == active && session != null ? session.pool.take(12, room) : Collections.emptyList();
     }
+    /**
+     * Accept only a verified OnlyHaven category result produced by the background
+     * warmer. It belongs to its own session, never the currently selected feed.
+     * Foreground admission still checks blocks, history, orientation and identities.
+     */
+    synchronized void offerBackgroundStarter(ShitTokSourceMode sources, ContentPreference mode,
+                                              NativeContentItem item) {
+        if (sources == null || mode == null || item == null || !item.isVideo()
+                || item.url == null || item.url.isEmpty()
+                || !sources.creatorInventory(mode) || !backend.available(HAVEN)) return;
+        Session session = sessions.computeIfAbsent(sources.key(mode),
+                ignored -> new Session(sources, mode));
+        synchronized (session) {
+            session.evidence.put(item.url, HAVEN);
+            trimEvidence(session);
+        }
+        session.pool.setEligibility(HAVEN, true, true);
+        session.pool.putCached(HAVEN, Collections.singletonList(item));
+    }
+
     synchronized void putBack(ContentPreference mode, NativeContentItem item) {
         Session session = session(mode);
         if (session == null) return;
