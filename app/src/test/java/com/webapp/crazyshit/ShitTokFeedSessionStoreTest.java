@@ -16,7 +16,7 @@ public class ShitTokFeedSessionStoreTest {
                 "https://example.test/" + id, "", "", "Test", "", "", "", 0L, .5f);
     }
     private static CrazyShitRepository.StreamInfo stream(NativeContentItem item) {
-        return new CrazyShitRepository.StreamInfo(item.url, item.url + ".mp4", "clip");
+        return new CrazyShitRepository.StreamInfo(item.url + ".mp4", item.url, "clip");
     }
 
     @Test public void eachOfFiveTabsRetainsOwnVideoTimestampPauseAndQueue() {
