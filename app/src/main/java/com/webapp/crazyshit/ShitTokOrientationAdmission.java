@@ -52,6 +52,13 @@ final class ShitTokOrientationAdmission {
     private final ShitTokAdmissionHealth health;
     private volatile boolean creatorScheduling;
     void setCreatorFocused(boolean value) { creatorScheduling = value; }
+    private volatile boolean allowLandscape;
+    void setLandscapeAllowed(boolean enabled) { allowLandscape = enabled; }
+    private boolean isEligible(float aspect) {
+        return allowLandscape
+                ? ShitTokOrientation.immersiveEligible(aspect)
+                : ShitTokOrientation.eligible(aspect);
+    }
     private final LinkedHashMap<String, Entry> cache = new LinkedHashMap<String, Entry>(64, .75f, true) {
         @Override protected boolean removeEldestEntry(Map.Entry<String, ShitTokOrientationAdmission.Entry> eldest) {
             return size() > CACHE_LIMIT;
@@ -107,7 +114,7 @@ final class ShitTokOrientationAdmission {
                         && Float.compare(known.aspect, item.aspectRatioHint) == 0 ? known.stream : null;
                 Entry hint = new Entry(item.aspectRatioHint, reusable, 0L, "metadata");
                 synchronized (cache) { cache.put(item.url, hint); }
-                if (!ShitTokOrientation.eligible(hint.aspect)) {
+                if (!isEligible(hint.aspect)) {
                     orientationRejected.incrementAndGet();
                     ShitTokPoolDiagnostics.admissionOutcome(item, "orientation", diagnosticToken);
                     continue;
@@ -119,8 +126,8 @@ final class ShitTokOrientationAdmission {
                 known = hint;
             }
             if (known != null && (known.aspect > 0f || known.retryAt > clock.getAsLong())
-                    && (!requireStreams || known.stream != null || !ShitTokOrientation.eligible(known.aspect))) {
-                if (ShitTokOrientation.eligible(known.aspect)) accept(item, known, admitted, streams, onVerified, diagnosticToken);
+                    && (!requireStreams || known.stream != null || !isEligible(known.aspect))) {
+                if (isEligible(known.aspect)) accept(item, known, admitted, streams, onVerified, diagnosticToken);
                 else if (known.stream == null || known.stream.mediaUrl == null || known.stream.mediaUrl.isEmpty()) {
                     unplayableRejected.incrementAndGet();
                     ShitTokPoolDiagnostics.admissionOutcome(item, "unplayable", diagnosticToken);
@@ -144,7 +151,7 @@ final class ShitTokOrientationAdmission {
             probes++;
             long candidateStarted = clock.getAsLong();
             CrazyShitRepository.StreamInfo stream = known != null && known.provenance.equals("pending") ? known.stream : null;
-            float aspect = known != null && ShitTokOrientation.eligible(known.aspect) ? known.aspect : 0f;
+            float aspect = known != null && isEligible(known.aspect) ? known.aspect : 0f;
             boolean terminalError = false;
             try {
                 event("resolve_start", item, "source=" + ShitTokAspectPriority.sourceKey(item));
@@ -196,7 +203,7 @@ final class ShitTokOrientationAdmission {
             Entry result = new Entry(aspect, stream,
                     aspect > 0f ? 0L : clock.getAsLong() + UNKNOWN_COOLDOWN_MS, provenance);
             synchronized (cache) { cache.put(item.url, result); }
-            if (!ShitTokOrientation.eligible(aspect)) {
+            if (!isEligible(aspect)) {
                 boolean missingStream = stream == null || stream.mediaUrl == null || stream.mediaUrl.isEmpty();
                 if (missingStream) unplayableRejected.incrementAndGet();
                 else orientationRejected.incrementAndGet();
@@ -206,10 +213,10 @@ final class ShitTokOrientationAdmission {
                     ShitTokPoolDiagnostics.admissionOutcome(item, missingStream ? "unplayable" : "orientation", diagnosticToken);
                 }
             }
-            if (creatorScheduling) health.result(ShitTokAspectPriority.sourceKey(item), ShitTokOrientation.eligible(aspect),
+            if (creatorScheduling) health.result(ShitTokAspectPriority.sourceKey(item), isEligible(aspect),
                     terminalError, clock.getAsLong() - candidateStarted);
-            event(ShitTokOrientation.eligible(aspect) ? "verified" : "rejected", item, "aspect=" + aspect);
-            if (ShitTokOrientation.eligible(aspect)) accept(item, result, admitted, streams, onVerified, diagnosticToken);
+            event(isEligible(aspect) ? "verified" : "rejected", item, "aspect=" + aspect);
+            if (isEligible(aspect)) accept(item, result, admitted, streams, onVerified, diagnosticToken);
         }
         return new Result(admitted, streams, remaining, deferred);
     }
@@ -336,10 +343,10 @@ final class ShitTokOrientationAdmission {
     }
 
     boolean rejectsKnown(NativeContentItem item) {
-        if (trustedHint(item) && ShitTokOrientation.eligible(item.aspectRatioHint)) return false;
+        if (trustedHint(item) && isEligible(item.aspectRatioHint)) return false;
         synchronized (cache) {
             Entry known = cache.get(item.url);
-            return known != null && !ShitTokOrientation.eligible(known.aspect)
+            return known != null && !isEligible(known.aspect)
                     && (known.aspect > 0f || known.retryAt > clock.getAsLong());
         }
     }
@@ -394,12 +401,12 @@ final class ShitTokOrientationAdmission {
             NativeContentItem selected = null;
             if (!eligible.isEmpty()) {
                 boolean fastPortrait = creatorScheduling && eligible.stream().anyMatch(i -> trustedHint(i)
-                        && ShitTokOrientation.eligible(i.aspectRatioHint));
+                        && isEligible(i.aspectRatioHint));
                 if (fastPortrait) {
                     int index = -1;
                     for (int i = 0; i < eligible.size(); i++) {
                         NativeContentItem item = eligible.get(i);
-                        if (trustedHint(item) && ShitTokOrientation.eligible(item.aspectRatioHint)
+                        if (trustedHint(item) && isEligible(item.aspectRatioHint)
                                 && (index < 0 || opportunity(item) > opportunity(eligible.get(index)))) index = i;
                     }
                     selected = eligible.remove(index);
