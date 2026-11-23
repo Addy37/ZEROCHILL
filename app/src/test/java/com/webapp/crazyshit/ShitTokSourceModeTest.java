@@ -238,7 +238,7 @@ public class ShitTokSourceModeTest {
         ReflectionHelpers.callInstanceMethod(callbacks, "onPageSelected", from(int.class, position));
     }
 
-    @Test @Config(sdk = {29, 35}) public void deepSourceSwitchKeepsSelectedUrlWhenOldLayoutReportsPageTenDuringPrune() {
+    @Test @Config(sdk = {29, 35}) public void deepCategorySwitchKeepsSelectedUrlWhenOldLayoutReportsPageTenDuringPrune() {
         try (DeepFeed f = new DeepFeed()) {
             NativeContentItem selected = f.items.get(10);
             int token = f.owner.token(selected.url);
@@ -246,20 +246,20 @@ public class ShitTokSourceModeTest {
             boolean[] delivered = {false};
             adapter.registerAdapterDataObserver(new androidx.recyclerview.widget.RecyclerView.AdapterDataObserver() {
                 @Override public void onItemRangeRemoved(int first, int count) {
-                    if (!delivered[0] && f.items.size() == 6) {
+                    if (!delivered[0] && f.items.size() == 1) {
                         delivered[0] = true;
                         pageCallback(f.feed, 10); // old ViewPager layout; i=9 against the six-row model
                     }
                 }
             });
-            ShitTokSourceMode.set(f.host.get(), ShitTokSourceMode.ONLY_FAP);
+            ShitTokContentPreference.set(f.host.get(), ContentPreference.WOMEN);
             ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
             ReflectionHelpers.callInstanceMethod(f.feed, "settleSelectedPage");
             assertTrue(delivered[0]);
-            assertEquals(6, f.items.size());
-            assertSame(selected, f.items.get(5));
-            assertEquals(5, (int) ReflectionHelpers.getField(f.feed, "selectedPosition"));
-            assertEquals(5, f.pager.getCurrentItem());
+            assertEquals(1, f.items.size());
+            assertSame(selected, f.items.get(0));
+            assertEquals(0, (int) ReflectionHelpers.getField(f.feed, "selectedPosition"));
+            assertEquals(0, f.pager.getCurrentItem());
             assertEquals(selected.url, ReflectionHelpers.getField(f.owner, "selected"));
             assertEquals(token, f.owner.token(selected.url));
         }
@@ -294,7 +294,7 @@ public class ShitTokSourceModeTest {
         }
     }
 
-    @Test public void numericallyValidOldLayoutCallbackCannotSelectAnotherClipOrResetResume() {
+    @Test public void oldLayoutCallbackCannotResetLeaseOrResumeAfterCategorySwitch() {
         try (DeepFeed f = new DeepFeed()) {
             NativeContentItem current = f.items.get(10);
             ShitTokSessionResume resume = ReflectionHelpers.getField(f.feed, "sessionResume");
@@ -307,13 +307,13 @@ public class ShitTokSourceModeTest {
             boolean[] delivered = {false};
             adapter.registerAdapterDataObserver(new androidx.recyclerview.widget.RecyclerView.AdapterDataObserver() {
                 @Override public void onItemRangeRemoved(int first, int count) {
-                    if (!delivered[0] && f.items.size() == 6) {
+                    if (!delivered[0] && f.items.size() == 1) {
                         delivered[0] = true;
-                        pageCallback(f.feed, 4); // fits the new list, but belongs to the old layout
+                        pageCallback(f.feed, 0); // a recycled old-layout callback during prune
                     }
                 }
             });
-            ShitTokSourceMode.set(f.host.get(), ShitTokSourceMode.ONLY_FAP);
+            ShitTokContentPreference.set(f.host.get(), ContentPreference.WOMEN);
             ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
             assertTrue(delivered[0]);
             consistent(f, current);
@@ -324,18 +324,16 @@ public class ShitTokSourceModeTest {
             pageCallback(f.feed, 10); // delayed invalid callback after the synchronous update
             consistent(f, current);
             f.layout();
-            f.pager.setCurrentItem(4, false); // a new, real selection still works after layout
-            consistent(f, f.items.get(4));
+            consistent(f, current); // same lease remains selected until verified new feed content arrives
         }
     }
 
-    @Test public void rapidGenderAndSourceChangesDuringSwipeApplyLatestModeAtIdle() {
+    @Test public void rapidCategoryChangesDuringSwipeApplyLatestTabAtIdle() {
         try (DeepFeed f = new DeepFeed()) {
             NativeContentItem current = f.items.get(10);
             for (int i = 0; i < 3; i++) {
                 ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState",
                         from(int.class, androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_DRAGGING));
-                ShitTokSourceMode.set(f.host.get(), ShitTokSourceMode.ONLY_FAP);
                 ShitTokContentPreference.set(f.host.get(), ContentPreference.MEN);
                 ReflectionHelpers.callInstanceMethod(f.feed, "applyContentPreference");
                 ShitTokContentPreference.set(f.host.get(), ContentPreference.ALL);
@@ -343,11 +341,11 @@ public class ShitTokSourceModeTest {
                 ReflectionHelpers.callInstanceMethod(f.feed, "handlePagerScrollState",
                         from(int.class, androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_IDLE));
                 consistent(f, current);
-                assertEquals(ShitTokSourceMode.ONLY_FAP, ReflectionHelpers.getField(f.feed, "queueSources"));
+                assertEquals(ShitTokSourceMode.ALL, ReflectionHelpers.getField(f.feed, "queueSources"));
                 assertEquals(ContentPreference.ALL, ReflectionHelpers.getField(f.feed, "queuePreference"));
                 ReflectionHelpers.callInstanceMethod(f.feed, "settleSelectedPage");
             }
-            assertEquals(6, f.items.size());
+            assertEquals(11, f.items.size());
         }
     }
 
