@@ -133,6 +133,7 @@ jobs:
               --tests com.webapp.crazyshit.ShitTokContentPreferenceTest \
               --tests com.webapp.crazyshit.ShitTokCategoryHandoffTest \
               --tests com.webapp.crazyshit.ShitTokPosterFramingTest \
+              --tests com.webapp.crazyshit.ShitTokFeedSessionStoreTest \
               --tests com.webapp.crazyshit.ShitTokCategoryReturnCacheTest \
               --tests com.webapp.crazyshit.ShitTokWarmCategoryCacheTest \
               --tests com.webapp.crazyshit.ShitTokFeedSourcesTest \
