@@ -4493,14 +4493,19 @@ public final class ChaosFeedView extends FrameLayout {
             failure.setContentDescription("Couldn't play this video");
             failure.setVisibility(View.GONE);
             poster.setVisibility(View.VISIBLE);
+            configurePosterPresentation(poster, horizontalVideo);
             Glide.with(poster).clear(poster);
             if (next.imageUrl == null || next.imageUrl.isEmpty()) {
                 poster.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 22)));
             } else {
-                Glide.with(poster)
-                        .load(imageWithHeaders(next.imageUrl, next.url))
-                        .centerCrop()
-                        .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                // This placeholder stays visible until Media3 renders a real frame.
+                // Cropping horizontal thumbnails fills the whole portrait viewport,
+                // producing the giant zoom seen when returning to Chaos.
+                com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> request =
+                        Glide.with(poster).load(imageWithHeaders(next.imageUrl, next.url));
+                if (horizontalVideo) request = request.fitCenter();
+                else request = request.centerCrop();
+                request.diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                         .dontAnimate()
                         .placeholder(new ColorDrawable(Color.rgb(20, 20, 22)))
                         .error(new ColorDrawable(Color.rgb(20, 20, 22)))
@@ -4787,6 +4792,7 @@ public final class ChaosFeedView extends FrameLayout {
                         videoAspectRatio = ShitTokOrientation.effectiveAspect(
                                 videoSize.width, videoSize.height, videoSize.pixelWidthHeightRatio, 0);
                         horizontalVideo = shouldOfferLandscapeFullscreen(videoAspectRatio);
+                        configurePosterPresentation(poster, horizontalVideo);
                         updateAmbientBackdrop();
                         updateFullscreenPromptPosition();
                         if (!aspectSampleRecorded) {
@@ -4918,6 +4924,14 @@ public final class ChaosFeedView extends FrameLayout {
             syncPoster();
             syncLoading();
             if (autoplay && !userPaused && ownsPlayback()) playOwnedPlayer();
+        }
+
+        static void configurePosterPresentation(ImageView image, boolean horizontal) {
+            // Horizontal posters must match the FIT-sized video they precede.
+            // Transparent unused space shows the ambient backdrop behind them.
+            image.setScaleType(horizontal ? ImageView.ScaleType.FIT_CENTER
+                    : ImageView.ScaleType.CENTER_CROP);
+            image.setBackgroundColor(horizontal ? Color.TRANSPARENT : Color.rgb(20, 20, 22));
         }
 
         private void syncPoster() {
