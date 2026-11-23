@@ -67,6 +67,14 @@ public class NavigationIaTest {
         BottomNavigationView nav = ReflectionHelpers.getField(activity, "bottomNavigation");
         View topBar = ReflectionHelpers.getField(activity, "topBar");
 
+        // Reproduce the orientation owner's late portrait pass after ShitTok
+        // sensor-landscape fullscreen. The old title/search header stays gone.
+        assertEquals(View.GONE, topBar.getVisibility());
+        LandscapeUiController.attach(activity);
+        LandscapeUiController.apply(activity);
+        assertEquals(View.GONE, topBar.getVisibility());
+        assertEquals(0, topBar.getLayoutParams().height);
+
         nav.setSelectedItemId(3); // Stable OnlyFap slot.
         shadowOf(android.os.Looper.getMainLooper()).idle();
         assertEquals(View.GONE, topBar.getVisibility());
