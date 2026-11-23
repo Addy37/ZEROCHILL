@@ -33,6 +33,13 @@ public class ShitTokFullscreenAccentTest {
             RecyclerView.ViewHolder holder = adapter.createViewHolder(recycler, 0);
             TextView fullscreen = holder.itemView.findViewWithTag("shittok_fullscreen");
             assertNotNull(fullscreen);
+            View staticBackdrop = holder.itemView.findViewWithTag("shittok_horizontal_ambient");
+            View liveBackdrop = holder.itemView.findViewWithTag("shittok_horizontal_live_ambient");
+            assertNotNull(staticBackdrop);
+            assertNotNull(liveBackdrop);
+            // Without a selected, rendered horizontal video, live sampling
+            // stays dormant and the static thumbnail remains available.
+            assertEquals(View.GONE, liveBackdrop.getVisibility());
             assertAccent(fullscreen, AppearanceTheme.Accent.PINK.color);
 
             AppearanceTheme.setAccent(activity, AppearanceTheme.Accent.PURPLE);
