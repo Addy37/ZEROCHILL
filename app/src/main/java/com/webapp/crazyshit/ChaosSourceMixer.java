@@ -95,7 +95,7 @@ final class ChaosSourceMixer {
         requestPreference(context, available, true);
     }
     synchronized void requestPreference(Context context, Runnable available, boolean demand) {
-        ContentPreference mode = ContentPreference.get(context);
+        ContentPreference mode = ShitTokContentPreference.get(context);
         ShitTokSourceMode sources = ShitTokSourceMode.get(context);
         if (poolMode != mode || poolSources != sources) {
             sourcePool.pause(); shitShow.stop(); poolMode = mode; poolSources = sources;
@@ -235,7 +235,7 @@ final class ChaosSourceMixer {
 
     List<NativeContentItem> loadRandomBatch(Context context, boolean continuityOnly,
             java.util.function.Consumer<List<NativeContentItem>> onCandidates, long budgetMs) {
-        ContentPreference mode = ContentPreference.get(context);
+        ContentPreference mode = ShitTokContentPreference.get(context);
         if (ShitTokSourceMode.get(context).creatorInventory(mode)) {
             // Only the authoritative category loader can produce a filtered candidate.
             return takePreference(mode);
@@ -266,7 +266,7 @@ final class ChaosSourceMixer {
     List<NativeContentItem> takeReadyCandidates() { return sourcePool.take(16); }
 
     void recoverSources(Context context) {
-        if (ShitTokSourceMode.get(context).creatorInventory(ContentPreference.get(context))) return;
+        if (ShitTokSourceMode.get(context).creatorInventory(ShitTokContentPreference.get(context))) return;
         if (context instanceof android.app.Activity) {
             ShitShowPlayableResolver.rememberHost((android.app.Activity) context);
         }
