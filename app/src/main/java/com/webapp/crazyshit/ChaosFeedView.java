@@ -310,6 +310,12 @@ public final class ChaosFeedView extends FrameLayout {
         playbackOwner = new ShitTokPlaybackOwner(activity.getApplicationContext(), new ShitTokPlaybackOwner.Callbacks() {
             @Override public void onLeaseChanged(String url) {
                 if (closed || isPaging()) return;
+                if (pendingCategoryActivation) {
+                    // No pending tab may bind/play a surface before handoff.
+                    // A newly acquired selected lease can start silent buffering.
+                    if (url.equals(pendingCategoryReturnUrl)) post(this::prebufferReturningCategory);
+                    return;
+                }
                 for (ChaosHolder holder : new ArrayList<>(playerHolders)) {
                     if (holder.item != null && url.equals(holder.item.url) && holderAt(holder.boundPosition) == holder) holder.attachLease();
                 }
@@ -1279,6 +1285,7 @@ public final class ChaosFeedView extends FrameLayout {
             resolving.clear();
             removeCallbacks(showCategoryWait);
             categoryWaitingVisible = false;
+            playbackOwner.cancelSilentReturnPrebuffer();
             playbackOwner.permission(false, chaosMuted);
             for (ChaosHolder holder : new ArrayList<>(playerHolders)) silencePlayer(holder.player);
             pager.setUserInputEnabled(false);
@@ -1335,11 +1342,31 @@ public final class ChaosFeedView extends FrameLayout {
             }
             publishQueueChange(() -> adapter.notifyDataSetChanged());
             sourceMixer.requestPreference(activity, () -> post(this::loadMorePool), false);
+            // Allow the remembered video to open the already-cached stream before
+            // the horizontal transition completes. It has no audio permission.
+            post(this::prebufferReturningCategory);
             post(this::loadMorePool);
             post(this::activatePendingCategory);
         } finally {
             endQueueUpdate();
         }
+    }
+
+    /** Prepare one cached return clip without starting playback or a new player pool. */
+    private void prebufferReturningCategory() {
+        if (closed || !active || !hostResumed || searchCoverActive
+                || !pendingCategoryActivation || pendingCategoryReturnUrl.isEmpty()) return;
+        String url = pendingCategoryReturnUrl;
+        if (indexOfUrl(url) < 0) return;
+        CrazyShitRepository.StreamInfo stream = streamCache.get(url);
+        if (stream == null || stream.mediaUrl == null || stream.mediaUrl.isEmpty()) return;
+        // One selected lease, no preloaded neighbors. The regular vertical
+        // playlist neighbors are acquired when the category becomes active.
+        playbackOwner.select(url, null, null, false);
+        if (playbackOwner.prebufferSelectedReturn(url, stream)) {
+            ShitTokPoolDiagnostics.record("categoryReturnPrebuffer", url);
+        }
+        // A pending lease will invoke onLeaseChanged and retry this once ready.
     }
 
     /** Restore the selected clip before its queued successors, not a fresh random batch. */
