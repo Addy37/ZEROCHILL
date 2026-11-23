@@ -212,6 +212,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final Random random = new Random();
     private final ShitTokWarmCategoryCache warmCategories = new ShitTokWarmCategoryCache();
     private final ShitTokCategoryReturnCache returnCategories = new ShitTokCategoryReturnCache();
+    private final ShitTokFeedSessionStore feedSessions = new ShitTokFeedSessionStore();
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
     private final Deque<NativeContentItem> orientationPending = new ArrayDeque<>();
     private ShitTokOrientationAdmission orientationAdmission;
@@ -753,7 +754,7 @@ public final class ChaosFeedView extends FrameLayout {
             syncHolderPositionsAfterQueuePrune();
             syncQueuePager();
             if (items.isEmpty()) {
-                playbackOwner.clearSession();
+                if (!pendingCategoryActivation) playbackOwner.clearSession();
                 creatorMetadata.select(null);
                 settledSelectionPending = false;
             }
@@ -1020,6 +1021,8 @@ public final class ChaosFeedView extends FrameLayout {
     public void refresh() {
     if (isPaging()) { deferUiApply(this::refresh); return; }
         returnCategories.clear();
+        feedSessions.clear();
+        cancelHorizontalCategorySlide();
         pendingCategoryReturnUrl = "";
         pendingCategoryActivation = false;
         categoryWaitingVisible = false;
@@ -1073,6 +1076,8 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void close() {
         returnCategories.clear();
+        feedSessions.clear();
+        cancelHorizontalCategorySlide();
         pendingCategoryReturnUrl = "";
         pendingCategoryActivation = false;
         categoryWaitingVisible = false;
@@ -1146,6 +1151,88 @@ public final class ChaosFeedView extends FrameLayout {
         }
     };
 
+    private ImageView departingCategoryFrame;
+    private int horizontalCategoryDirection = 1;
+
+    /** Tabs animate only the feed content; the header and dock never move. */
+    static int horizontalPreferenceDirection(ContentPreference from, ContentPreference to) {
+        return Integer.compare(tabOrder(to), tabOrder(from)) < 0 ? -1 : 1;
+    }
+
+    private static int tabOrder(ContentPreference value) {
+        if (value == ContentPreference.WOMEN) return 1;
+        if (value == ContentPreference.MEN) return 2;
+        if (value == ContentPreference.TRANS_WOMEN || value == ContentPreference.TRANS_MEN) return 3;
+        if (value == ContentPreference.GROUPS) return 4;
+        return 0;
+    }
+
+    private void beginHorizontalCategorySlide(ContentPreference from, ContentPreference to) {
+        horizontalCategoryDirection = horizontalPreferenceDirection(from, to);
+        if (departingCategoryFrame != null) {
+            // Rapid tabs keep the one frozen outgoing frame until the latest feed is ready.
+            departingCategoryFrame.animate().withEndAction(null).cancel();
+            departingCategoryFrame.setTranslationX(0f);
+            pager.animate().withEndAction(null).cancel();
+            pager.setTranslationX(0f);
+            return;
+        }
+        if (!sourceRequestsEnabled || !ZeroChillMotion.animationsEnabled(activity)
+                || !active || !hostResumed || pager.getWidth() <= 0 || !isAttachedToWindow()) return;
+        ChaosHolder current = holderAt(selectedPosition);
+        View surface = current == null ? null : current.playerView.getVideoSurfaceView();
+        String token = ShitTokTransitionSnapshotStore.beginCapture(activity, pager, surface);
+        android.graphics.Bitmap image = ShitTokTransitionSnapshotStore.snapshot(token);
+        ShitTokTransitionSnapshotStore.remove(token);
+        if (image == null) return;
+        ImageView snapshot = new ImageView(activity);
+        snapshot.setImageBitmap(image);
+        snapshot.setScaleType(ImageView.ScaleType.FIT_XY);
+        snapshot.setBackgroundColor(Color.BLACK);
+        snapshot.setClickable(true);
+        snapshot.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        addView(snapshot, new FrameLayout.LayoutParams(-1, -1));
+        departingCategoryFrame = snapshot;
+        initialProgress.bringToFront();
+    }
+
+    private void finishHorizontalCategorySlide() {
+        final ImageView old = departingCategoryFrame;
+        if (old == null) return;
+        int width = pager.getWidth();
+        if (!ZeroChillMotion.animationsEnabled(activity) || width <= 0 || !isAttachedToWindow()) {
+            cancelHorizontalCategorySlide();
+            return;
+        }
+        final int delta = horizontalCategoryDirection * width;
+        pager.animate().withEndAction(null).cancel();
+        old.animate().withEndAction(null).cancel();
+        pager.setTranslationX(delta);
+        old.setTranslationX(0f);
+        old.animate().translationX(-delta)
+                .setDuration(240L).setInterpolator(ZeroChillMotion.EASE_OUT).start();
+        pager.animate().translationX(0f)
+                .setDuration(240L).setInterpolator(ZeroChillMotion.EASE_OUT)
+                .withEndAction(() -> {
+                    if (departingCategoryFrame == old) cancelHorizontalCategorySlide();
+                }).start();
+    }
+
+    private void cancelHorizontalCategorySlide() {
+        if (departingCategoryFrame != null) {
+            ImageView old = departingCategoryFrame;
+            departingCategoryFrame = null;
+            old.animate().withEndAction(null).cancel();
+            old.setImageDrawable(null);
+            removeView(old);
+        }
+        if (pager != null) {
+            pager.animate().withEndAction(null).cancel();
+            pager.setTranslationX(0f);
+        }
+    }
+
+    /** One queue, timestamp, and pause state per preference tab; only one player stays active. */
     private void applyContentPreference() {
         if (closed) return;
         ContentPreference current = ShitTokContentPreference.get(activity);
@@ -1160,105 +1247,88 @@ public final class ChaosFeedView extends FrameLayout {
             cancelInventoryBatch();
         }
         if (isPaging()) { deferUiApply(this::applyContentPreference); return; }
-        boolean sameSelected = false;
         beginQueueUpdate();
         try {
-        ContentPreference previous = queuePreference;
-        long categoryAt = android.os.SystemClock.elapsedRealtime();
-        ArrayList<NativeContentItem> outgoingFuture = new ArrayList<>(items.subList(
-                Math.min(items.size(), selectedPosition + 1), items.size()));
-        warmCategories.save(queueSources, previous, outgoingFuture, streamCache, categoryAt);
-        if (hasSelectedPage() && !pendingCategoryActivation) {
-            // Bookmark the clip/queue only. The playback owner already retains the
-            // exact timestamp on lease retirement, including user pause.
-            // Do not overwrite a remembered position with an unprepared player's zero.
-            returnCategories.remember(queueSources, previous, items.get(selectedPosition),
-                    outgoingFuture, streamCache, categoryAt);
-        }
-        queuePreference = current; queueSources = currentSources;
-        // Keep the current playback lease until the next category has a
-        // verified candidate, then switch automatically. Never show an
-        // unrelated Chaos clip indefinitely under the Ladies label.
-        pendingCategoryActivation = !items.isEmpty();
-        pendingCategoryReturnUrl = "";
-        categorySelectionVersion++;
-        // Retire old, in-flight URL resolutions as well as inventory requests.
-        // A rapid second tap must never revive the earlier category.
-        resolving.clear();
-        removeCallbacks(showCategoryWait);
-        categoryWaitingVisible = false;
-        if (pendingCategoryActivation) {
-            playbackOwner.permission(false, chaosMuted);
-            ChaosHolder outgoing = holderAt(selectedPosition);
-            if (outgoing != null) silencePlayer(outgoing.player);
-            pager.setUserInputEnabled(false);
-            postDelayed(showCategoryWait, 160L);
-        } else {
-            pager.setUserInputEnabled(!searchCoverActive);
-        }
-        syncLoadingIndicators();
-        orientationAdmission.setCreatorFocused(currentSources.creatorInventory(current));
-        orientationAdmission.setLandscapeAllowed(
-                ShitTokCategoryStrip.Tab.selected(activity) == ShitTokCategoryStrip.Tab.CHAOS);
-        invalidatedSelection = null;
-        ShitTokPoolDiagnostics.beginMode(currentSources, current);
-        modeTailHits = modeRefills = modeDryRefills = 0;
-        modeMinRunway = Integer.MAX_VALUE; modeBelowAt = modeBelowMs = 0;
-        cancelPendingAutoAdvance();
-        for (NativeContentItem item : orientationPending) sourceMixer.abandon(item);
-        orientationPending.clear();
-        consecutiveDryLoads = 0;
-        // Keep only the active lease. The very next swipe must use the new category.
-        int first = Math.min(items.size(), selectedPosition + 1);
-        int removed = items.size() - first;
-        for (NativeContentItem item : new ArrayList<>(items.subList(first, items.size()))) {
-            sourceMixer.abandon(item);
-            sessionUrls.remove(item.url);
-            sessionIdentities.remove(ShitTokContentIdentity.page(item.url));
-            CrazyShitRepository.StreamInfo stream = streamCache.remove(item.url);
-            if (stream != null) sessionIdentities.remove(ShitTokContentIdentity.media(stream.mediaUrl));
-            releaseFutureHolder(item.url);
-        }
-        items.subList(first, items.size()).clear();
-        if (removed > 0) publishQueueChange(() -> adapter.notifyItemRangeRemoved(first, removed));
-        pruneIncompatibleHistory();
-        reconcilePlaybackWindow(); // Retire old neighbors while retaining the current URL lease.
-        // Establish the category session before rechecking cached clip evidence.
-        sourceMixer.requestPreference(activity, () -> post(this::loadMorePool), false);
-        ShitTokCategoryReturnCache.Checkpoint savedCategory =
-                returnCategories.take(currentSources, current, categoryAt);
-        sameSelected = restoreCategoryCheckpoint(savedCategory);
-        if (!sameSelected && savedCategory != null)
-            pendingCategoryReturnUrl = savedCategory.selectedUrl;
-        ArrayList<NativeContentItem> warm = new ArrayList<>();
-        for (ShitTokWarmCategoryCache.Entry entry : warmCategories.take(currentSources, current, android.os.SystemClock.elapsedRealtime())) {
-            streamCache.put(entry.item.url, entry.stream);
-            warm.add(entry.item);
-        }
-        int warmStart = items.size();
-        appendUnique(warm);
-        if (items.size() > warmStart) {
-            publishQueueChange(() -> adapter.notifyItemRangeInserted(warmStart, items.size() - warmStart));
-            sequenceFilteredFuture();
-            reconcilePlaybackWindow();
-            post(this::activatePendingCategory);
-        }
-        if (sameSelected) {
-            pendingCategoryReturnUrl = "";
-            pendingCategoryActivation = false;
-            categoryWaitingVisible = false;
+            ContentPreference previous = queuePreference;
+            // A rapid tap whose feed never activated must not overwrite its earlier checkpoint.
+            if (!pendingCategoryActivation && hasSelectedPage()) {
+                String outgoingUrl = items.get(selectedPosition).url;
+                ExoPlayer outgoingPlayer = playbackOwner.player(outgoingUrl);
+                long position = outgoingPlayer != null
+                        ? Math.max(0L, outgoingPlayer.getCurrentPosition())
+                        : sessionResume.positionFor(outgoingUrl);
+                if (outgoingPlayer != null) playbackOwner.remember(outgoingUrl, position);
+                feedSessions.save(queueSources, previous, items, selectedPosition, position,
+                        playbackOwner.isUserPaused(outgoingUrl), streamCache);
+            }
+            beginHorizontalCategorySlide(previous, current);
+            ShitTokFeedSessionStore.Session saved = feedSessions.get(currentSources, current);
+            queuePreference = current;
+            queueSources = currentSources;
+            pendingCategoryActivation = !items.isEmpty() || saved != null;
+            pendingCategoryReturnUrl = saved == null ? "" : saved.selectedUrl;
+            categorySelectionVersion++;
+            resolving.clear();
             removeCallbacks(showCategoryWait);
-            pager.setUserInputEnabled(!searchCoverActive);
-        }
-        refillDeferred = true;
-        continuityWorkNeeded = true;
-        post(this::loadMorePool);
+            categoryWaitingVisible = false;
+            playbackOwner.permission(false, chaosMuted);
+            for (ChaosHolder holder : new ArrayList<>(playerHolders)) silencePlayer(holder.player);
+            pager.setUserInputEnabled(false);
+            if (pendingCategoryActivation) postDelayed(showCategoryWait, 160L);
+            syncLoadingIndicators();
+            orientationAdmission.setCreatorFocused(currentSources.creatorInventory(current));
+            orientationAdmission.setLandscapeAllowed(
+                    ShitTokCategoryStrip.Tab.selected(activity) == ShitTokCategoryStrip.Tab.CHAOS);
+            invalidatedSelection = null;
+            ShitTokPoolDiagnostics.beginMode(currentSources, current);
+            modeTailHits = modeRefills = modeDryRefills = 0;
+            modeMinRunway = Integer.MAX_VALUE; modeBelowAt = modeBelowMs = 0;
+            cancelPendingAutoAdvance();
+            for (NativeContentItem item : orientationPending) sourceMixer.abandon(item);
+            orientationPending.clear();
+            consecutiveDryLoads = 0;
+            refillDeferred = true;
+            continuityWorkNeeded = true;
+
+            // There is no shared historical pager across categories anymore.
+            items.clear();
+            streamCache.clear();
+            sessionUrls.clear();
+            sessionIdentities.clear();
+            unplayable.clear();
+            resolveRetried.clear();
+            queueSelectedUrl = "";
+            queueSelectedPosition = 0;
+            if (saved != null) {
+                for (NativeContentItem item : saved.queue) {
+                    if (item == null || item.url == null || hiddenUrls.contains(item.url)
+                            || ShitTokBlockedCreatorStore.isBlocked(blockedCreatorKeys, item)
+                            || !eligiblePreference(item, current)
+                            || !eligibleVideoAspect(item.aspectRatioHint)) continue;
+                    items.add(item);
+                    sessionUrls.add(item.url);
+                    sessionIdentities.add(ShitTokContentIdentity.page(item.url));
+                    CrazyShitRepository.StreamInfo stream = saved.streams.get(item.url);
+                    if (stream != null) {
+                        streamCache.put(item.url, stream);
+                        sessionIdentities.add(ShitTokContentIdentity.media(stream.mediaUrl));
+                    }
+                }
+                if (sessionUrls.contains(saved.selectedUrl)) {
+                    queueSelectedUrl = saved.selectedUrl;
+                    queueSelectedPosition = Math.max(0, indexOfUrl(saved.selectedUrl));
+                    playbackOwner.remember(saved.selectedUrl, saved.positionMs);
+                    playbackOwner.setUserPaused(saved.selectedUrl, saved.paused);
+                } else {
+                    pendingCategoryReturnUrl = "";
+                }
+            }
+            publishQueueChange(() -> adapter.notifyDataSetChanged());
+            sourceMixer.requestPreference(activity, () -> post(this::loadMorePool), false);
+            post(this::loadMorePool);
+            post(this::activatePendingCategory);
         } finally {
             endQueueUpdate();
-            if (sameSelected && active && hostResumed) {
-                reconcilePlaybackWindow();
-                playSelected();
-            }
         }
     }
 
@@ -1331,14 +1401,14 @@ public final class ChaosFeedView extends FrameLayout {
             }
             if (next < 0) pendingCategoryReturnUrl = "";
         }
-        if (next < 0) next = firstReadyCategoryIndex(items, selectedPosition,
+        if (next < 0) next = firstReadyCategoryIndex(items, -1,
                 item -> eligiblePreference(item, queuePreference),
                 item -> {
                     CrazyShitRepository.StreamInfo stream = streamCache.get(item.url);
                     return stream != null && stream.mediaUrl != null && !stream.mediaUrl.isEmpty();
                 });
         if (next < 0) {
-            for (int i = selectedPosition + 1; i < items.size(); i++) {
+            for (int i = 0; i < items.size(); i++) {
                 NativeContentItem candidate = items.get(i);
                 if (eligiblePreference(candidate, queuePreference)
                         && !unplayable.contains(candidate.url)) {
@@ -1367,6 +1437,7 @@ public final class ChaosFeedView extends FrameLayout {
         } else {
             pager.setCurrentItem(next, false);
         }
+        pager.postOnAnimation(this::finishHorizontalCategorySlide);
     }
 
     private void pruneIncompatibleHistory() {
