@@ -1254,9 +1254,12 @@ public final class ChaosFeedView extends FrameLayout {
             if (!pendingCategoryActivation && hasSelectedPage()) {
                 String outgoingUrl = items.get(selectedPosition).url;
                 ExoPlayer outgoingPlayer = playbackOwner.player(outgoingUrl);
-                long position = outgoingPlayer != null
-                        ? Math.max(0L, outgoingPlayer.getCurrentPosition())
-                        : sessionResume.positionFor(outgoingUrl);
+                long currentTime = outgoingPlayer == null ? 0L
+                        : Math.max(0L, outgoingPlayer.getCurrentPosition());
+                // Keep a remembered position if the returning player is still at
+                // zero or not yet prepared. Never replace it with an empty lease.
+                long position = currentTime > 0L
+                        ? currentTime : sessionResume.positionFor(outgoingUrl);
                 if (outgoingPlayer != null) playbackOwner.remember(outgoingUrl, position);
                 feedSessions.save(queueSources, previous, items, selectedPosition, position,
                         playbackOwner.isUserPaused(outgoingUrl), streamCache);
