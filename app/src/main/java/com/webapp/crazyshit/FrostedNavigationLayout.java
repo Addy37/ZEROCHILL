@@ -14,19 +14,12 @@ final class FrostedNavigationLayout extends LinearLayout {
     private boolean pageDirty = true;
     private View navigationView;
     private GlassHeaderView headerView;
-    private View categoryStripView;
     private View headerUnderlayView;
 
     void setFrostedHeaderView(GlassHeaderView header) {
         headerView = header;
         header.setPageBackdrop(pageBackdrop);
         pageDirty = true;
-    }
-
-    void setShitTokCategoryStripView(View strip) {
-        categoryStripView = strip;
-        pageDirty = true;
-        invalidate();
     }
 
     ViewPageBackdrop pageBackdropForOverlay() { return pageBackdrop; }
@@ -84,7 +77,6 @@ final class FrostedNavigationLayout extends LinearLayout {
             }
             if (pageBackdrop.drawPage(canvas)) {
                 drawHeader(canvas);
-                drawCategoryStrip(canvas);
                 if (navigationView != null && navigationView.getVisibility() == VISIBLE)
                     drawChild(canvas, navigationView, getDrawingTime());
                 return;
@@ -92,14 +84,13 @@ final class FrostedNavigationLayout extends LinearLayout {
         }
         drawContentChildren(canvas, navigationView, getDrawingTime());
         drawHeader(canvas);
-        drawCategoryStrip(canvas);
         if (navigationView != null && navigationView.getVisibility() == VISIBLE) {
             drawChild(canvas, navigationView, getDrawingTime());
         }
     }
 
     @Override public void onDescendantInvalidated(View child, View target) {
-        if (child != navigationView && child != headerView && child != categoryStripView) pageDirty = true;
+        if (child != navigationView && child != headerView) pageDirty = true;
         super.onDescendantInvalidated(child, target);
     }
 
@@ -125,16 +116,10 @@ final class FrostedNavigationLayout extends LinearLayout {
         }
     }
 
-    private void drawCategoryStrip(Canvas canvas) {
-        if (categoryStripView != null && categoryStripView.getVisibility() == VISIBLE)
-            drawChild(canvas, categoryStripView, getDrawingTime());
-    }
-
     private void drawContentChildren(Canvas canvas, View navigation, long drawingTime) {
         for (int index = 0; index < getChildCount(); index++) {
             View child = getChildAt(index);
-            if (child != navigation && child != headerView && child != categoryStripView
-                    && child.getVisibility() != View.GONE) {
+            if (child != navigation && child != headerView && child.getVisibility() != View.GONE) {
                 // Only primary content may draw upward into the pinned header slot.
                 // Keep the existing side/bottom clipping and system inset boundary.
                 int checkpoint = canvas.save();
