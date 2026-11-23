@@ -61,6 +61,28 @@ public class ShitTokFeedSessionStoreTest {
         assertEquals(87654L, saved.positionMs);
     }
 
+    @Test public void aDeepReturnKeepsNextStreamsWarmBeforeOlderHistory() {
+        ShitTokFeedSessionStore sessions = new ShitTokFeedSessionStore();
+        List<NativeContentItem> pages = new ArrayList<>();
+        Map<String, CrazyShitRepository.StreamInfo> streams = new HashMap<>();
+        for (int i = 0; i < 150; i++) {
+            NativeContentItem page = clip("page-" + i);
+            pages.add(page);
+            streams.put(page.url, stream(page));
+        }
+        sessions.save(ShitTokSourceMode.ALL, ContentPreference.GROUPS,
+                pages, 100, 54321L, false, streams);
+        ShitTokFeedSessionStore.Session saved =
+                sessions.get(ShitTokSourceMode.ALL, ContentPreference.GROUPS);
+        assertEquals(ShitTokFeedSessionStore.MAX_ITEMS > pages.size() ? pages.size()
+                : ShitTokFeedSessionStore.MAX_ITEMS, saved.queue.size());
+        assertNotNull(saved.streams.get(pages.get(100).url));
+        assertNotNull(saved.streams.get(pages.get(101).url));
+        assertNotNull(saved.streams.get(pages.get(110).url));
+        assertNotNull(saved.streams.get(pages.get(99).url));
+        assertTrue(saved.streams.size() <= 32);
+    }
+
     @Test public void unactivatedOrEmptyTabCannotOverwriteItsLastValidCheckpoint() {
         ShitTokFeedSessionStore sessions = new ShitTokFeedSessionStore();
         NativeContentItem saved = clip("last-valid-ladies");
