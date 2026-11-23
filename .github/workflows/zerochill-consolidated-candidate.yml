@@ -121,7 +121,7 @@ jobs:
           set -euo pipefail
           # Five-feed and buffering experiments share one focused ShitTok suite.
           # Full legacy suite runs remain separate and are not silently waived.
-          if [[ "$GITHUB_REF_NAME" == "test-apk/shittok-five-feeds" || "$GITHUB_REF_NAME" == "test-apk/shittok-buffering-pass-1" ]]; then
+          if [[ "$GITHUB_REF_NAME" == "test-apk/shittok-five-feeds" || "$GITHUB_REF_NAME" == "test-apk/shittok-buffering-pass-1" || "$GITHUB_REF_NAME" == "test-apk/shittok-background-warmup" ]]; then
             gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest \
               --tests com.webapp.crazyshit.ShitTokCategoryStripTest \
               --tests com.webapp.crazyshit.ShitTokHeaderStyleTest \
@@ -137,6 +137,7 @@ jobs:
               --tests com.webapp.crazyshit.ShitTokCategoryPrebufferTest \
               --tests com.webapp.crazyshit.ShitTokBufferProtectionTest \
               --tests com.webapp.crazyshit.ShitTokReturnBufferPriorityTest \
+              --tests com.webapp.crazyshit.ShitTokBackgroundCategoryWarmupTest \
               --tests com.webapp.crazyshit.ShitTokPlayerPoolTest \
               --tests com.webapp.crazyshit.ShitTokAudioOwnershipTest \
               --tests com.webapp.crazyshit.ShitTokCategoryReturnCacheTest \

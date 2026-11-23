@@ -127,6 +127,17 @@ final class ChaosSourceMixer {
         filtered.request(sources, mode, demand, available);
     }
 
+    /** Seed only the matching preference inventory; never switch the foreground mode. */
+    synchronized void offerBackgroundStarter(android.content.Context context,
+                                              ShitTokSourceMode sources, ContentPreference preference,
+                                              NativeContentItem item) {
+        if (filtered == null) filtered = new ShitTokFilteredInventory(SOURCE_IO,
+                android.os.SystemClock::elapsedRealtime,
+                ShitTokFilteredInventory.backend(context, shitShow,
+                        () -> sourcePool.takeCached(BATCH_SHIT_SHOW, SHIT_SHOW_PER_BATCH)));
+        filtered.offerBackgroundStarter(sources, preference, item);
+    }
+
     boolean hasPreference(ContentPreference mode) {
         return poolSources.creatorInventory(mode) && poolMode == mode && filtered != null && filtered.hasReady(mode);
     }
