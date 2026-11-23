@@ -21,10 +21,8 @@ import static org.robolectric.util.ReflectionHelpers.ClassParameter.from;
 @Config(application = Application.class, sdk = 35)
 public class ShitTokHeaderStyleTest {
     @Test public void traditionalHeaderIsHiddenOnlyForShitTok() throws Exception {
-        NativeMainActivity activity = Robolectric.buildActivity(NativeMainActivity.class).get();
-        LinearLayout controls = ReflectionHelpers.callInstanceMethod(activity, "buildTopBar");
-        GlassHeaderView header = new GlassHeaderView(activity, controls);
-        ReflectionHelpers.setField(activity, "topBar", header);
+        NativeMainActivity activity = Robolectric.buildActivity(NativeMainActivity.class).setup().get();
+        GlassHeaderView header = ReflectionHelpers.getField(activity, "topBar");
 
         @SuppressWarnings("unchecked")
         Class<Enum> screenClass = (Class<Enum>) Class.forName(
