@@ -211,6 +211,7 @@ public final class ChaosFeedView extends FrameLayout {
     private final Deque<Integer> pendingWarmPreparePositions = new ArrayDeque<>();
     private final Random random = new Random();
     private final ShitTokWarmCategoryCache warmCategories = new ShitTokWarmCategoryCache();
+    private final ShitTokCategoryReturnCache returnCategories = new ShitTokCategoryReturnCache();
     private final ChaosSourceMixer sourceMixer = new ChaosSourceMixer(repository, random);
     private final Deque<NativeContentItem> orientationPending = new ArrayDeque<>();
     private ShitTokOrientationAdmission orientationAdmission;
@@ -1018,6 +1019,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     public void refresh() {
     if (isPaging()) { deferUiApply(this::refresh); return; }
+        returnCategories.clear();
         pendingCategoryActivation = false;
         categoryWaitingVisible = false;
         categorySelectionVersion++;
@@ -1069,6 +1071,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void close() {
+        returnCategories.clear();
         pendingCategoryActivation = false;
         categoryWaitingVisible = false;
         categorySelectionVersion++;
@@ -1157,9 +1160,15 @@ public final class ChaosFeedView extends FrameLayout {
         beginQueueUpdate();
         try {
         ContentPreference previous = queuePreference;
-        warmCategories.save(queueSources, previous, new ArrayList<>(items.subList(
-                Math.min(items.size(), selectedPosition + 1), items.size())), streamCache,
-                android.os.SystemClock.elapsedRealtime());
+        long categoryAt = android.os.SystemClock.elapsedRealtime();
+        ArrayList<NativeContentItem> outgoingFuture = new ArrayList<>(items.subList(
+                Math.min(items.size(), selectedPosition + 1), items.size()));
+        warmCategories.save(queueSources, previous, outgoingFuture, streamCache, categoryAt);
+        if (hasSelectedPage()) {
+            rememberSelectedPosition();
+            returnCategories.remember(queueSources, previous, items.get(selectedPosition),
+                    outgoingFuture, streamCache, categoryAt);
+        }
         queuePreference = current; queueSources = currentSources;
         // Keep the current playback lease until the next category has a
         // verified candidate, then switch automatically. Never show an
@@ -1209,6 +1218,9 @@ public final class ChaosFeedView extends FrameLayout {
         reconcilePlaybackWindow(); // Retire old neighbors while retaining the current URL lease.
         // Establish the category session before rechecking cached clip evidence.
         sourceMixer.requestPreference(activity, () -> post(this::loadMorePool), false);
+        ShitTokCategoryReturnCache.Checkpoint savedCategory =
+                returnCategories.take(currentSources, current, categoryAt);
+        boolean sameSelected = restoreCategoryCheckpoint(savedCategory);
         ArrayList<NativeContentItem> warm = new ArrayList<>();
         for (ShitTokWarmCategoryCache.Entry entry : warmCategories.take(currentSources, current, android.os.SystemClock.elapsedRealtime())) {
             streamCache.put(entry.item.url, entry.stream);
@@ -1222,10 +1234,60 @@ public final class ChaosFeedView extends FrameLayout {
             reconcilePlaybackWindow();
             post(this::activatePendingCategory);
         }
+        if (sameSelected) {
+            pendingCategoryActivation = false;
+            categoryWaitingVisible = false;
+            removeCallbacks(showCategoryWait);
+            pager.setUserInputEnabled(!searchCoverActive);
+        }
         refillDeferred = true;
         continuityWorkNeeded = true;
         post(this::loadMorePool);
-        } finally { endQueueUpdate(); }
+        } finally {
+            endQueueUpdate();
+            if (sameSelected && active && hostResumed) {
+                reconcilePlaybackWindow();
+                playSelected();
+            }
+        }
+    }
+
+    /** Restore the selected clip before its queued successors, not a fresh random batch. */
+    private boolean restoreCategoryCheckpoint(ShitTokCategoryReturnCache.Checkpoint checkpoint) {
+        if (checkpoint == null) return false;
+        boolean selectedAlreadyVisible = checkpoint.selectedUrl.equals(selectedUrl)
+                && hasSelectedPage() && eligiblePreference(items.get(selectedPosition), queuePreference);
+        for (ShitTokCategoryReturnCache.Entry entry : checkpoint.entries) {
+            if (entry.item == null || entry.item.url == null
+                    || !eligiblePreference(entry.item, queuePreference)
+                    || !eligibleVideoAspect(entry.item.aspectRatioHint)) continue;
+            String url = entry.item.url;
+            if (entry.stream != null) streamCache.put(url, entry.stream);
+            int existing = indexOfUrl(url);
+            if (existing == selectedPosition) continue; // Same clip after a rapid A-B-A tap.
+            if (existing >= 0 && existing < selectedPosition) {
+                int destination = selectedPosition;
+                items.add(destination, items.remove(existing));
+                final int from = existing, to = destination;
+                publishQueueChange(() -> adapter.notifyItemMoved(from, to));
+            } else if (existing < 0) {
+                // Only re-admit clips the user explicitly left in this category.
+                // Other unseen-first/anti-repeat rules are unchanged.
+                sessionUrls.remove(url);
+                sessionIdentities.remove(ShitTokContentIdentity.page(url));
+                if (entry.stream != null)
+                    sessionIdentities.remove(ShitTokContentIdentity.media(entry.stream.mediaUrl));
+                int before = items.size();
+                appendUnique(java.util.Collections.singletonList(entry.item));
+                if (items.size() > before)
+                    publishQueueChange(() -> adapter.notifyItemRangeInserted(before, items.size() - before));
+            }
+        }
+        if (checkpoint.entries.size() > 0) {
+            sequenceFilteredFuture();
+            post(this::activatePendingCategory);
+        }
+        return selectedAlreadyVisible;
     }
 
     static int firstReadyCategoryIndex(List<NativeContentItem> queue, int after,
