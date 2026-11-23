@@ -644,6 +644,201 @@ Deno.serve(async (request) => {
       });
     }
 
+
+    // Threaded admin inbox: one conversation per participant pair, all history counted.
+    // Read-only and protected by the same private admin token as existing actions.
+    if (action === "admin_dm_conversations") {
+      const queryText = lower(body.query);
+      const filter = clean(body.filter) || "all";
+      if (!["all", "reported"].includes(filter)) {
+        return response({ error: "Invalid conversation filter." }, 400);
+      }
+      const groups = new Map<string, any>();
+      const groupByMessage = new Map<string, string>();
+      const batchSize = 1000;
+      const maxRows = 20000;
+      for (let offset = 0; offset < maxRows; offset += batchSize) {
+        const { data, error } = await db.from("direct_messages")
+          .select("id,sender_id,recipient_id,body,created_at,read_at")
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(offset, offset + batchSize - 1);
+        if (error) throw error;
+        const page = data ?? [];
+        for (const row of page) {
+          const first = clean(row.sender_id);
+          const second = clean(row.recipient_id);
+          if (!first || !second) continue;
+          const ids = [first, second].sort();
+          const key = ids.join(":");
+          let group = groups.get(key);
+          if (!group) {
+            group = {
+              participant_a_id: ids[0], participant_b_id: ids[1],
+              last_message_id: clean(row.id),
+              last_message_body: String(row.body ?? ""),
+              last_sender_id: first,
+              last_created_at: clean(row.created_at),
+              message_count: 0, unread_count: 0, report_count: 0,
+              report_reasons_set: new Set<string>(),
+              query_match: !queryText,
+            };
+            groups.set(key, group);
+          }
+          group.message_count++;
+          if (!row.read_at) group.unread_count++;
+          if (queryText && [row.id, first, second, row.body].some((value) => lower(value).includes(queryText))) {
+            group.query_match = true;
+          }
+          groupByMessage.set(clean(row.id), key);
+        }
+        if (page.length < batchSize) break;
+        if (offset + batchSize === maxRows) {
+          return response({ error: "Conversation archive is too large for this view." }, 503);
+        }
+      }
+
+      // Preserve report badges from the original threaded admin view.
+      const { data: reports, error: reportError } = await db.from("social_reports")
+        .select("direct_message_id,reason")
+        .not("direct_message_id", "is", null)
+        .limit(5001);
+      if (reportError) throw reportError;
+      if ((reports ?? []).length > 5000) {
+        return response({ error: "Report archive is too large for this view." }, 503);
+      }
+      for (const report of reports ?? []) {
+        const group = groups.get(groupByMessage.get(clean(report.direct_message_id)) ?? "");
+        if (!group) continue;
+        group.report_count++;
+        const reason = clean(report.reason);
+        if (reason) group.report_reasons_set.add(reason);
+        if (queryText && lower(reason).includes(queryText)) group.query_match = true;
+      }
+      const profiles = profileMap(await loadProfiles(db));
+      const items = [...groups.values()].map((group) => {
+        group.participant_a_name = profileName(profiles.get(group.participant_a_id), group.participant_a_id);
+        group.participant_b_name = profileName(profiles.get(group.participant_b_id), group.participant_b_id);
+        group.last_sender_name = profileName(profiles.get(group.last_sender_id), group.last_sender_id);
+        if (queryText && [group.participant_a_name, group.participant_b_name].some(
+          (value) => lower(value).includes(queryText))) group.query_match = true;
+        return group;
+      }).filter((group) => group.query_match && (filter === "all" || group.report_count > 0))
+        .sort((left, right) => right.last_created_at.localeCompare(left.last_created_at)
+          || right.last_message_id.localeCompare(left.last_message_id))
+        .slice(0, 200)
+        .map((group) => ({
+          participant_a_id: group.participant_a_id, participant_a_name: group.participant_a_name,
+          participant_b_id: group.participant_b_id, participant_b_name: group.participant_b_name,
+          last_message_id: group.last_message_id, last_message_body: group.last_message_body,
+          last_sender_id: group.last_sender_id, last_sender_name: group.last_sender_name,
+          last_created_at: group.last_created_at, message_count: group.message_count,
+          unread_count: group.unread_count, report_count: group.report_count,
+          report_reasons: [...group.report_reasons_set],
+        }));
+      return response({ items });
+    }
+
+    // Owner-only, read-only DM archive. Existing app-user RLS and inboxes are unchanged.
+    // Results are bounded and fetched only when the private admin explicitly opens DMs.
+    if (action === "admin_dm_messages") {
+      const cursor = clean(body.cursor);
+      let beforeAt = "";
+      let beforeId = "";
+      if (cursor) {
+        const separator = cursor.lastIndexOf("|");
+        beforeAt = cursor.slice(0, separator);
+        beforeId = cursor.slice(separator + 1);
+        if (separator < 1 || !Number.isFinite(Date.parse(beforeAt)) || !userIdPattern.test(beforeId)) {
+          return response({ error: "Invalid DM page cursor." }, 400);
+        }
+      }
+
+      const participantA = clean(body.participant_a_id);
+      const participantB = clean(body.participant_b_id);
+      if ((participantA || participantB) &&
+          (!userIdPattern.test(participantA) || !userIdPattern.test(participantB) ||
+           participantA === participantB)) {
+        return response({ error: "Invalid conversation participants." }, 400);
+      }
+      const pageSize = 50;
+      const query = db
+        .from("direct_messages")
+        .select("id,sender_id,recipient_id,body,attachment_bucket,attachment_path,created_at,read_at");
+      const timeFilter = cursor
+        ? `or(created_at.lt.${beforeAt},and(created_at.eq.${beforeAt},id.lt.${beforeId}))`
+        : "";
+      // Keep the legacy unscoped archive endpoint functional for Admin 7.0.1.
+      const pairFilter = participantA && participantB
+        ? `and(sender_id.eq.${participantA},recipient_id.eq.${participantB}${timeFilter ? "," + timeFilter : ""}),and(sender_id.eq.${participantB},recipient_id.eq.${participantA}${timeFilter ? "," + timeFilter : ""})`
+        : "";
+      const filtered = pairFilter ? query.or(pairFilter) :
+        cursor ? query.or(`created_at.lt.${beforeAt},and(created_at.eq.${beforeAt},id.lt.${beforeId})`) : query;
+      const { data, error } = await filtered
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(pageSize + 1);
+      if (error) throw error;
+      const rows = (data ?? []).slice(0, pageSize);
+      const people = [...new Set(rows.flatMap((message) => [
+        clean(message.sender_id), clean(message.recipient_id),
+      ]))];
+      const profiles = new Map<string, any>();
+      if (people.length) {
+        const { data: identities, error: identitiesError } = await db
+          .from("profiles")
+          .select("user_id,username,display_name")
+          .in("user_id", people);
+        if (identitiesError) throw identitiesError;
+        for (const profile of identities ?? []) profiles.set(clean(profile.user_id), profile);
+      }
+      const messageReports = new Map<string, string[]>();
+      if (rows.length) {
+        const { data: reportRows, error: reportError } = await db.from("social_reports")
+          .select("direct_message_id,reason")
+          .in("direct_message_id", rows.map((message) => clean(message.id)));
+        if (reportError) throw reportError;
+        for (const report of reportRows ?? []) {
+          const id = clean(report.direct_message_id);
+          messageReports.set(id, [...(messageReports.get(id) ?? []), clean(report.reason)]);
+        }
+      }
+      const items = await Promise.all(rows.map(async (message) => {
+        const senderId = clean(message.sender_id);
+        const recipientId = clean(message.recipient_id);
+        const bucket = clean(message.attachment_bucket);
+        const path = clean(message.attachment_path);
+        let mediaUrl: string | null = null;
+        // Never accept a caller-provided storage path. Short-lived links are
+        // generated solely from an existing, validated message attachment.
+        if (["social-photos", "social-gifs"].includes(bucket) &&
+            path === `${senderId}/${clean(message.id)}`) {
+          const { data: signed } = await db.storage.from(bucket).createSignedUrl(path, 300);
+          mediaUrl = signed?.signedUrl ?? null;
+        }
+        return {
+          id: clean(message.id),
+          sender_id: senderId,
+          sender_name: profileName(profiles.get(senderId), senderId),
+          recipient_id: recipientId,
+          recipient_name: profileName(profiles.get(recipientId), recipientId),
+          body: String(message.body ?? ""),
+          created_at: clean(message.created_at),
+          read_at: message.read_at ?? null,
+          has_attachment: Boolean(path),
+          attachment_kind: bucket === "social-gifs" ? "GIF" : bucket === "social-photos" ? "Photo" : "",
+          media_url: mediaUrl,
+          report_count: (messageReports.get(clean(message.id)) ?? []).length,
+          report_reasons: [...new Set(messageReports.get(clean(message.id)) ?? [])].filter(Boolean),
+        };
+      }));
+      const last = rows[rows.length - 1];
+      const nextCursor = (data ?? []).length > pageSize && last
+        ? `${clean(last.created_at)}|${clean(last.id)}`
+        : null;
+      return response({ items, next_cursor: nextCursor });
+    }
+
     if (action === "social_activity") {
       const query = lower(body.query);
       const filter = clean(body.filter) || "all";
