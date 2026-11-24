@@ -67,7 +67,7 @@ final class EromePages {
         for (Element album : doc.select("div.album")) {
             if (albums.size() >= MAX_SEARCH_RESULTS) break;
             NativeContentItem item = albumCard(doc, album);
-            if (item != null) albums.put(item.url, item);
+            if (item != null) albums.putIfAbsent(item.url, item);
         }
         if (albums.isEmpty()) {
             if (isEmptySearch(doc)) return new SearchPage(new ArrayList<>(), false);
@@ -91,11 +91,11 @@ final class EromePages {
         for (Element group : doc.select("div.media-group")) {
             if (media.size() >= MAX_ALBUM_MEDIA) break;
             NativeContentItem video = videoItem(group, canonical, title, uploader);
-            if (video != null) media.put(video.url, video);
+            if (video != null) media.putIfAbsent(video.url, video);
             for (Element image : group.select("img.img-front")) {
                 if (media.size() >= MAX_ALBUM_MEDIA) break;
                 NativeContentItem photo = imageItem(image, canonical, title, uploader);
-                if (photo != null) media.put(photo.url, photo);
+                if (photo != null) media.putIfAbsent(photo.url, photo);
             }
         }
         if (media.isEmpty() && doc.selectFirst("h1.album-title-page, div.media-group") == null) {
