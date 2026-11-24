@@ -159,17 +159,9 @@ final class BunkrCreatorGalleryRepository {
         if (paw != null) {
             State guard = state(context, sessionId, query);
             synchronized (guard) {
-                BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.restore(context, sessionId);
-                if (snapshot != null && snapshot.endReached) return new Batch(new ArrayList<>(), true);
-                int offset = snapshot == null ? 0 : snapshot.currentPage * PawchiveRepository.PAGE_SIZE;
-                PawchiveRepository.GalleryPage page = new PawchiveRepository().galleryPage(paw, offset);
-                if (listener != null) listener.onItems(page.items);
-                try {
-                    BunkrGallerySessionStore.recordCreatorBatch(context, sessionId, page.items, !page.hasMore,
-                            new org.json.JSONObject().put("query", query).put("source", "pawchive")
-                                    .put("profile", sourceProfileUrl).put("offset", offset + PawchiveRepository.PAGE_SIZE));
-                } catch (org.json.JSONException error) { throw new IOException("Could not save gallery cursor", error); }
-                return new Batch(page.items, !page.hasMore);
+                Batch batch = fetchPawchiveWithBunkr(context, guard, paw, listener);
+                saveCursor(context, sessionId, guard, batch);
+                return batch;
             }
         }
         State state = state(context, sessionId, query);
@@ -179,6 +171,93 @@ final class BunkrCreatorGalleryRepository {
             saveCursor(context, sessionId, state, batch);
             return batch;
         }
+    }
+
+    // Pawchive's service/id is a storage identity, never a Bunkr search term.
+    static String pawchiveBunkrQuery(PawchiveRepository.Creator creator) {
+        if (creator == null) return "";
+        String name = creator.name.trim();
+        return name.length() >= 3 && !name.matches("[0-9]+")
+                && !name.startsWith("pawchive:") ? name : "";
+    }
+
+    private Batch fetchPawchiveWithBunkr(Context context, State state, PawchiveRepository.Creator paw,
+            ProgressListener listener) throws IOException {
+        if (!paw.profileUrl().equals(state.pawProfile)) {
+            state.pawProfile = paw.profileUrl();
+            state.pawOffset = 0;
+            state.pawFinished = false;
+            // The other catalogs are intentionally excluded from this provider-specific lane.
+            state.discoveryQueries.clear();
+            state.verifiedHandles.clear();
+            state.pending.clear();
+            state.albumUrls.clear();
+            state.nextSearchPage = 1;
+            state.nextBunkrAlias = 1;
+            state.searchFinished = false;
+            state.bunkrSearchFailures = 0;
+            String name = pawchiveBunkrQuery(paw);
+            if (!name.isEmpty()) addDiscoveryQuery(state, name);
+        }
+        ArrayList<NativeContentItem> result = new ArrayList<>();
+        IOException pawFailure = null;
+        if (!state.pawFinished) {
+            try {
+                PawchiveRepository.GalleryPage page = new PawchiveRepository().galleryPage(paw, state.pawOffset);
+                for (NativeContentItem item : page.items) {
+                    if (item != null && !item.url.isEmpty() && state.loadedMediaUrls.add(item.url))
+                        result.add(item);
+                }
+                state.pawOffset += PawchiveRepository.PAGE_SIZE;
+                state.pawFinished = !page.hasMore;
+                if (listener != null && !result.isEmpty()) listener.onItems(new ArrayList<>(result));
+            } catch (IOException failure) {
+                pawFailure = failure;
+            }
+        }
+
+        // Deliver Pawchive immediately, then reuse the existing confirmed-album search and pagination.
+        // Limit supplementary work per batch; a Bunkr outage must never hide a native Pawchive page.
+        if (!Thread.currentThread().isInterrupted() && !state.discoveryQueries.isEmpty()) {
+            Context app = context.getApplicationContext();
+            try {
+                loadAlbumsIfNeeded(app, state);
+                state.bunkrSearchFailures = 0;
+            } catch (IOException failure) {
+                if (++state.bunkrSearchFailures >= 2) {
+                    state.searchFinished = true;
+                    state.nextBunkrAlias = state.discoveryQueries.size();
+                }
+            }
+            BatchWork work = new BatchWork();
+            for (int i = 0; i < 2 && !state.pending.isEmpty(); i++) requestAlbum(app, state, work);
+            long deadline = SystemClock.elapsedRealtime() + ALBUM_BATCH_BUDGET_MS;
+            try {
+                while (!work.requests.isEmpty()) {
+                    long remaining = deadline - SystemClock.elapsedRealtime();
+                    if (remaining <= 0) break;
+                    Future<MediaPage> future = work.completed.poll(remaining, TimeUnit.MILLISECONDS);
+                    if (future == null) break;
+                    applyCompletedPage(state, work, future, listener);
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            } finally {
+                for (Future<MediaPage> future : new ArrayList<>(work.requests.keySet())) {
+                    if (future.isDone()) applyCompletedPage(state, work, future, listener);
+                    else {
+                        future.cancel(true);
+                        work.requests.remove(future).onFailure.accept(new TimeoutException("Bunkr album timed out"));
+                    }
+                }
+            }
+            result.addAll(work.bunkrItems);
+        } else if (state.discoveryQueries.isEmpty()) state.searchFinished = true;
+
+        if (pawFailure != null && result.isEmpty()) throw pawFailure;
+        boolean bunkrFinished = state.searchFinished && state.pending.isEmpty()
+                && state.nextBunkrAlias >= state.discoveryQueries.size();
+        return new Batch(result, state.pawFinished && bunkrFinished);
     }
 
     private Batch fetchNextLocked(Context context, State state, ProgressListener listener) throws IOException {
@@ -948,6 +1027,8 @@ final class BunkrCreatorGalleryRepository {
         try {
             org.json.JSONObject json = new org.json.JSONObject().put("query", state.query).put("version", CURSOR_VERSION)
                     .put("next", state.nextSearchPage).put("searchFinished", state.searchFinished)
+                    .put("pawProfile", state.pawProfile).put("pawOffset", state.pawOffset)
+                    .put("pawFinished", state.pawFinished)
                     .put("nextBunkrAlias", state.nextBunkrAlias)
                     .put("discoveryQueries", new org.json.JSONArray(state.discoveryQueries))
                     .put("verifiedHandles", new org.json.JSONArray(state.verifiedHandles))
@@ -1004,6 +1085,9 @@ final class BunkrCreatorGalleryRepository {
         if (json == null || json.optInt("version") != CURSOR_VERSION
                 || !query.equalsIgnoreCase(json.optString("query"))) return state;
         state.initialized = true;
+        state.pawProfile = json.optString("pawProfile");
+        state.pawOffset = Math.max(0, json.optInt("pawOffset"));
+        state.pawFinished = json.optBoolean("pawFinished");
         state.nextSearchPage = Math.max(1, json.optInt("next", 1));
         state.searchFinished = json.optBoolean("searchFinished");
         state.nextBunkrAlias = Math.max(1, json.optInt("nextBunkrAlias", 1));
@@ -1157,6 +1241,9 @@ final class BunkrCreatorGalleryRepository {
         final Set<String> wikiFeetProfileUrls = new HashSet<>();
         final Set<String> onlyHavenProfileUrls = new HashSet<>();
         final Set<String> loadedMediaUrls = new HashSet<>();
+        String pawProfile = "";
+        int pawOffset;
+        boolean pawFinished;
         int nextSearchPage = 1;
         int nextBunkrAlias = 1;
         int bunkrSearchFailures;

@@ -152,7 +152,8 @@ final class CreatorGallerySpec {
         addEvidence(evidence, "profile:", urls);
         addEvidence(evidence, "alias:", aliases);
         Collections.sort(evidence);
-        return "creator-gallery:v3:" + digest(clean(query).toLowerCase(Locale.ROOT) + "\n"
+        String prefix = PawchiveRepository.isProfile(profile) ? "creator-gallery:paw-bunkr-v1:" : "creator-gallery:v3:";
+        return prefix + digest(clean(query).toLowerCase(Locale.ROOT) + "\n"
                 + clean(profile) + "\n" + clean(favoriteKey).toLowerCase(Locale.ROOT)
                 + "\n" + String.join("\n", evidence));
     }
