@@ -41,6 +41,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     static final int SOURCE_REMOTE = 0;
     static final int SOURCE_LIBRARY = 1;
+    static final int SOURCE_SAMPLE_ALBUM = 2;
 
     private static final int TYPE_SECTION = 0;
     private static final int TYPE_RESULT = 1;
@@ -343,7 +344,9 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     private String metaText(NativeContentItem item, int source) {
         StringBuilder meta;
-        if (source == SOURCE_LIBRARY) {
+        if (source == SOURCE_SAMPLE_ALBUM) {
+            meta = new StringBuilder("Sample album");
+        } else if (source == SOURCE_LIBRARY) {
             meta = new StringBuilder("Library");
         } else if (item.isCreator()) {
             meta = new StringBuilder("Creator");
@@ -387,7 +390,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     private void requestRenderedThumbnail(NativeContentItem item, String rejectedUrl) {
-        if (item == null || item.isSection() || WikiFeetRepository.isRetiredItem(item)) return;
+        if (item == null || AlbumSearchFixture.isSample(item.url) || item.isSection() || WikiFeetRepository.isRetiredItem(item)) return;
         if ((item.isSeries() || item.isCategory()) && !BunkrRepository.isAlbumUrl(item.url)) return;
         if (item.url == null || item.url.isEmpty()) return;
         if ((rejectedUrl == null || rejectedUrl.isEmpty()) &&
@@ -435,6 +438,10 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     private void loadImage(ImageView image, NativeContentItem item) {
         Glide.with(image).clear(image);
         image.setImageDrawable(new ColorDrawable(Color.rgb(31, 31, 36)));
+        if (AlbumSearchFixture.isSample(item.url)) {
+            image.setImageResource(android.R.drawable.ic_menu_gallery);
+            return;
+        }
         if (WikiFeetRepository.isRetiredItem(item) && !item.imageUrl.startsWith("file://")) return;
 
         byte[] embedded = null;
