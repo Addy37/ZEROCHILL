@@ -49,7 +49,7 @@ public class OnlyFapGenderShelvesTest {
         };
     }
     @Test public void everyFilteredModeUsesDistinctPagesAndPublishesThreeCategoryShelves() {
-        for (ContentPreference preference : ContentPreference.values()) {
+        for (ContentPreference preference : ContentPreference.standardValues()) {
             if (preference == ContentPreference.ALL) continue;
             mode(preference);
             List<Integer> offsets = new ArrayList<>();
@@ -178,7 +178,7 @@ public class OnlyFapGenderShelvesTest {
         for (ContentPreference selected : new ContentPreference[]{ContentPreference.WOMEN, ContentPreference.MEN,
                 ContentPreference.TRANS_WOMEN, ContentPreference.ALL, ContentPreference.WOMEN}) {
             mode(selected);
-            for (ContentPreference old : ContentPreference.values()) if (old != selected) {
+            for (ContentPreference old : ContentPreference.standardValues()) if (old != selected) {
                 hub.setPreferenceShelf(old, 1, creators(old.value, 0, 16), false);
                 hub.finishPreferenceShelves(old, false);
             }
@@ -213,7 +213,7 @@ public class OnlyFapGenderShelvesTest {
         activity.getSharedPreferences("creator_favorites", 0).edit()
                 .putStringSet("creators", Collections.singleton(CreatorFavoriteStore.key(saved))).commit();
         CreatorCatalog.remember(activity, Collections.singletonList(saved));
-        for (ContentPreference selected : ContentPreference.values()) {
+        for (ContentPreference selected : ContentPreference.standardValues()) {
             mode(selected);
             assertTrue(CreatorFavoriteStore.contains(activity, saved));
             assertTrue(CreatorCatalog.favoriteGroups(activity).stream().anyMatch(group -> group.item.url.equals(saved.url)));

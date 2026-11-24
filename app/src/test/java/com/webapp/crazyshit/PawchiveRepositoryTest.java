@@ -73,6 +73,36 @@ public class PawchiveRepositoryTest {
         assertTrue(media.get(1).video);
     }
 
+    @Test public void nativeGalleryUsesExactProfileAndTypedMediaWithoutCrossSourceLookup() throws Exception {
+        java.util.List<String> requests = new java.util.ArrayList<>();
+        PawchiveRepository repository = new PawchiveRepository(route -> {
+            requests.add(route);
+            return "[{\"service\":\"fanbox\",\"user\":\"1\",\"id\":\"2\","
+                    + "\"title\":\"Artwork\",\"file\":{\"path\":\"/ab/cd/photo.jpg\"},"
+                    + "\"attachments\":[{\"path\":\"/ab/cd/clip.mp4\"}]}]";
+        });
+        PawchiveRepository.Creator creator = PawchiveRepository.profile(
+                "https://pawchive.pw/fanbox/user/1", "Artist");
+        NativeContentItem card = PawchiveRepository.creatorItem(creator);
+        assertEquals("pawchive:fanbox/1", CreatorFavoriteStore.key(card));
+        assertEquals(creator.profileUrl(), NativeFeedBrowserActivity.creatorProfileHint(card));
+        PawchiveRepository.GalleryPage page = repository.galleryPage(creator, 50);
+        assertEquals(java.util.Collections.singletonList("/fanbox/user/1?o=50"), requests);
+        assertEquals(2, page.items.size());
+        assertTrue(page.items.get(0).isImage());
+        assertTrue(page.items.get(1).isVideo());
+        assertEquals(creator.profileUrl(), page.items.get(0).uploader);
+        assertEquals(creator.profileUrl(), OnlyFapVideoMetadata.creator(page.items.get(1)).url);
+        assertFalse(page.hasMore);
+    }
+
+    @Test public void directMediaRejectsForeignHostsAndUnsupportedPaths() {
+        assertTrue(PawchiveRepository.isDirectMedia("https://file.pawchive.pw/data/ab/cd/photo.jpg"));
+        assertFalse(PawchiveRepository.isDirectMedia("https://file.pawchive.pw.evil.test/data/ab/cd/photo.jpg"));
+        assertFalse(PawchiveRepository.isDirectMedia("https://file.pawchive.pw/data/../photo.jpg"));
+        assertFalse(PawchiveRepository.isDirectMedia("https://file.pawchive.pw/data/ab/cd/archive.zip"));
+    }
+
     @Test(expected = IOException.class)
     public void postDetailRejectsDifferentIdentity() throws Exception {
         PawchiveRepository repo = new PawchiveRepository(route ->

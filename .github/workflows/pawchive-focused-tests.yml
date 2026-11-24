@@ -25,8 +25,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7005001'
-      APP_VERSION_NAME: '7.5.0-pawchive-test.1'
+      APP_VERSION_CODE: '7005002'
+      APP_VERSION_NAME: '7.5.0-pawchive-test.2'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v6

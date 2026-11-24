@@ -158,7 +158,7 @@ final class OnlyFapHeroPolicy {
         if (items == null) return;
         for (NativeContentItem item : items) {
             if (result.size() >= limit) break;
-            if (item == null || !item.isCreator()) continue;
+            if (item == null || !item.isCreator() || PawchiveRepository.isProfile(item.url)) continue;
             String key = CreatorFavoriteStore.key(item);
             if (!key.isEmpty() && !excluded.contains(key)) result.putIfAbsent(key, item);
         }

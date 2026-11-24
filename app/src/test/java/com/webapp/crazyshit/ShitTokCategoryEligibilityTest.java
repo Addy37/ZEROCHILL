@@ -9,12 +9,12 @@ public class ShitTokCategoryEligibilityTest {
         NativeContentItem unknown = ShitTokSourcePoolTest.clip("unknown", 1);
         Set<String> evidence = new HashSet<>();
         assertTrue(ShitTokPreferenceMix.eligible(unknown, ContentPreference.ALL, evidence));
-        for (ContentPreference selected : ContentPreference.values()) {
+        for (ContentPreference selected : ContentPreference.standardValues()) {
             if (selected == ContentPreference.ALL) continue;
             assertFalse(ShitTokPreferenceMix.eligible(unknown, selected, evidence));
             NativeContentItem verified = ShitTokSourcePoolTest.clip("verified", selected.ordinal());
             evidence.add(selected.value + "|" + verified.url);
-            for (ContentPreference mode : ContentPreference.values()) {
+            for (ContentPreference mode : ContentPreference.standardValues()) {
                 assertEquals(mode == selected || mode == ContentPreference.ALL,
                         ShitTokPreferenceMix.eligible(verified, mode, evidence));
             }
@@ -23,7 +23,7 @@ public class ShitTokCategoryEligibilityTest {
     @Test public void titlesNamesAndProviderLabelsNeverClassifyUnknownContent() {
         NativeContentItem unknown = new NativeContentItem("media", "Women Trans Men Groups",
                 "https://example.invalid/women", "", "", "Women", "");
-        for (ContentPreference mode : ContentPreference.values()) if (mode != ContentPreference.ALL)
+        for (ContentPreference mode : ContentPreference.standardValues()) if (mode != ContentPreference.ALL)
             assertFalse(ShitTokPreferenceMix.eligible(unknown, mode, Collections.emptySet()));
     }
 }

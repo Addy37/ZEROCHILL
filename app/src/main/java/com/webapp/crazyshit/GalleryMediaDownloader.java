@@ -43,7 +43,7 @@ final class GalleryMediaDownloader {
         if (!item.isImage()) return;
 
         String mediaUrl = value(resolvedUrl);
-        if (mediaUrl.isEmpty() && isOnlyHavenDirectImage(item)) {
+        if (mediaUrl.isEmpty() && (isOnlyHavenDirectImage(item) || PawchiveRepository.isDirectMedia(item.url))) {
             mediaUrl = value(item.url);
         }
         String referer = value(requestReferer);
@@ -94,7 +94,7 @@ final class GalleryMediaDownloader {
             String requestReferer
     ) {
         String mediaUrl = value(resolvedUrl);
-        if (mediaUrl.isEmpty() && isOnlyHavenDirectVideo(item)) {
+        if (mediaUrl.isEmpty() && (isOnlyHavenDirectVideo(item) || PawchiveRepository.isDirectMedia(item.url))) {
             mediaUrl = value(item.url);
         }
         if (mediaUrl.isEmpty()) {

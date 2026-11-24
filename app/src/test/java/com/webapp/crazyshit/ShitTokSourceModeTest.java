@@ -22,7 +22,7 @@ public class ShitTokSourceModeTest {
                 public void onSourceSelectorVisibilityChanged(boolean show) { visible.set(show); }
             }, false);
             try {
-                for (ContentPreference mode : ContentPreference.values()) {
+                for (ContentPreference mode : ContentPreference.standardValues()) {
                     ShitTokContentPreference.set(activity.get(), mode);
                     ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
                     assertTrue(visible.get());
@@ -127,7 +127,7 @@ public class ShitTokSourceModeTest {
     @Test public void showEligibilityIsExactAndInventoryIsIsolatedAcrossBothDimensions() {
         ShitTokFilteredInventory inv = inventory();
         NativeContentItem womenClip = null;
-        for (ContentPreference gender : ContentPreference.values()) {
+        for (ContentPreference gender : ContentPreference.standardValues()) {
             inv.request(ShitTokSourceMode.ONLY_FAP, gender, true, () -> {});
             List<NativeContentItem> clips = inv.take(gender);
             boolean show = clips.stream().anyMatch(i -> ShitTokAspectPriority.sourceKey(i).equals("shit-show"));
@@ -149,10 +149,10 @@ public class ShitTokSourceModeTest {
         NativeContentItem clip = ShitTokFilteredInventoryTest.clip("Jane", 6, 1);
         CrazyShitRepository.StreamInfo stream = new CrazyShitRepository.StreamInfo(clip.url, clip.url, "clip");
         for (ShitTokSourceMode source : ShitTokSourceMode.values())
-            for (ContentPreference gender : ContentPreference.values())
+            for (ContentPreference gender : ContentPreference.standardValues())
                 cache.save(source, gender, Arrays.asList(clip), Collections.singletonMap(clip.url, stream), 0);
         for (ShitTokSourceMode source : ShitTokSourceMode.values())
-            for (ContentPreference gender : ContentPreference.values()) {
+            for (ContentPreference gender : ContentPreference.standardValues()) {
                 assertEquals(1, cache.take(source, gender, 1).size());
                 assertTrue(cache.take(source, gender, 1).isEmpty());
             }

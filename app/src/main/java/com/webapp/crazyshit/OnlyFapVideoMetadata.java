@@ -12,7 +12,8 @@ final class OnlyFapVideoMetadata {
     private OnlyFapVideoMetadata() { }
 
     static boolean applies(NativeContentItem item) {
-        return item != null && (WikiFeetRepository.isWikiFeetUrl(item.uploader)
+        return item != null && (PawchiveRepository.isDirectMedia(item.url)
+                || WikiFeetRepository.isWikiFeetUrl(item.uploader)
                 || WikiFeetRepository.isWikiFeetUrl(item.url) || FapelloRepository.isFapelloUrl(item.url)
                 || OnlyHavenRepository.isOnlyHavenUrl(item.url)
                 || BunkrRepository.isBunkrUrl(item.url)

@@ -33,13 +33,16 @@ final class PawchiveRepository {
     }
 
     private final Transport transport;
+    private final boolean useSharedCache;
 
     PawchiveRepository() {
-        this(PawchiveRepository::request);
+        this.transport = PawchiveRepository::request;
+        this.useSharedCache = true;
     }
 
     PawchiveRepository(Transport transport) {
         this.transport = transport;
+        this.useSharedCache = false;
     }
 
     static final class Creator {
@@ -136,6 +139,7 @@ final class PawchiveRepository {
     private static List<Creator> cachedCreators;
     private static long cachedAt;
     private List<Creator> browseCatalog() throws IOException {
+        if (!useSharedCache) return listCreators();
         synchronized (PawchiveRepository.class) {
             long now = android.os.SystemClock.elapsedRealtime();
             if (cachedCreators != null && now - cachedAt < 300_000L) return cachedCreators;

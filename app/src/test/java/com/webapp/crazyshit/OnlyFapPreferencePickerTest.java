@@ -59,17 +59,24 @@ public class OnlyFapPreferencePickerTest {
         dialog.getWindow().getDecorView().findViewWithTag("preference_trans_men").performClick();
         assertEquals(1, changes[0]);
     }
-    @Test public void pawchiveLaunchDoesNotChangeTheExistingPreference() {
+    @Test public void pawchivePersistsWithoutChangingLegacyOrShitTokChoice() {
         ContentPreference.set(host, ContentPreference.MEN);
+        ShitTokContentPreference.set(host, ContentPreference.WOMEN);
         int[] changes = {0};
         ContentPreferenceUi.chooseAnchored(anchor, () -> changes[0]++);
         AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
         dialog.getWindow().getDecorView().findViewWithTag("preference_pawchive").performClick();
-        android.content.Intent intent = org.robolectric.Shadows.shadowOf(host).getNextStartedActivity();
-        assertNotNull(intent);
-        assertEquals(PawchiveBrowseActivity.class.getName(), intent.getComponent().getClassName());
+        assertEquals(ContentPreference.PAWCHIVE, ContentPreference.getOnlyFap(host));
         assertEquals(ContentPreference.MEN, ContentPreference.get(host));
-        assertEquals(0, changes[0]);
+        assertEquals(ContentPreference.WOMEN, ShitTokContentPreference.get(host));
+        assertEquals(1, changes[0]);
+        ContentPreferenceUi.chooseAnchored(anchor, () -> changes[0]++);
+        dialog = ShadowAlertDialog.getLatestAlertDialog();
+        assertTrue(dialog.getWindow().getDecorView().findViewWithTag("preference_pawchive").isSelected());
+        dialog.getWindow().getDecorView().findViewWithTag("preference_men").performClick();
+        assertEquals(ContentPreference.MEN, ContentPreference.getOnlyFap(host));
+        assertEquals(2, changes[0]);
+        assertEquals(ContentPreference.WOMEN, ShitTokContentPreference.get(host));
     }
     @Test public void rapidTapIsIgnoredAndDetachClosesTheOwnedWindow() {
         ContentPreferenceUi.chooseAnchored(anchor, null);

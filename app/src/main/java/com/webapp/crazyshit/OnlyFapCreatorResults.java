@@ -69,7 +69,7 @@ final class OnlyFapCreatorResults {
                 }
             }
             if (match < 0) {
-                result.add(titled(item, CreatorIdentity.display(item.title)));
+                result.add(PawchiveRepository.isProfile(item.url) ? item : titled(item, CreatorIdentity.display(item.title)));
                 profiles.add(itemProfiles);
                 names.add(name);
             } else {

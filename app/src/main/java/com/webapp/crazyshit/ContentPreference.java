@@ -3,7 +3,7 @@ package com.webapp.crazyshit;
 import android.content.Context;
 import android.content.SharedPreferences;
 
-/** One optional local preference shared by Settings, OnlyFap and ShitTok. */
+/** Legacy six choices plus a separately persisted OnlyFap-only provider selection. */
 enum ContentPreference {
     ALL("all", "All content", "ALL"),
     WOMEN("women", "Women", "♀"),

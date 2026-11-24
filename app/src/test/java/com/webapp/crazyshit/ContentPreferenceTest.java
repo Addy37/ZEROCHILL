@@ -32,7 +32,7 @@ public class ContentPreferenceTest {
         assertEquals(ContentPreference.ALL, ContentPreference.get(context));
         ContentPreference.prefs(context).edit().putString(ContentPreference.KEY, "non_binary").commit();
         assertEquals(ContentPreference.ALL, ContentPreference.get(context));
-        assertEquals(6, ContentPreference.values().length);
+        assertEquals(6, ContentPreference.standardValues().length);
     }
     @Test public void actualChangesAreAcknowledgedOncePerSurfaceAcrossRecreation() {
         assertTrue(ContentPreference.set(context, ContentPreference.MEN));
@@ -95,7 +95,7 @@ public class ContentPreferenceTest {
     @Test public void glassPillAndPickerReflectEveryModeAfterRecreationAndCancelDoesNotChangeIt() {
         org.robolectric.android.controller.ActivityController<Activity> controller =
                 Robolectric.buildActivity(Activity.class).setup();
-        for (ContentPreference mode : ContentPreference.values()) {
+        for (ContentPreference mode : ContentPreference.standardValues()) {
             ContentPreference.set(context, mode);
             controller.recreate();
             Activity activity = controller.get();
@@ -178,7 +178,7 @@ public class ContentPreferenceTest {
         members.put("onlyhaven", haven);
         CreatorCatalog.FavoriteGroup group = new CreatorCatalog.FavoriteGroup(fapello, members,
                 new LinkedHashSet<>(members.keySet()), true);
-        for (ContentPreference mode : ContentPreference.values()) {
+        for (ContentPreference mode : ContentPreference.standardValues()) {
             ContentPreference.set(context, mode);
             CreatorGallerySpec spec = CreatorGallerySpec.from(group);
             assertTrue(spec.seedUrls.contains(fapello.url));
@@ -263,8 +263,8 @@ public class ContentPreferenceTest {
         JSONObject document = new JSONObject(new String(Files.readAllBytes(Paths.get("src/main/assets/source_config_defaults.json")), java.nio.charset.StandardCharsets.UTF_8));
         String[] tokens = {"woman", "man", "trans_woman", "trans_man", "group"};
         SourceConfig.OnlyHaven config = SourceConfig.parseAndValidate(document.toString()).onlyHaven;
-        for (int i = 1; i < ContentPreference.values().length; i++) {
-            String route = OnlyHavenRepository.categoryRoute(config, ContentPreference.values()[i], 100, 50);
+        for (int i = 1; i < ContentPreference.standardValues().length; i++) {
+            String route = OnlyHavenRepository.categoryRoute(config, ContentPreference.standardValues()[i], 100, 50);
             assertEquals("api/v1/creators?gender=" + tokens[i - 1] + "&content=imported&n=50&o=50", route);
         }
         // An old remote config keeps the bundled contract; a new one can replace data only.
