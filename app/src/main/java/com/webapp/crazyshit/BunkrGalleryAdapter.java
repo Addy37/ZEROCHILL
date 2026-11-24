@@ -767,16 +767,25 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         // The original is decoded at tile size. No separate overlay, custom target or file-size cap.
         RequestBuilder<Drawable> request = Glide.with(holder.image)
                 .load(PawchiveOriginalImageLoader.model(context, item.url, original))
+                // Require GIF decoding for this upgrade, but keep Drawable as the output type
+                // so the normal static thumbnail remains a valid separate fallback request.
+                .decode(com.bumptech.glide.load.resource.gif.GifDrawable.class)
                 .disallowHardwareConfig()
-                .fitCenter()
+                .dontTransform()
                 .override(384, 384)
-                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .diskCacheStrategy(DiskCacheStrategy.DATA)
                 .dontAnimate()
                 .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
                 .listener(new RequestListener<Drawable>() {
                     @Override public boolean onLoadFailed(GlideException error, Object model,
                             Target<Drawable> target, boolean first) {
                         PawchiveMediaRequests.trace(item.url, "grid GIF Glide failed");
+                        if (BuildConfig.DEBUG && error != null) {
+                            // Log exception types only; remote URLs and response content stay private.
+                            for (Throwable cause : error.getRootCauses())
+                                PawchiveMediaRequests.trace(item.url,
+                                        "grid GIF decoder cause " + cause.getClass().getSimpleName());
+                        }
                         return false;
                     }
                     @Override public boolean onResourceReady(Drawable resource, Object model,
