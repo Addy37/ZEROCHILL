@@ -243,7 +243,7 @@ final class BunkrGalleryPagerAdapter
         if (url.isEmpty()) url = value(item.imageUrl);
         if (url.isEmpty() || !preloadedImages.add(url)) return;
         Glide.with(context)
-                .load(withHeaders(url, imageReferer(item)))
+                .load(imageModel(item, url))
                 .disallowHardwareConfig()
                 .fitCenter()
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
@@ -268,7 +268,11 @@ final class BunkrGalleryPagerAdapter
         notifyItemChanged(position, STATE_PAYLOAD);
         NativeContentItem item = itemAt(position);
         if (item != null && PawchiveRepository.isDirectMedia(item.url) && attachedList != null) {
-            attachedList.postDelayed(this::rememberCurrentPawchiveFrame, 250L);
+            attachedList.postDelayed(() -> {
+                NativeContentItem current = itemAt(activeVideoPosition);
+                if (activePlayer == player && current != null && item.url.equals(current.url))
+                    rememberCurrentPawchiveFrame();
+            }, 250L);
         }
     }
 
@@ -277,11 +281,18 @@ final class BunkrGalleryPagerAdapter
         NativeContentItem item = itemAt(activeVideoPosition);
         if (item == null || !PawchiveRepository.isDirectMedia(item.url)) return;
         RecyclerView.ViewHolder raw = attachedList.findViewHolderForAdapterPosition(activeVideoPosition);
-        if (!(raw instanceof Holder) || BunkrMediaPreview.cached(attachedList.getContext(), item) != null) return;
+        if (!(raw instanceof Holder) || !item.url.equals(((Holder) raw).boundUrl)) {
+            PawchiveMediaRequests.trace(item.url, "capture skipped holder");
+            return;
+        }
+        if (BunkrMediaPreview.cached(attachedList.getContext(), item) != null) return;
         PlayerView view = ((Holder) raw).playerView;
         if (view.getPlayer() != activePlayer) return;
         View surface = view.getVideoSurfaceView();
-        if (!(surface instanceof android.view.TextureView) || !((android.view.TextureView) surface).isAvailable()) return;
+        if (!(surface instanceof android.view.TextureView) || !((android.view.TextureView) surface).isAvailable()) {
+            PawchiveMediaRequests.trace(item.url, "capture skipped texture");
+            return;
+        }
         androidx.media3.common.VideoSize video = activePlayer.getVideoSize();
         if (video.width <= 0 || video.height <= 0) return;
         float width = video.width * video.pixelWidthHeightRatio;
@@ -290,6 +301,7 @@ final class BunkrGalleryPagerAdapter
         android.graphics.Bitmap frame = ((android.view.TextureView) surface).getBitmap(
                 Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(video.height * scale)));
         if (frame != null) BunkrMediaPreview.rememberPlaybackFrame(attachedList.getContext(), item, frame);
+        else PawchiveMediaRequests.trace(item.url, "capture returned null");
     }
 
     void onVideoBuffering(int position, Player player, boolean buffering) {
@@ -467,7 +479,7 @@ final class BunkrGalleryPagerAdapter
                 // The old request is cleared by into(). Keep only pixels we own while waiting.
                 Drawable placeholder = sameItem ? holder.image.ownedPreviewSnapshot() : null;
                 RequestBuilder<Drawable> imageRequest = Glide.with(holder.image)
-                        .load(withHeaders(preview, imageReferer(item)))
+                        .load(imageModel(item, preview))
                         .disallowHardwareConfig()
                         .fitCenter()
                         .diskCacheStrategy(DiskCacheStrategy.ALL)
@@ -487,6 +499,9 @@ final class BunkrGalleryPagerAdapter
                             ) {
                                 if (holder.imageRequest != request || !item.url.equals(holder.boundUrl)) return true;
                                 holder.imageLoading = false;
+                                if (pawchive) PawchiveMediaRequests.trace(item.url,
+                                        (fullImage ? "original" : "preview") + " Glide failed "
+                                                + error.getClass().getSimpleName());
                                 holder.itemView.post(() -> {
                                     if (holder.imageRequest == request) {
                                         updateState(holder, holder.getBindingAdapterPosition());
@@ -500,7 +515,7 @@ final class BunkrGalleryPagerAdapter
                                     // A failed thumbnail can race the original during shared entry.
                                     // Only the request using the current original can invalidate it.
                                     String currentOriginal = value(resolvedUrls.get(item.url));
-                                    if (bunkrPhoto && (!fullImage || (!currentOriginal.isEmpty()
+                                    if ((bunkrPhoto || pawchive) && (!fullImage || (!currentOriginal.isEmpty()
                                             && !resolved.equals(currentOriginal)))) {
                                         return;
                                     }
@@ -529,6 +544,9 @@ final class BunkrGalleryPagerAdapter
                                 holder.hasUsableImage = true;
                                 listener.onArtworkReady(holder.getBindingAdapterPosition());
                                 if (fullImage) {
+                                    if (pawchive) PawchiveMediaRequests.trace(item.url,
+                                            "original displayed " + resource.getIntrinsicWidth() + "x"
+                                                    + resource.getIntrinsicHeight() + " " + source);
                                     failed.remove(item.url);
                                     loading.remove(item.url);
                                 }
@@ -734,6 +752,12 @@ final class BunkrGalleryPagerAdapter
     @Override
     public int getItemCount() {
         return items.size();
+    }
+
+    private Object imageModel(NativeContentItem item, String url) {
+        if (item.isImage() && PawchiveRepository.isDeliveryFor(item.url, url))
+            return PawchiveOriginalImageLoader.model(context, item.url, url);
+        return withHeaders(url, imageReferer(item));
     }
 
     private GlideUrl withHeaders(String url, String pageUrl) {

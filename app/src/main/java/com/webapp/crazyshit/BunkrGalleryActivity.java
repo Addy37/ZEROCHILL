@@ -774,7 +774,8 @@ public final class BunkrGalleryActivity extends Activity {
                             item.url,
                             resolved.mediaUrl
                     );
-                    if (position != pager.getCurrentItem() && withinPreloadWindow(position)) {
+                    if (!PawchiveRepository.isDirectMedia(item.url)
+                            && position != pager.getCurrentItem() && withinPreloadWindow(position)) {
                         adapter.preloadImage(position);
                     }
                 });

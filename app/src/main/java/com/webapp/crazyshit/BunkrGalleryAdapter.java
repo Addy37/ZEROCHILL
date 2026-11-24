@@ -649,6 +649,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             holder.maintenance.refresh();
             if (file == null) {
                 if (!pawchive) holder.unavailable.setVisibility(View.VISIBLE);
+                else PawchiveMediaRequests.trace(item.url, "tile no poster");
                 return;
             }
             loadMediaPreview(holder, item, file);
@@ -679,11 +680,15 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         if (binding == holder.bindGeneration) {
                             file.delete(); // Regenerate an evicted/corrupt entry on the next attachment.
                             holder.unavailable.setVisibility(View.VISIBLE);
+                            if (PawchiveRepository.isDirectMedia(item.url))
+                                PawchiveMediaRequests.trace(item.url, "tile Glide failed");
                         }
                         return false;
                     }
                     @Override public boolean onResourceReady(Drawable resource, Object model,
                             Target<Drawable> target, DataSource source, boolean firstResource) {
+                        if (binding == holder.bindGeneration && PawchiveRepository.isDirectMedia(item.url))
+                            PawchiveMediaRequests.trace(item.url, "tile displayed");
                         if (adaptiveAspectRatios && binding == holder.bindGeneration)
                             applyAspectRatio(holder, item, resource);
                         return false;
