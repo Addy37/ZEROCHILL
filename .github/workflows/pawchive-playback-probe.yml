@@ -29,7 +29,7 @@ jobs:
                       return None
                   return super().redirect_request(req, fp, code, msg, headers, target)
           opener = u.build_opener(Redirect(), u.HTTPCookieProcessor(jar))
-          def req(url, label, headers=None, limit=16_000_000):
+          def req(url, label, headers=None, limit=24_000_000):
               try:
                   with opener.open(u.Request(url, headers={"User-Agent":ua, **(headers or {})}), timeout=8) as r:
                       body = r.read(limit)
