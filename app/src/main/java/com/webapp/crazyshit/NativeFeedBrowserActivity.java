@@ -1324,9 +1324,14 @@ public class NativeFeedBrowserActivity extends Activity {
             creatorTabsPager.setCurrentItem(CREATOR_TAB_PICTURES, false);
         }
         updateCreatorTabLabels();
+        updateCreatorGifPages();
         creatorTabsPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+            @Override public void onPageScrollStateChanged(int state) {
+                updateCreatorGifPages();
+            }
             @Override
             public void onPageSelected(int position) {
+                updateCreatorGifPages();
                 RecyclerView active = activeCreatorRecycler();
                 if (active != null) {
                     recycler = active;
@@ -1346,6 +1351,16 @@ public class NativeFeedBrowserActivity extends Activity {
                 }, 80L);
             }
         });
+    }
+
+    private void updateCreatorGifPages() {
+        boolean idle = creatorTabsPager != null
+                && creatorTabsPager.getScrollState() == ViewPager2.SCROLL_STATE_IDLE;
+        int selected = activeCreatorTab();
+        for (int i = 0; i < creatorTabAdapters.length; i++) {
+            if (creatorTabAdapters[i] != null)
+                creatorTabAdapters[i].setGifPageActive(idle && i == selected);
+        }
     }
 
     private void attachFeedScrollListener(RecyclerView list) {

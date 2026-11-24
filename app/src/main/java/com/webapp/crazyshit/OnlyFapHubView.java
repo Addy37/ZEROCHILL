@@ -112,9 +112,14 @@ final class OnlyFapHubView extends FrameLayout {
                 shelfCopy(newShelf, "New Creators", "Recently added creators");
                 shelfCopy(hotShelf, "Hot", "Creators getting attention right now");
                 shelfCopy(popularShelf, "Popular", "Popular across OnlyFap sources");
+            } else if (mode == ContentPreference.PAWCHIVE) {
+                shelfCopy(trendingShelf, "Popular", "Most favorited on Pawchive");
+                shelfCopy(newShelf, "Patreon", "Popular Patreon creators");
+                shelfCopy(hotShelf, "Fanbox", "Popular Fanbox creators");
+                shelfCopy(popularShelf, "Explore", "A rotating selection of creators");
             } else {
-                shelfCopy(trendingShelf, "Featured " + mode.label, mode == ContentPreference.PAWCHIVE ? "Pawchive creators" : "OnlyHaven · " + mode.label);
-                shelfCopy(newShelf, "Explore " + mode.label, mode == ContentPreference.PAWCHIVE ? "More creators from Pawchive" : "More creators from OnlyHaven");
+                shelfCopy(trendingShelf, "Featured " + mode.label, "OnlyHaven · " + mode.label);
+                shelfCopy(newShelf, "Explore " + mode.label, "More creators from OnlyHaven");
                 shelfCopy(hotShelf, "More " + mode.label, "Keep exploring " + mode.label);
             }
         }
@@ -141,12 +146,13 @@ final class OnlyFapHubView extends FrameLayout {
     void setPreferenceShelf(ContentPreference mode, int index, List<NativeContentItem> items, boolean failed) {
         if (closed || mode == ContentPreference.ALL || mode != discoveryPreference
                 || mode != ContentPreference.getOnlyFap(getContext())) return;
-        if (index < 0 || index >= OnlyFapCategoryLoader.SHELF_COUNT || failed) return;
+        if (index < 0 || index >= OnlyFapCategoryLoader.shelfCount(mode) || failed) return;
         List<NativeContentItem> result = safe(items);
         CreatorShelf shelf;
         if (index == 0) { trendingItems = result; shelf = trendingShelf; }
         else if (index == 1) { newItems = result; shelf = newShelf; }
-        else { hotItems = result; shelf = hotShelf; }
+        else if (index == 2) { hotItems = result; shelf = hotShelf; }
+        else { popularItems = result; shelf = popularShelf; }
         shelf.adapter.replace(result);
         shelf.container.setVisibility(result.isEmpty() ? View.GONE : View.VISIBLE);
         // A same-mode background refresh may overlap the previous page boundaries.
@@ -154,10 +160,13 @@ final class OnlyFapHubView extends FrameLayout {
         trendingItems = uniquePreferenceShelf(trendingItems, trendingShelf, visible);
         newItems = uniquePreferenceShelf(newItems, newShelf, visible);
         hotItems = uniquePreferenceShelf(hotItems, hotShelf, visible);
+        if (mode == ContentPreference.PAWCHIVE)
+            popularItems = uniquePreferenceShelf(popularItems, popularShelf, visible);
         // Hero membership grows without clearing qualified slots or restarting Liquid Rift.
         List<NativeContentItem> category = new ArrayList<>(trendingItems);
         category.addAll(newItems);
         category.addAll(hotItems);
+        if (mode == ContentPreference.PAWCHIVE) category.addAll(popularItems);
         OnlyFapHeroPolicy.appendUniqueCreators(category, heroDiscoveryItems);
         discoverCandidates = category;
         heroCategoryRevision++;

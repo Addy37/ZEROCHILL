@@ -71,6 +71,35 @@ public class OnlyFapGenderShelvesTest {
             for (NativeContentItem creator : candidates()) assertTrue(creator.url.contains(preference.value));
         }
     }
+    @Test public void pawchivePublishesFourIndependentShelvesAndRestoresLegacyTitles() {
+        ContentPreference.setOnlyFap(activity, ContentPreference.PAWCHIVE);
+        hub.preparePreference(ContentPreference.PAWCHIVE);
+        hub.beginRefresh();
+        List<Integer> offsets = new ArrayList<>();
+        OnlyFapCategoryLoader.load(ContentPreference.PAWCHIVE, (selected, limit, offset) -> {
+            offsets.add(offset);
+            List<NativeContentItem> items = new ArrayList<>();
+            if (offset != 16) for (int i = offset; i < offset + limit; i++)
+                items.add(PawchiveRepository.creatorItem(new PawchiveRepository.Creator(
+                        "patreon", Integer.toString(i), "Creator " + i, 1)));
+            return new OnlyFapCategoryLoader.Batch(items, false);
+        }, () -> true, publish(ContentPreference.PAWCHIVE));
+        assertEquals(Arrays.asList(0, 16, 32, 48), offsets);
+        assertEquals(48, hub.itemCount());
+        assertEquals(48, candidates().size());
+        assertEquals("Popular", title("trendingShelf"));
+        assertEquals("Patreon", title("newShelf"));
+        assertEquals("Fanbox", title("hotShelf"));
+        assertEquals("Explore", title("popularShelf"));
+        assertEquals(16, rail("popularShelf").getAdapter().getItemCount());
+        ContentPreference.setOnlyFap(activity, ContentPreference.MEN);
+        hub.preparePreference(ContentPreference.MEN);
+        assertEquals(0, hub.itemCount());
+        assertEquals("Featured " + ContentPreference.MEN.label, title("trendingShelf"));
+        hub.setPreferenceShelf(ContentPreference.PAWCHIVE, 3, Collections.emptyList(), false);
+        assertEquals(0, hub.itemCount());
+    }
+
     @Test public void sameProviderIdentityAppearsInOneShelfEvenWhenItsDisplayNameChanges() {
         mode(ContentPreference.MEN);
         OnlyFapCategoryLoader.load(ContentPreference.MEN, (selected, limit, offset) -> {

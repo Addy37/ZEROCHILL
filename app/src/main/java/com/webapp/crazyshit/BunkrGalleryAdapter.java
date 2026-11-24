@@ -73,6 +73,23 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final LinkedHashSet<View> favoriteMovingTiles = new LinkedHashSet<>();
     private int favoriteMoveGeneration;
     private boolean previewsActive = true;
+    private boolean gifPageActive = true;
+    private long gifResumeAt;
+    private static final java.util.concurrent.ExecutorService GIF_RESOLVER =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread thread = new Thread(r, "GalleryGifResolver");
+                thread.setDaemon(true);
+                return thread;
+            });
+    private final Runnable resumeGifs = this::updateGifTiles;
+    private final RecyclerView.OnScrollListener gifScroll = new RecyclerView.OnScrollListener() {
+        @Override public void onScrollStateChanged(@NonNull RecyclerView recycler, int state) {
+            deferGifs();
+        }
+        @Override public void onScrolled(@NonNull RecyclerView recycler, int dx, int dy) {
+            if (dx != 0 || dy != 0) deferGifs();
+        }
+    };
     private final java.util.function.Consumer<String> playbackPreviewListener = this::showPlaybackPreview;
     private final LinkedHashSet<Holder> previewHolders = new LinkedHashSet<>();
     private final Rect previewBounds = new Rect();
@@ -91,6 +108,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 else if (holder.needsRepair) repairArtwork(holder, holder.boundItem, holder.boundItem.imageUrl);
             }
         }
+        updateGifTiles();
         return true;
     };
     private final PreloadRequestTracker imagePreloads =
@@ -278,6 +296,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         int next = Math.max(1, columns);
         if (gridColumns == next) return;
         gridColumns = next;
+        deferGifs();
         if (!items.isEmpty()) {
             notifyItemRangeChanged(0, items.size(), PAYLOAD_OVERLAY_DENSITY);
         }
@@ -487,6 +506,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
+        cancelGifResolution(holder);
+        setGifRunning(holder.image.getDrawable(), false);
+        holder.gifUpgradeAttempted = false;
+        holder.gifThumbnailReady = false;
         resetTileTransform(holder.itemView);
         holder.morphPulse.animate().cancel();
         holder.morphPulse.setAlpha(0f);
@@ -574,6 +597,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                             if (binding != holder.bindGeneration) return;
                             if (PawchiveRepository.isDirectMedia(item.url)) {
                                 holder.unavailable.setVisibility(View.VISIBLE);
+                                holder.gifThumbnailReady = true;
+                                updateGifTiles();
                                 return;
                             }
                             if (repair) repairArtwork(holder, item, url);
@@ -585,6 +610,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                             Target<Drawable> target, DataSource dataSource, boolean firstResource) {
                         if (adaptiveAspectRatios && binding == holder.bindGeneration)
                             applyAspectRatio(holder, item, resource);
+                        if (item.isGif()) holder.image.post(() -> {
+                            if (binding == holder.bindGeneration) {
+                                holder.gifThumbnailReady = true;
+                                updateGifTiles();
+                            }
+                        });
                         return false;
                     }
                 });
@@ -608,6 +639,174 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 }
             });
             request = request.error(fallback);
+        }
+        request.into(holder.image);
+    }
+
+    // Use the same normal Glide ImageView target and original model as the fullscreen viewer.
+    // Only the ordinary thumbnail is fetched during initial binding and scrolling.
+    static void setGifRunning(Drawable drawable, boolean running) {
+        if (!(drawable instanceof android.graphics.drawable.Animatable)) return;
+        android.graphics.drawable.Animatable animation = (android.graphics.drawable.Animatable) drawable;
+        if (running && !animation.isRunning()) animation.start();
+        else if (!running && animation.isRunning()) animation.stop();
+    }
+
+    private static boolean twoColumns(RecyclerView recycler) {
+        RecyclerView.LayoutManager layout = recycler.getLayoutManager();
+        if (layout instanceof androidx.recyclerview.widget.StaggeredGridLayoutManager)
+            return ((androidx.recyclerview.widget.StaggeredGridLayoutManager) layout).getSpanCount() == 2;
+        if (layout instanceof androidx.recyclerview.widget.GridLayoutManager)
+            return ((androidx.recyclerview.widget.GridLayoutManager) layout).getSpanCount() == 2;
+        return false;
+    }
+
+    private boolean gifsMayRun() {
+        RecyclerView recycler = previewViewport;
+        return recycler != null && previewsActive && gifPageActive && twoColumns(recycler)
+                && recycler.isAttachedToWindow() && recycler.isShown()
+                && recycler.getWindowVisibility() == View.VISIBLE
+                && recycler.getScrollState() == RecyclerView.SCROLL_STATE_IDLE
+                && android.os.SystemClock.uptimeMillis() >= gifResumeAt;
+    }
+
+    private void pauseGifTiles() {
+        for (Holder holder : previewHolders) setGifRunning(holder.image.getDrawable(), false);
+    }
+
+    private void deferGifs() {
+        gifResumeAt = android.os.SystemClock.uptimeMillis() + 250L;
+        pauseGifTiles();
+        if (previewViewport != null) {
+            previewViewport.removeCallbacks(resumeGifs);
+            previewViewport.postDelayed(resumeGifs, 250L);
+        }
+    }
+
+    void setGifPageActive(boolean active) {
+        if (gifPageActive == active) return;
+        gifPageActive = active;
+        deferGifs();
+        if (!active) for (Holder holder : previewHolders) cancelGifResolution(holder);
+    }
+
+    private void updateGifTiles() {
+        boolean ready = gifsMayRun();
+        for (Holder holder : previewHolders) {
+            NativeContentItem item = holder.boundItem;
+            if (item == null || !item.isGif()) continue;
+            Drawable drawable = holder.image.getDrawable();
+            boolean visible = ready && previewVisible(holder);
+            if (!visible) {
+                setGifRunning(drawable, false);
+                continue;
+            }
+            if (drawable instanceof com.bumptech.glide.load.resource.gif.GifDrawable) {
+                com.bumptech.glide.load.resource.gif.GifDrawable gif =
+                        (com.bumptech.glide.load.resource.gif.GifDrawable) drawable;
+                if (gif.getFrameCount() > 1) {
+                    gif.setLoopCount(com.bumptech.glide.load.resource.gif.GifDrawable.LOOP_FOREVER);
+                    setGifRunning(gif, true);
+                    continue;
+                }
+            } else if (drawable instanceof android.graphics.drawable.Animatable) {
+                setGifRunning(drawable, true);
+                continue;
+            }
+            if (PawchiveRepository.isDirectMedia(item.url) && !holder.gifUpgradeAttempted
+                    && (holder.gifThumbnailReady || item.imageUrl == null || item.imageUrl.isEmpty()))
+                upgradeGif(holder, item);
+        }
+    }
+
+    private void cancelGifResolution(Holder holder) {
+        if (holder.gifResolution != null) {
+            holder.gifResolution.cancel(true);
+            holder.gifResolution = null;
+            holder.gifUpgradeAttempted = false;
+            holder.gifResolutionGeneration++;
+        }
+    }
+
+    private void upgradeGif(Holder holder, NativeContentItem item) {
+        holder.gifUpgradeAttempted = true;
+        String original = PawchiveRepository.original(item);
+        if (!original.isEmpty()) {
+            loadOriginalGif(holder, item, original);
+            return;
+        }
+        // Older saved records may lack the shard. Resolve the same way as fullscreen.
+        int binding = holder.bindGeneration;
+        int generation = ++holder.gifResolutionGeneration;
+        holder.gifResolution = GIF_RESOLVER.submit(() -> {
+            String resolved = "";
+            try {
+                CrazyShitRepository.StreamInfo info = PlayableSourceRouter.resolve(context, item);
+                if (info != null && PawchiveRepository.isDeliveryFor(item.url, info.mediaUrl))
+                    resolved = info.mediaUrl;
+            } catch (Exception error) {
+                PawchiveMediaRequests.trace(item.url, "grid GIF resolution failed");
+            }
+            final String delivery = resolved;
+            holder.image.post(() -> {
+                if (binding != holder.bindGeneration || generation != holder.gifResolutionGeneration) return;
+                holder.gifResolution = null;
+                if (!gifsMayRun() || !previewVisible(holder)) {
+                    holder.gifUpgradeAttempted = false;
+                    return;
+                }
+                if (!delivery.isEmpty()) loadOriginalGif(holder, item, delivery);
+                else PawchiveMediaRequests.trace(item.url, "grid GIF missing original");
+            });
+        });
+    }
+
+    private void loadOriginalGif(Holder holder, NativeContentItem item, String original) {
+        int binding = holder.bindGeneration;
+        PawchiveMediaRequests.trace(item.url, "grid GIF original request");
+        // The original is decoded at tile size. No separate overlay, custom target or file-size cap.
+        RequestBuilder<Drawable> request = Glide.with(holder.image)
+                .load(PawchiveOriginalImageLoader.model(context, item.url, original))
+                // Require GIF decoding for this upgrade, but keep Drawable as the output type
+                // so the normal static thumbnail remains a valid separate fallback request.
+                .decode(com.bumptech.glide.load.resource.gif.GifDrawable.class)
+                .disallowHardwareConfig()
+                .dontTransform()
+                .override(384, 384)
+                .diskCacheStrategy(DiskCacheStrategy.DATA)
+                .dontAnimate()
+                .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
+                .listener(new RequestListener<Drawable>() {
+                    @Override public boolean onLoadFailed(GlideException error, Object model,
+                            Target<Drawable> target, boolean first) {
+                        PawchiveMediaRequests.trace(item.url, "grid GIF Glide failed");
+                        if (BuildConfig.DEBUG && error != null) {
+                            // Log exception types only; remote URLs and response content stay private.
+                            for (Throwable cause : error.getRootCauses())
+                                PawchiveMediaRequests.trace(item.url,
+                                        "grid GIF decoder cause " + cause.getClass().getSimpleName());
+                        }
+                        return false;
+                    }
+                    @Override public boolean onResourceReady(Drawable resource, Object model,
+                            Target<Drawable> target, DataSource source, boolean first) {
+                        if (binding != holder.bindGeneration) return true;
+                        int frames = resource instanceof com.bumptech.glide.load.resource.gif.GifDrawable
+                                ? ((com.bumptech.glide.load.resource.gif.GifDrawable) resource).getFrameCount() : 0;
+                        PawchiveMediaRequests.trace(item.url, "grid GIF decoded frames " + frames + " " + source);
+                        if (adaptiveAspectRatios) applyAspectRatio(holder, item, resource);
+                        holder.unavailable.setVisibility(View.GONE);
+                        holder.image.post(() -> {
+                            if (binding == holder.bindGeneration) updateGifTiles();
+                        });
+                        return false;
+                    }
+                });
+        if (item.imageUrl != null && !item.imageUrl.isEmpty()) {
+            RequestBuilder<Drawable> thumb = formatThumbnail(Glide.with(holder.image)
+                    .load(withHeaders(item.imageUrl, imageReferer(item)))
+                    .diskCacheStrategy(DiskCacheStrategy.ALL).override(384, 384).dontAnimate(), item);
+            request = request.thumbnail(thumb).error(thumb.clone());
         }
         request.into(holder.image);
     }
@@ -724,9 +923,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     void setPreviewsActive(boolean active) {
         if (previewsActive == active) return;
         previewsActive = active;
+        deferGifs();
         if (!active) stopFavoriteMoves();
         for (Holder holder : previewHolders) {
             if (!active) {
+                cancelGifResolution(holder);
                 cancelPreview(holder);
                 holder.previewAttempted = false;
             } else if (holder.boundItem != null) {
@@ -740,12 +941,18 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     @Override public void onAttachedToRecyclerView(@NonNull RecyclerView recycler) {
         super.onAttachedToRecyclerView(recycler);
         previewViewport = recycler;
+        recycler.addOnScrollListener(gifScroll);
+        deferGifs();
         BunkrMediaPreview.addPlaybackPreviewListener(playbackPreviewListener);
         recycler.getViewTreeObserver().addOnPreDrawListener(previewVisibility);
     }
 
     @Override public void onDetachedFromRecyclerView(@NonNull RecyclerView recycler) {
         stopFavoriteMoves();
+        pauseGifTiles();
+        for (Holder holder : previewHolders) cancelGifResolution(holder);
+        recycler.removeCallbacks(resumeGifs);
+        recycler.removeOnScrollListener(gifScroll);
         BunkrMediaPreview.removePlaybackPreviewListener(playbackPreviewListener);
         recycler.getViewTreeObserver().removeOnPreDrawListener(previewVisibility);
         for (int i = 0; i < recycler.getChildCount(); i++) {
@@ -769,6 +976,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     @Override public void onViewDetachedFromWindow(@NonNull Holder holder) {
         resetTileTransform(holder.itemView);
         previewHolders.remove(holder);
+        setGifRunning(holder.image.getDrawable(), false);
+        cancelGifResolution(holder);
         holder.attached = false;
         cancelPreview(holder);
         holder.previewAttempted = false;
@@ -810,6 +1019,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     public void onViewRecycled(@NonNull Holder holder) {
         resetTileTransform(holder.itemView);
         previewHolders.remove(holder);
+        setGifRunning(holder.image.getDrawable(), false);
+        cancelGifResolution(holder);
         holder.bindGeneration++;
         cancelPreview(holder);
         holder.boundItem = null;
@@ -991,6 +1202,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         boolean attached, needsRepair, repairPending, wantsMediaPreview, previewAttempted;
         NativeContentItem boundItem;
         BunkrMediaPreview.Task preview;
+        boolean gifUpgradeAttempted, gifThumbnailReady;
+        int gifResolutionGeneration;
+        java.util.concurrent.Future<?> gifResolution;
         final AspectRatioFrameLayout tile;
         final ImageView image;
         final FrameLayout source;
