@@ -38,7 +38,7 @@ public final class EromeFixtureActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private int albumId = -1, limit = EromeFixtureCatalog.PAGE_SIZE, columns = 2, epoch, initialPosition;
     private String uploader = "", tag = "", filter = EromeFixtureCatalog.ALL;
-    private boolean viewer, simulateFailure, fullscreen, pausedByUser;
+    private boolean viewer, simulateFailure, fullscreen, pausedByUser, loadingPage;
     private LinearLayout root, cards;
     private RecyclerView grid;
     private BunkrGalleryPagerAdapter pagerAdapter;
@@ -81,6 +81,8 @@ public final class EromeFixtureActivity extends Activity {
     }
     private void render() {
         epoch++;
+        loadingPage = false;
+        simulateFailure = false;
         main.removeCallbacksAndMessages(null);
         detachGrid();
         root = new LinearLayout(this);
@@ -112,14 +114,17 @@ public final class EromeFixtureActivity extends Activity {
         scroll.addView(cards);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         List<EromeFixtureCatalog.Album> matches = EromeFixtureCatalog.matching(uploader, tag);
-        for (int i = 0; i < Math.min(limit, matches.size()); i++) albumCard(matches.get(i));
+        for (int offset = 0; offset < Math.min(limit, matches.size()); offset += EromeFixtureCatalog.PAGE_SIZE)
+            for (EromeFixtureCatalog.Album album : EromeFixtureCatalog.page(uploader, tag, offset)) albumCard(album);
         if (matches.isEmpty()) cards.addView(label("No sample albums match.", 16, AppearanceTheme.secondaryText(this)));
         if (limit < matches.size()) cards.addView(action("Load more", this::loadMore));
         // Deliberate fixture-only controls for phone validation of empty/error states.
-        root.addView(action("Test loading / retry", () -> { simulateFailure = true; loadMore(); }));
+        root.addView(action("Test loading / retry", () -> { if (!loadingPage) { simulateFailure = true; loadMore(); } }));
         root.addView(action("Test empty results", () -> { tag = "no-fixture-match"; limit = 3; render(); }));
     }
     private void loadMore() {
+        if (loadingPage) return;
+        loadingPage = true;
         final int token = epoch;
         final boolean fail = simulateFailure;
         simulateFailure = false;
@@ -130,7 +135,7 @@ public final class EromeFixtureActivity extends Activity {
             if (fail) {
                 status.setText("Sample request failed. Tap to retry.");
                 status.setTextColor(AppearanceTheme.accent(this));
-                status.setOnClickListener(v -> { limit += EromeFixtureCatalog.PAGE_SIZE; render(); });
+                status.setOnClickListener(v -> { loadingPage = false; loadMore(); status.setOnClickListener(null); root.removeView(status); });
             } else { limit += EromeFixtureCatalog.PAGE_SIZE; render(); }
         }, 350L);
     }
@@ -152,7 +157,13 @@ public final class EromeFixtureActivity extends Activity {
         card.addView(action(album.title + "  ›", open));
         card.addView(label(album.pictures + " pictures  •  " + album.videos + " videos", 12, AppearanceTheme.secondaryText(this)));
         card.addView(action(album.uploader, () -> { uploader = album.uploader; tag = ""; limit = 3; render(); }));
-        card.addView(action("#" + String.join("  #", album.tags), () -> { tag = album.tags.get(0); limit = 3; render(); }));
+        LinearLayout tags = row();
+        for (String value : album.tags) {
+            TextView chip = action("#" + value, () -> { tag = value; limit = 3; render(); });
+            chip.setTextColor(AppearanceTheme.accent(this));
+            tags.addView(chip, new LinearLayout.LayoutParams(0, -2, 1));
+        }
+        card.addView(tags);
     }
     private void gallery(EromeFixtureCatalog.Album album) {
         root.addView(action(album.uploader + "  ›", () -> {
@@ -240,7 +251,7 @@ public final class EromeFixtureActivity extends Activity {
                 selectMedia(position);
             }
         });
-        pager.post(() -> { if (!isFinishing() && player == null) selectMedia(pager.getCurrentItem()); });
+        pager.post(() -> { if (!isFinishing() && player == null && pagerAdapter.itemAt(pager.getCurrentItem()).isVideo()) selectMedia(pager.getCurrentItem()); });
     }
 
     private File sampleVideo() throws java.io.IOException {
