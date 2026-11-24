@@ -24,20 +24,7 @@ import java.util.WeakHashMap;
 final class PawchiveOriginalImageLoader implements ModelLoader<PawchiveOriginalImageLoader.Model, InputStream> {
     private static final WeakHashMap<Glide, Boolean> REGISTERED = new WeakHashMap<>();
 
-    static final int MAX_GALLERY_GIF_BYTES = 4 * 1024 * 1024;
-    static final int MAX_GALLERY_GIF_PIXELS = 1024 * 1024;
-
     static Model model(Context context, String identity, String delivery) {
-        return model(context, identity, delivery, false);
-    }
-
-    static Model galleryGif(Context context, String identity, String delivery) {
-        if (identity == null || !identity.toLowerCase(Locale.ROOT).endsWith(".gif"))
-            throw new IllegalArgumentException("Not a GIF identity");
-        return model(context, identity, delivery, true);
-    }
-
-    private static Model model(Context context, String identity, String delivery, boolean boundedGif) {
         if (!PawchiveRepository.isDeliveryFor(identity, delivery))
             throw new IllegalArgumentException("Invalid Pawchive original");
         Glide glide = Glide.get(context.getApplicationContext());
@@ -47,23 +34,21 @@ final class PawchiveOriginalImageLoader implements ModelLoader<PawchiveOriginalI
                 REGISTERED.put(glide, true);
             }
         }
-        return new Model(identity, delivery, boundedGif);
+        return new Model(identity, delivery);
     }
 
     static final class Model {
         final String identity, delivery;
-        final boolean boundedGif;
-        Model(String identity, String delivery, boolean boundedGif) {
+        Model(String identity, String delivery) {
             this.identity = identity;
             this.delivery = delivery;
-            this.boundedGif = boundedGif;
         }
         @Override public boolean equals(Object other) {
             if (!(other instanceof Model)) return false;
             Model that = (Model) other;
-            return identity.equals(that.identity) && delivery.equals(that.delivery) && boundedGif == that.boundedGif;
+            return identity.equals(that.identity) && delivery.equals(that.delivery);
         }
-        @Override public int hashCode() { return Objects.hash(identity, delivery, boundedGif); }
+        @Override public int hashCode() { return Objects.hash(identity, delivery); }
         @Override public String toString() {
             return "PawchiveOriginal(" + Integer.toHexString(identity.hashCode()) + ")";
         }
@@ -76,7 +61,7 @@ final class PawchiveOriginalImageLoader implements ModelLoader<PawchiveOriginalI
     @Override public LoadData<InputStream> buildLoadData(@NonNull Model model, int width, int height,
             @NonNull Options options) {
         if (!handles(model)) return null;
-        return new LoadData<>(new ObjectKey((model.boundedGif ? "pawchive-gallery-gif-v1:" : "pawchive-original-v1:") + model.identity), new Fetcher(model));
+        return new LoadData<>(new ObjectKey("pawchive-original-v1:" + model.identity), new Fetcher(model));
     }
 
     private static final class Factory implements ModelLoaderFactory<Model, InputStream> {
@@ -84,38 +69,6 @@ final class PawchiveOriginalImageLoader implements ModelLoader<PawchiveOriginalI
             return new PawchiveOriginalImageLoader();
         }
         @Override public void teardown() { }
-    }
-
-    interface ReadCheck { void check() throws IOException; }
-
-    static byte[] readGalleryGif(InputStream input, long declaredLength, ReadCheck check) throws IOException {
-        if (declaredLength > MAX_GALLERY_GIF_BYTES) throw new IOException("Gallery GIF too large");
-        byte[] header = new byte[10];
-        int count = 0;
-        while (count < header.length) {
-            check.check();
-            int n = input.read(header, count, header.length - count);
-            if (n <= 0) throw new IOException("Truncated GIF header");
-            count += n;
-        }
-        String signature = new String(header, 0, 6, java.nio.charset.StandardCharsets.US_ASCII);
-        int width = (header[6] & 255) | ((header[7] & 255) << 8);
-        int height = (header[8] & 255) | ((header[9] & 255) << 8);
-        if ((!signature.equals("GIF87a") && !signature.equals("GIF89a"))
-                || width == 0 || height == 0 || (long) width * height > MAX_GALLERY_GIF_PIXELS)
-            throw new IOException("Unsupported gallery GIF dimensions or signature");
-        java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
-        output.write(header);
-        byte[] buffer = new byte[16 * 1024];
-        while (true) {
-            check.check();
-            int n = input.read(buffer);
-            if (n < 0) break;
-            if (n == 0) throw new IOException("Empty GIF read");
-            if (n > MAX_GALLERY_GIF_BYTES - output.size()) throw new IOException("Gallery GIF too large");
-            output.write(buffer, 0, n);
-        }
-        return output.toByteArray();
     }
 
     private static final class Fetcher implements DataFetcher<InputStream> {
@@ -139,8 +92,8 @@ final class PawchiveOriginalImageLoader implements ModelLoader<PawchiveOriginalI
                     HttpURLConnection current = (HttpURLConnection) new URL(delivery).openConnection();
                     connection = current;
                     current.setInstanceFollowRedirects(false);
-                    current.setConnectTimeout(model.boundedGif ? 8_000 : 15_000);
-                    current.setReadTimeout(model.boundedGif ? 8_000 : 20_000);
+                    current.setConnectTimeout(15_000);
+                    current.setReadTimeout(20_000);
                     current.setRequestProperty("User-Agent", PawchiveMediaRequests.USER_AGENT);
                     current.setRequestProperty("Referer", PawchiveRepository.ORIGIN);
                     current.setRequestProperty("Accept", "image/avif,image/webp,image/*,*/*;q=0.8");
@@ -161,20 +114,7 @@ final class PawchiveOriginalImageLoader implements ModelLoader<PawchiveOriginalI
                     type = type == null ? "" : type.toLowerCase(Locale.ROOT);
                     if (!type.startsWith("image/") && !type.startsWith("application/octet-stream"))
                         throw new IOException("Original is not an image");
-                    if (model.boundedGif) {
-                        long length = current.getContentLengthLong();
-                        if (length > MAX_GALLERY_GIF_BYTES) throw new IOException("Gallery GIF too large");
-                        long deadline = android.os.SystemClock.elapsedRealtime() + 12_000L;
-                        try (InputStream input = current.getInputStream()) {
-                            stream = new java.io.ByteArrayInputStream(readGalleryGif(input, length, () -> {
-                                check();
-                                if (android.os.SystemClock.elapsedRealtime() > deadline)
-                                    throw new InterruptedIOException("Gallery GIF timeout");
-                            }));
-                        }
-                        current.disconnect();
-                        connection = null;
-                    } else stream = current.getInputStream();
+                    stream = current.getInputStream();
                     check();
                     callback.onDataReady(stream);
                     return;

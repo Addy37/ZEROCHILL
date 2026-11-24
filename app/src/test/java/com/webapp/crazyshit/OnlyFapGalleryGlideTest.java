@@ -108,6 +108,57 @@ public class OnlyFapGalleryGlideTest {
         await(() -> pending.containsKey(item.imageUrl));
         pending.remove(item.imageUrl).onDataReady(new ByteArrayInputStream(png(w, h)));
     }
+    @Test public void visiblePawchiveGifUsesOriginalAndPausesWhenGalleryPageIsHidden() throws Exception {
+        String identity = "https://file.pawchive.pw/data/ab/cd/fixture.gif";
+        String original = "https://n1.pawchive.pw/data/ab/cd/fixture.gif";
+        String thumbnail = "https://img.pawchive.pw/thumbnail/data/ab/cd/fixture.gif";
+        PawchiveOriginalImageLoader.model(activity, identity, original);
+        Glide.get(activity).getRegistry().replace(PawchiveOriginalImageLoader.Model.class, InputStream.class,
+                new ModelLoaderFactory<PawchiveOriginalImageLoader.Model, InputStream>() {
+                    public ModelLoader<PawchiveOriginalImageLoader.Model, InputStream> build(MultiModelLoaderFactory factory) {
+                        return new ModelLoader<PawchiveOriginalImageLoader.Model, InputStream>() {
+                            public boolean handles(PawchiveOriginalImageLoader.Model model) { return true; }
+                            public LoadData<InputStream> buildLoadData(PawchiveOriginalImageLoader.Model model,
+                                    int w, int h, com.bumptech.glide.load.Options options) {
+                                return new LoadData<>(new ObjectKey(model.identity), new DataFetcher<InputStream>() {
+                                    public void loadData(Priority priority, DataCallback<? super InputStream> callback) {
+                                        pending.put(model.delivery, callback);
+                                    }
+                                    public void cleanup() { }
+                                    public void cancel() { }
+                                    public Class<InputStream> getDataClass() { return InputStream.class; }
+                                    public DataSource getDataSource() { return DataSource.REMOTE; }
+                                });
+                            }
+                        };
+                    }
+                    public void teardown() { }
+                });
+        NativeContentItem gif = new NativeContentItem(NativeContentItem.KIND_IMAGE, "GIF fixture",
+                identity, thumbnail, "", "", "", "OnlyFap", "Fixture", 0L, 1f)
+                .withSourceMedia(original, "");
+        adapter.replace(Collections.singletonList(gif), false);
+        layout();
+        complete(gif, 16, 16);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
+        await(() -> pending.containsKey(original));
+        byte[] frames = java.util.Base64.getDecoder().decode(
+                "R0lGODlhEAAQAIEAAP8AAAAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQAFAAAACwAAAAAEAAQAAAIHQABCBxIsKDBgwgTKlzIsKHDhxAjSpxIsaLFgQEBACH5BAEUAAEALAAAAAAQABAAgQAA/wAAAAAAAAAAAAgdAAEIHEiwoMGDCBMqXMiwocOHECNKnEixosWBAQEAOw==");
+        pending.remove(original).onDataReady(new ByteArrayInputStream(frames));
+        await(() -> first().image.getDrawable() instanceof com.bumptech.glide.load.resource.gif.GifDrawable);
+        com.bumptech.glide.load.resource.gif.GifDrawable drawable =
+                (com.bumptech.glide.load.resource.gif.GifDrawable) first().image.getDrawable();
+        assertEquals(2, drawable.getFrameCount());
+        assertTrue(drawable.isRunning());
+        adapter.setGifPageActive(false);
+        assertFalse(drawable.isRunning());
+        adapter.setGifPageActive(true);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
+        await(drawable::isRunning);
+        adapter.setPreviewsActive(false);
+        assertFalse(drawable.isRunning());
+    }
+
     @Test public void realGlideDimensionsReplaceSquareAndDoNotLeakAfterReplacement() throws Exception {
         NativeContentItem portrait = item("portrait"), wide = item("wide");
         adapter.replace(Collections.singletonList(portrait), false); layout();
