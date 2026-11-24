@@ -15,11 +15,11 @@ jobs:
       - name: Trace public player and media response
         run: |
           python3 - <<'PY'
-          import collections, html, http.cookiejar, json, re, urllib.parse as p, urllib.request as u, urllib.error
+          import collections, html, http.cookiejar, json, re, time, urllib.parse as p, urllib.request as u, urllib.error
           from html.parser import HTMLParser
 
           root = "https://pawchive.pw"
-          ua = "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36"
+          ua = "ZEROCHILL/7.5.0 (+https://github.com/Addy37/ZEROCHILL)"
           jar = http.cookiejar.CookieJar()
           class Redirect(u.HTTPRedirectHandler):
               def redirect_request(self, req, fp, code, msg, headers, target):
@@ -86,27 +86,10 @@ jobs:
                                 {k: (p.urlsplit(v).hostname, p.urlsplit(v).path.split("/")[1:2])
                                  for k,v in attrs.items() if v and k in {"src","data-src","poster"}}, flush=True)
                   bare = clip["server"] + "/data" + clip["path"]
-                  req(bare, "Beta 3 prepare (GET)", {"Referer":root+"/","Accept-Encoding":"identity"}, 1024)
-                  req(bare, "Beta 3 seek (open range)", {"Referer":root+"/","Accept-Encoding":"identity","Range":"bytes=1048576-"}, 1024)
-                  for tag, attrs in page.entries:
-                      raw = attrs.get("src") if tag == "source" else attrs.get("href") if tag == "a" else None
-                      if not raw: continue
-                      actual = p.urlsplit(p.urljoin(url, html.unescape(raw)))
-                      if actual.scheme != "https" or not (actual.hostname or "").endswith(".pawchive.pw"): continue
-                      if tag == "a" and clip["path"] not in actual.path: continue
-                      print("target", tag, actual.hostname, "query keys", sorted(p.parse_qs(actual.query)),
-                        "path matches", actual.path == p.urlsplit(bare).path,
-                        "suffix after first directory matches", actual.path.split("/",3)[-1] == p.urlsplit(bare).path.split("/",3)[-1],
-                        "segments", [piece if len(piece) < 6 else re.sub(r"[a-f0-9]{10,}", "<hash>", piece)[:55]
-                                     for piece in actual.path.strip("/").split("/")[:-1]],
-                        "suffix", actual.path.split(".")[-1], "filename matches",
-                        p.parse_qs(actual.query).get("f") == [clip["name"]], flush=True)
-                      req(actual.geturl(), tag + " origin-range", {"Referer":root+"/","Range":"bytes=0-1023"}, 1024)
-                      if tag == "source":
-                          req(actual.geturl(), "inline prepare (GET)", {"Referer":root+"/","Accept-Encoding":"identity"}, 1024)
-                          req(actual.geturl(), "inline seek (open range)", {"Referer":root+"/","Accept-Encoding":"identity","Range":"bytes=1048576-"}, 1024)
-                          print("source suffix/query encodes listing", p.unquote(actual.path).endswith(clip["path"]),
-                                any(clip["path"] in value for value in p.parse_qs(actual.query).values() for value in value))
+                  time.sleep(1.2)
+                  req(bare, "identified prepare (GET)", {"Referer":root+"/","Accept-Encoding":"identity"}, 1024)
+                  time.sleep(1.2)
+                  req(bare, "identified seek (open range)", {"Referer":root+"/","Accept-Encoding":"identity","Range":"bytes=1048576-"}, 1024)
                   if len(samples) == 2: break
               break
           PY
