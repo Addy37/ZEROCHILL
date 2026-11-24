@@ -17,6 +17,7 @@ final class PlayableSourceRouter {
             throws IOException {
         if (item == null) return null;
         if (WikiFeetRepository.isRetiredItem(item)) return null;
+        if (PawchiveRepository.isDirectMedia(item.url)) return new PawchiveRepository().resolve(item);
         return resolve(context, item.url, item.uploader);
     }
 
@@ -39,10 +40,7 @@ final class PlayableSourceRouter {
 
     private static CrazyShitRepository.StreamInfo resolveInternal(Context context, String pageUrl, String origin)
             throws IOException {
-        if (PawchiveRepository.isDirectMedia(pageUrl)) {
-            return new CrazyShitRepository.StreamInfo(pageUrl, pageUrl, "Pawchive",
-                    PawchiveRepository.isProfile(origin) ? origin : "https://pawchive.pw/");
-        }
+        if (PawchiveRepository.isDirectMedia(pageUrl)) return null;
         if (BaddieHubRepository.isBaddieHubUrl(pageUrl)) {
             return new BaddieHubRepository().resolvePlayable(context, pageUrl);
         }

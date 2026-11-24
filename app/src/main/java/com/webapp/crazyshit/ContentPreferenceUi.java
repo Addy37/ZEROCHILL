@@ -151,7 +151,8 @@ final class ContentPreferenceUi {
         android.graphics.drawable.Drawable icon = mode.icon() == 0 ? null
                 : androidx.core.content.ContextCompat.getDrawable(context, mode.icon());
         if (icon != null) {
-            icon = icon.mutate(); icon.setTint(Color.WHITE);
+            icon = icon.mutate();
+            icon.setTint(mode == ContentPreference.PAWCHIVE ? AppearanceTheme.accent(context) : Color.WHITE);
             icon.setBounds(0, 0, dp(context, 22), dp(context, 22));
         }
         selector.setCompoundDrawablesRelative(icon, null, null, null);

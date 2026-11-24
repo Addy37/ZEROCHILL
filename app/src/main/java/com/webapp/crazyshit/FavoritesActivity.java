@@ -409,7 +409,8 @@ public class FavoritesActivity extends Activity {
         wrapper.setFocusable(true);
         wrapper.setContentDescription((mediaFavorites ? "Favorite " : "Watch Later ") + item.title);
         wrapper.setOnClickListener(v -> {
-            if (mediaFavorites && item.content != null) SavedGalleryMedia.open(this, item);
+            if (item.content != null && (mediaFavorites || PawchiveRepository.isDirectMedia(item.url)))
+                SavedGalleryMedia.open(this, item);
             else select(item.url, item.title);
         });
         ZeroChillMotion.installPressFeedback(wrapper);
@@ -633,6 +634,8 @@ public class FavoritesActivity extends Activity {
                 .addHeader("User-Agent", USER_AGENT)
                 .addHeader("Referer", pageUrl == null || pageUrl.isEmpty() ? SITE : pageUrl)
                 .addHeader("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
+        if (PawchiveRepository.isArtwork(imageUrl))
+            return new GlideUrl(imageUrl, headers.setHeader("Referer", PawchiveRepository.ORIGIN).build());
         try {
             String cookies = CookieManager.getInstance().getCookie(imageUrl);
             if (cookies == null || cookies.trim().isEmpty()) {

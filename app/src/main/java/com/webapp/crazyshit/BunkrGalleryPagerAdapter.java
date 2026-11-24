@@ -226,6 +226,8 @@ final class BunkrGalleryPagerAdapter
         NativeContentItem item = itemAt(position);
         if (item == null) return "";
         String cached = value(resolvedUrls.get(item.url));
+        if (PawchiveRepository.isDirectMedia(item.url) && !PawchiveRepository.isDeliveryFor(item.url, cached))
+            return "";
         if (!BunkrRepository.usableCachedPlayable(item.url, cached, System.currentTimeMillis() / 1000L)) {
             resolvedUrls.remove(item.url);
             return "";
@@ -420,7 +422,8 @@ final class BunkrGalleryPagerAdapter
         GalleryMediaTransition.clearName(holder.image);
         holder.image.setZoomEnabled(item.isImage());
         boolean bunkrPhoto = item.isImage() && BunkrRepository.isBunkrUrl(item.url);
-        String resolved = bunkrPhoto ? resolvedUrl(position) : value(resolvedUrls.get(item.url));
+        boolean pawchive = PawchiveRepository.isDirectMedia(item.url);
+        String resolved = bunkrPhoto || pawchive ? resolvedUrl(position) : value(resolvedUrls.get(item.url));
         boolean opening = sharedElementOpening && item.url.equals(sharedElementUrl)
                 && !value(item.imageUrl).isEmpty();
         // The thumbnail owns the shared expansion. Upgrade it once Android finishes.
@@ -625,9 +628,20 @@ final class BunkrGalleryPagerAdapter
                 holder.reveal.revealVideo(!revealsStopped);
             }
         } else holder.reveal.showPoster();
-        boolean showFailure = failed.contains(item.url) && !active
-                && !(item.isImage() && holder.hasUsableImage);
-        holder.failure.setVisibility(showFailure ? View.VISIBLE : View.GONE);
+        boolean failedItem = failed.contains(item.url) && !active;
+        boolean previewOnly = failedItem && item.isImage() && holder.hasUsableImage
+                && PawchiveRepository.isDirectMedia(item.url);
+        boolean showFailure = failedItem && !(item.isImage() && holder.hasUsableImage);
+        holder.failure.setText(previewOnly ? "Showing preview · Tap to retry original"
+                : "Couldn't load this item.\nTap to retry or use the menu to open its page.");
+        FrameLayout.LayoutParams failurePlacement = (FrameLayout.LayoutParams) holder.failure.getLayoutParams();
+        int failureHeight = previewOnly ? ViewGroup.LayoutParams.WRAP_CONTENT : ViewGroup.LayoutParams.MATCH_PARENT;
+        if (failurePlacement.height != failureHeight) {
+            failurePlacement.height = failureHeight;
+            failurePlacement.gravity = previewOnly ? Gravity.TOP : Gravity.CENTER;
+            holder.failure.setLayoutParams(failurePlacement);
+        }
+        holder.failure.setVisibility(showFailure || previewOnly ? View.VISIBLE : View.GONE);
         boolean openingPreview = sharedElementOpening && item.url.equals(sharedElementUrl)
                 && (item.isVideo() || resolvedUrl(position).isEmpty()
                 || !resolvedUrl(position).equals(holder.requestedImageUrl) || holder.imageLoading);
@@ -698,6 +712,9 @@ final class BunkrGalleryPagerAdapter
     }
 
     private GlideUrl withHeaders(String url, String pageUrl) {
+        if (PawchiveRepository.isArtwork(url) || PawchiveRepository.isDeliveryFor(pageUrl, url))
+            return new GlideUrl(url, new LazyHeaders.Builder()
+                    .setHeader("User-Agent", USER_AGENT).setHeader("Referer", PawchiveRepository.ORIGIN).build());
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
                 .addHeader("User-Agent", USER_AGENT)
                 .addHeader("Referer", pageUrl == null

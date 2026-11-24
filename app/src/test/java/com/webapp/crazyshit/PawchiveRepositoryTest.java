@@ -61,7 +61,7 @@ public class PawchiveRepositoryTest {
     @Test public void mediaAllowsOnlyProviderRelativeImagesAndVideos() throws Exception {
         org.json.JSONObject json = new org.json.JSONObject(
                 "{\"file\":{\"name\":\"photo.jpg\",\"path\":\"/ab/cd/photo.jpg\"},"
-                + "\"attachments\":[{\"name\":\"clip.mp4\",\"path\":\"/ab/cd/clip.mp4\"},"
+                + "\"attachments\":[{\"name\":\"clip.mp4\",\"path\":\"/ab/cd/clip.mp4\",\"server\":\"https://n3.pawchive.pw\"},"
                 + "{\"name\":\"duplicate.jpg\",\"path\":\"/ab/cd/photo.jpg\"},"
                 + "{\"name\":\"unsafe.jpg\",\"path\":\"https://example.com/unsafe.jpg\"},"
                 + "{\"name\":\"traversal.jpg\",\"path\":\"/../private.jpg\"},"
@@ -78,8 +78,8 @@ public class PawchiveRepositoryTest {
         PawchiveRepository repository = new PawchiveRepository(route -> {
             requests.add(route);
             return "[{\"service\":\"fanbox\",\"user\":\"1\",\"id\":\"2\","
-                    + "\"title\":\"Artwork\",\"file\":{\"path\":\"/ab/cd/photo.jpg\"},"
-                    + "\"attachments\":[{\"path\":\"/ab/cd/clip.mp4\"}]}]";
+                    + "\"title\":\"Artwork\",\"file\":{\"path\":\"/ab/cd/photo.jpg\",\"server\":\"https://n4.pawchive.pw\"},"
+                    + "\"attachments\":[{\"path\":\"/ab/cd/clip.mp4\",\"server\":\"https://n3.pawchive.pw\"}]}]";
         });
         PawchiveRepository.Creator creator = PawchiveRepository.profile(
                 "https://pawchive.pw/fanbox/user/1", "Artist");
@@ -91,6 +91,9 @@ public class PawchiveRepositoryTest {
         assertEquals(2, page.items.size());
         assertTrue(page.items.get(0).isImage());
         assertTrue(page.items.get(1).isVideo());
+        assertEquals("https://img.pawchive.pw/thumbnail/data/ab/cd/photo.jpg", page.items.get(0).imageUrl);
+        assertEquals(page.items.get(0).imageUrl, page.items.get(1).imageUrl);
+        assertEquals("https://n4.pawchive.pw/data/ab/cd/photo.jpg", PawchiveRepository.original(page.items.get(0)));
         assertEquals(creator.profileUrl(), page.items.get(0).uploader);
         assertEquals(creator.profileUrl(), OnlyFapVideoMetadata.creator(page.items.get(1)).url);
         assertFalse(page.hasMore);
@@ -101,6 +104,57 @@ public class PawchiveRepositoryTest {
         assertFalse(PawchiveRepository.isDirectMedia("https://file.pawchive.pw.evil.test/data/ab/cd/photo.jpg"));
         assertFalse(PawchiveRepository.isDirectMedia("https://file.pawchive.pw/data/../photo.jpg"));
         assertFalse(PawchiveRepository.isDirectMedia("https://file.pawchive.pw/data/ab/cd/archive.zip"));
+    }
+
+    @Test public void savedVideoKeepsItsIdentityAndRoutesToItsDeclaredServer() throws Exception {
+        String identity = "https://file.pawchive.pw/data/ab/cd/clip.mp4";
+        String post = "https://pawchive.pw/fanbox/user/1/post/2";
+        NativeContentItem clip = new NativeContentItem(NativeContentItem.KIND_MEDIA, "Clip", identity,
+                "", "", "https://pawchive.pw/fanbox/user/1", "", "OnlyFap · Pawchive", "Artist")
+                .withSourceMedia("https://n3.pawchive.pw/data/ab/cd/clip.mp4", post);
+        NativeContentItem saved = OnlyFapVideoMetadata.decode(ContentItemCodec.encode(clip), identity);
+        assertNotNull(saved);
+        CrazyShitRepository.StreamInfo stream = PlayableSourceRouter.resolve(null, saved);
+        assertEquals(identity, saved.url);
+        assertEquals("https://n3.pawchive.pw/data/ab/cd/clip.mp4", stream.mediaUrl);
+        assertEquals(post, stream.pageUrl);
+        assertEquals("https://pawchive.pw/", stream.requestReferer);
+        assertFalse(PawchiveRepository.isDeliveryFor(identity, "https://n3.pawchive.pw.other.test/data/ab/cd/clip.mp4"));
+        assertFalse(PawchiveRepository.isDeliveryFor(identity, "https://n3.pawchive.pw/data/ab/cd/another.mp4"));
+    }
+
+    @Test public void oldPhotoGetsAPreviewAndResolvesOnlyThroughItsExactCreator() throws Exception {
+        String identity = "https://file.pawchive.pw/data/ab/cd/photo.jpg";
+        NativeContentItem photo = new NativeContentItem(NativeContentItem.KIND_IMAGE, "Photo",
+                identity, identity, "", "https://pawchive.pw/patreon/user/123", "");
+        NativeContentItem saved = ContentItemCodec.decode(ContentItemCodec.encode(photo));
+        assertEquals("https://img.pawchive.pw/thumbnail/data/ab/cd/photo.jpg", saved.imageUrl);
+        java.util.List<String> requests = new java.util.ArrayList<>();
+        PawchiveRepository repo = new PawchiveRepository(route -> {
+            requests.add(route);
+            return "[{\"service\":\"patreon\",\"user\":\"123\",\"id\":\"4\","
+                    + "\"file\":{\"path\":\"/ab/cd/photo.jpg\",\"server\":\"https://n4.pawchive.pw\"}}]";
+        });
+        assertEquals("https://n4.pawchive.pw/data/ab/cd/photo.jpg", repo.resolve(saved).mediaUrl);
+        assertEquals(java.util.Collections.singletonList("/patreon/user/123?o=0"), requests);
+    }
+
+    @Test public void fillsPendingDetailsWithABoundedRequestAndKeepsGalleryIdentity() throws Exception {
+        java.util.List<String> requests = new java.util.ArrayList<>();
+        PawchiveRepository repo = new PawchiveRepository(route -> {
+            requests.add(route);
+            if (route.contains("?o=0")) {
+                return "[{\"service\":\"patreon\",\"user\":\"123\",\"id\":\"4\","
+                        + "\"preview_state\":\"pending\",\"has_full\":true,\"file\":{},\"attachments\":[]}]";
+            }
+            return "{\"service\":\"patreon\",\"user\":\"123\",\"id\":\"4\","
+                    + "\"file\":{\"path\":\"/ab/cd/photo.jpg\",\"server\":\"https://n4.pawchive.pw\"}}";
+        });
+        PawchiveRepository.Creator creator = PawchiveRepository.profile("https://pawchive.pw/patreon/user/123", "Artist");
+        PawchiveRepository.GalleryPage page = repo.galleryPage(creator, 0);
+        assertEquals(1, page.items.size());
+        assertFalse(page.hasMore);
+        assertEquals(java.util.Arrays.asList("/patreon/user/123?o=0", "/patreon/user/123/post/4"), requests);
     }
 
     @Test(expected = IOException.class)

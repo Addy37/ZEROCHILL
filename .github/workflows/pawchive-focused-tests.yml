@@ -11,6 +11,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: pawchive-beta-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
 jobs:
   signed-beta:
     if: github.head_ref == 'feature/pawchive-onlyfap' || github.ref_name == 'feature/pawchive-onlyfap'
@@ -25,8 +28,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7005002'
-      APP_VERSION_NAME: '7.5.0-pawchive-test.2'
+      APP_VERSION_CODE: '7005003'
+      APP_VERSION_NAME: '7.5.0-pawchive-test.3'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v6
@@ -108,23 +111,40 @@ jobs:
             --tests com.webapp.crazyshit.ShitTokPreferencePreparationTest \
             --tests com.webapp.crazyshit.OnlyFapGenderShelvesTest \
             --tests com.webapp.crazyshit.ShitTokContentPreferenceTest \
-            --tests com.webapp.crazyshit.ShitTokSourceModeTest
+            --tests com.webapp.crazyshit.ShitTokSourceModeTest \
+            --tests com.webapp.crazyshit.ShitTokFiveFeedInventoryTest \
+            --tests com.webapp.crazyshit.ShitTokCategoryEligibilityTest \
+            --tests com.webapp.crazyshit.PlayableSourceRouterTest
       - name: Assemble and verify side-by-side APK
         run: |
           set -euo pipefail
           gradle --no-daemon --console=plain --max-workers=3 :app:assembleDebug
           mkdir -p candidate
           bash tools/verify-android-build-lineage.sh candidate/APK-LINEAGE.txt
-          apk="candidate/ZeroChill-Pawchive-Beta-$(git rev-parse --short=8 HEAD).apk"
+          apk="candidate/ZeroChill-Pawchive-Beta-3-feature-pawchive-onlyfap-$(git rev-parse --short=8 HEAD).apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee candidate/APK-SIGNING.txt
+          grep -Fx 'Signer #1 certificate SHA-256 digest: 04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356' candidate/APK-SIGNING.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$apk" > "$RUNNER_TEMP/beta-badging.txt"
-          grep "package: name='com.addy37.crazyshitunofficial.dev'" "$RUNNER_TEMP/beta-badging.txt"
+          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005003' versionName='7.5.0-pawchive-test.3'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
       - name: Upload signed Pawchive test APK
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Pawchive-signed-beta
+          name: ZeroChill-Pawchive-signed-beta-3
           path: candidate/
           retention-days: 14
           if-no-files-found: error
+
+      - name: Audit the four legacy shared-queue assertions separately
+        id: legacy
+        continue-on-error: true
+        run: |
+          gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.preferenceChangePreservesPlayingGenerationAndDropsEvenPreparedNext \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.preferenceSwitchRetainsCurrentPlayerObjectAndFocusState \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.switchingFromLaterPageRemovesIncompatibleHistoryWithoutChangingPlaybackGeneration \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.womenMenWomenRestoresVerifiedFutureStreamsAndKeepsCurrentClip
+      - name: Record legacy audit outcome
+        if: steps.legacy.outcome != 'skipped'
+        run: echo "Legacy shared-queue audit **${{ steps.legacy.outcome }}**. See the separate test step for individual assertions." >> "$GITHUB_STEP_SUMMARY"

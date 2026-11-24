@@ -520,7 +520,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 || (BunkrRepository.isBunkrUrl(item.url) && !BunkrRepository.isUsableArtwork(item.imageUrl))) {
             Glide.with(holder.image).clear(holder.image);
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
-            repairArtwork(holder, item, item.imageUrl);
+            if (PawchiveRepository.isDirectMedia(item.url)) {
+                if (item.isImage()) holder.unavailable.setVisibility(View.VISIBLE);
+            } else repairArtwork(holder, item, item.imageUrl);
         } else {
             loadArtwork(holder, item, item.imageUrl, true);
         }
@@ -552,6 +554,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         // Glide forbids starting another request synchronously inside its listener.
                         holder.image.post(() -> {
                             if (binding != holder.bindGeneration) return;
+                            if (PawchiveRepository.isDirectMedia(item.url)) {
+                                holder.unavailable.setVisibility(View.VISIBLE);
+                                return;
+                            }
                             if (repair) repairArtwork(holder, item, url);
                             else requestMediaPreview(holder, item);
                         });
@@ -827,6 +833,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private GlideUrl withHeaders(String imageUrl, String pageUrl) {
+        if (PawchiveRepository.isArtwork(imageUrl) || PawchiveRepository.isDeliveryFor(pageUrl, imageUrl))
+            return new GlideUrl(imageUrl, new LazyHeaders.Builder()
+                    .setHeader("User-Agent", USER_AGENT).setHeader("Referer", PawchiveRepository.ORIGIN).build());
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
                 .addHeader("User-Agent", USER_AGENT)
                 .addHeader("Referer", pageUrl == null
@@ -871,6 +880,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     private SourceBadge sourceBadge(NativeContentItem item) {
         if (item == null) return null;
+        if (PawchiveRepository.isDirectMedia(item.url))
+            return new SourceBadge(R.drawable.ic_content_pawchive, "Pawchive", false);
         if (FapelloRepository.isFapelloUrl(item.url) ||
                 FapelloRepository.isModelUrl(item.uploader)) {
             return new SourceBadge(R.drawable.ic_source_fapello, "Fapello", false);

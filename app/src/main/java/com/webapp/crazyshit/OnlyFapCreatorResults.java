@@ -115,7 +115,8 @@ final class OnlyFapCreatorResults {
                 || FapelloRepository.isModelUrl(second.url) && !FapelloRepository.isModelUrl(first.url)
                 ? second : first;
         NativeContentItem artwork = second.imageUrl.isEmpty() ? first : second;
-        return new NativeContentItem(updated.kind, CreatorIdentity.display(first.title), route.url,
+        String name = PawchiveRepository.isProfile(route.url) ? updated.title : CreatorIdentity.display(first.title);
+        return new NativeContentItem(updated.kind, name, route.url,
                 artwork.imageUrl, updated.views, artwork.uploader, updated.comments, updated.description,
                 route.searchQuery, updated.publishedAtMillis, updated.aspectRatioHint)
                 .withCreatorIdentity(new ArrayList<>(aliases), new ArrayList<>(profiles));

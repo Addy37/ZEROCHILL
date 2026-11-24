@@ -73,7 +73,7 @@ final class CreatorCatalog {
                     result.add(item);
             }
         } else for (NativeContentItem item : all(context)) {
-            if (!WikiFeetRepository.isRetiredItem(item)
+            if (!WikiFeetRepository.isRetiredItem(item) && !PawchiveRepository.isProfile(item.url)
                     && OnlyFapCreatorResults.rank(item, query) != Integer.MAX_VALUE) result.add(item);
         }
         Comparator<NativeContentItem> names = Comparator.comparing(
@@ -133,7 +133,8 @@ final class CreatorCatalog {
             members.put(raw, exact == null ? unresolvedFavorite(raw) : exact);
             NativeContentItem display = previous != null && (!previous.item.imageUrl.isEmpty()
                     || best.imageUrl.isEmpty()) ? previous.item : best;
-            automatic.put(identity, new FavoriteGroup(titled(display, CreatorIdentity.display(display.title)),
+            automatic.put(identity, new FavoriteGroup(PawchiveRepository.isProfile(display.url)
+                    ? display : titled(display, CreatorIdentity.display(display.title)),
                     members, new LinkedHashSet<>(members.keySet()), false));
         }
         List<FavoriteGroup> groups = new ArrayList<>(automatic.values());

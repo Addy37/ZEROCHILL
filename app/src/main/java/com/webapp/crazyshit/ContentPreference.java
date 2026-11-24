@@ -11,7 +11,7 @@ enum ContentPreference {
     TRANS_WOMEN("trans_women", "Trans women", "⚧"),
     TRANS_MEN("trans_men", "Trans men", "⚧"),
     GROUPS("groups", "Groups", ""),
-    PAWCHIVE("pawchive", "Pawchive", "🐾");
+    PAWCHIVE("pawchive", "Pawchive", "");
 
     private static final String PAWCHIVE_SELECTED = "onlyfap_pawchive_selected";
     static ContentPreference[] standardValues() {
@@ -58,6 +58,7 @@ enum ContentPreference {
         return prefs.edit().putLong(key, revision).commit();
     }
     int icon() {
+        if (this == PAWCHIVE) return R.drawable.ic_content_pawchive;
         return this == GROUPS ? R.drawable.ic_content_groups : 0;
     }
 }

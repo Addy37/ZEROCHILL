@@ -855,8 +855,11 @@ final class OnlyFapHubView extends FrameLayout {
             post(() -> work.schedule("favorite-publish", () -> {
                 favoritesLoading = false;
                 if (closed) return;
+                boolean pawchive = discoveryPreference == ContentPreference.PAWCHIVE;
+                inputs.add(pawchive ? ContentPreference.PAWCHIVE.value : ContentPreference.ALL.value);
                 if (!inputs.equals(favoriteInputs)) {
                     favoriteInputs = inputs;
+                    favorites.removeIf(group -> PawchiveRepository.isProfile(group.item.url) != pawchive);
                     favoritesRail.removeAllViews();
                     int count = Math.min(10, favorites.size());
                     for (int i = 0; i < count; i++) {
@@ -1140,6 +1143,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     private void requestStartupHero() {
         if (closed || !active || heroItem != null || pendingHero != null || startupRequested) return;
+        if (discoveryPreference == ContentPreference.PAWCHIVE) return;
         if (discoveryPreference != ContentPreference.ALL) {
             for (NativeContentItem creator : discoverCandidates) {
                 loadStartupThumbnail(creator);
@@ -1491,9 +1495,9 @@ final class OnlyFapHubView extends FrameLayout {
                 try {
                     PawchiveRepository.Creator profile = PawchiveRepository.profile(creator.url, creator.title);
                     if (profile != null && active && !closed && generation == heroGeneration) {
-                        List<NativeContentItem> media = new PawchiveRepository().galleryPage(profile, 0).items;
+                        List<NativeContentItem> media = new PawchiveRepository().galleryPage(profile, 0, false).items;
                         ArrayList<OnlyFapHeroPolicy.Artwork> candidates = new ArrayList<>();
-                        OnlyFapHeroPolicy.addDirectImages(candidates, media, profile.profileUrl());
+                        OnlyFapHeroPolicy.addPreviews(candidates, media, PawchiveRepository.ORIGIN);
                         for (OnlyFapHeroPolicy.Artwork choice : candidates) {
                             if (!active || closed || generation != heroGeneration || !portraitArtwork.isEmpty()) break;
                             qualifyPortraitArtwork(generation, creator, portraitArtwork, choice, trace);
@@ -2422,7 +2426,12 @@ final class OnlyFapHubView extends FrameLayout {
                             .placeholder(new ColorDrawable(
                                     ZeroChillUi.color(getContext(), R.color.zc_surface_pressed)))
                             .error(R.drawable.ic_more_account);
-            if (avatarOverride == null) request.circleCrop();
+            if (avatarOverride == null) {
+                request.circleCrop();
+                if (PawchiveRepository.isProfile(creator.url))
+                    request.listener(PawchiveAvatarArtwork.fallback(image, creator,
+                            () -> active && !closed && image.isAttachedToWindow(), dp(72)));
+            }
             request.into(image);
         } catch (Exception ignored) {
             image.setImageResource(R.drawable.ic_more_account);
@@ -2432,7 +2441,8 @@ final class OnlyFapHubView extends FrameLayout {
     private GlideUrl remoteImage(String imageUrl, String referer) {
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
                 .addHeader("User-Agent", USER_AGENT);
-        if (!clean(referer).isEmpty()) headers.addHeader("Referer", referer);
+        if (PawchiveRepository.isArtwork(imageUrl)) headers.setHeader("Referer", PawchiveRepository.ORIGIN);
+        else if (!clean(referer).isEmpty()) headers.addHeader("Referer", referer);
         return new GlideUrl(imageUrl, headers.build());
     }
 

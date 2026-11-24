@@ -27,8 +27,8 @@ final class SavedGalleryMedia {
             return;
         }
         Intent intent = viewer(activity, saved.content);
-        if (saved.mediaFavorite && saved.content.isImage()) {
-            intent.putExtra(EXTRA_FAVORITE, true);
+        if (saved.mediaFavorite) {
+            if (saved.content.isImage()) intent.putExtra(EXTRA_FAVORITE, true);
             Intent gallery = creatorGallery(activity, saved);
             if (gallery != null) intent.putExtra(EXTRA_CREATOR_GALLERY, gallery);
         }
@@ -53,6 +53,10 @@ final class SavedGalleryMedia {
     /** Called on navigation/menu actions, never during scrolling or thumbnail binding. */
     static Intent creatorGallery(Activity activity, FavoriteStore.Item saved) {
         if (saved == null || saved.content == null) return null;
+        if (PawchiveRepository.isDirectMedia(saved.content.url)) {
+            NativeContentItem creator = OnlyFapVideoMetadata.creator(saved.content);
+            return creator == null ? null : galleryIntent(activity, CreatorGallerySpec.from(creator));
+        }
         String key = saved.galleryKey.trim();
         boolean retired = WikiFeetRepository.isRetiredItem(saved.content);
         if (!key.isEmpty()) {
