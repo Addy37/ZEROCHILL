@@ -281,7 +281,7 @@ public class OnlyFapFilteredHeroTest {
         ReflectionHelpers.setField(hub, "heroArtworkReady", true);
     }
     private void changeMode(ContentPreference mode) {
-        ContentPreference.set(activity, mode);
+        ContentPreference.setOnlyFap(activity, mode);
         hub.preparePreference(mode);
     }
     private Object pendingHero(String title) throws Exception {
@@ -513,13 +513,13 @@ public class OnlyFapFilteredHeroTest {
         ready(generation(), incoming);
         android.animation.ValueAnimator animator = ReflectionHelpers.getField(hub, "heroMorph");
         animator.setCurrentFraction(.2f);
-        changeMode(ContentPreference.TRANS_WOMEN);
+        changeMode(ContentPreference.TRANS);
         assertNull(ReflectionHelpers.getField(hub, "heroMorph"));
         assertEquals("Outgoing creator", title());
         Object latest = pendingHero("Latest");
         ready(generation(), latest);
         android.animation.ValueAnimator current = ReflectionHelpers.getField(hub, "heroMorph");
-        changeMode(ContentPreference.TRANS_WOMEN); // Same-category tap must leave it running.
+        changeMode(ContentPreference.TRANS); // Same-category tap must leave it running.
         assertSame(current, ReflectionHelpers.getField(hub, "heroMorph"));
         current.end();
         assertEquals("Latest", title());
@@ -556,7 +556,7 @@ public class OnlyFapFilteredHeroTest {
         filteredPoolFills(ContentPreference.MEN);
     }
     @Test public void transPoolContinuesPastTinyFirstArtworkAndRejectedShelves() throws Exception {
-        filteredPoolFills(ContentPreference.TRANS_WOMEN);
+        filteredPoolFills(ContentPreference.TRANS);
     }
 
     @Implements(value = FapelloRepository.class, isInAndroidSdk = false)
@@ -752,13 +752,13 @@ public class OnlyFapFilteredHeroTest {
         awaitCondition(() -> started.get() == 1);
         try {
             changeMode(ContentPreference.MEN); hub.setPreferenceCreators(Collections.emptyList());
-            changeMode(ContentPreference.TRANS_WOMEN); hub.setPreferenceCreators(Collections.emptyList());
+            changeMode(ContentPreference.TRANS); hub.setPreferenceCreators(Collections.emptyList());
         } finally { staleReady.countDown(); }
         layoutHero();
         awaitCondition(() -> heroes().size() == 1 && ReflectionHelpers.getField(hub, "heroItem") != null);
         for (NativeContentItem item : (List<NativeContentItem>) ReflectionHelpers.getField(hub, "discoverCandidates"))
-            assertTrue(item.url.contains("trans_women"));
-        assertTrue(title().contains("trans_women"));
+            assertTrue(item.url.contains("trans"));
+        assertTrue(title().contains("trans"));
     }
 
     @Test public void repeatingFilteredSourceStopsAtBudgetInsteadOfLoopingOnDuplicates() throws Exception {
@@ -783,10 +783,10 @@ public class OnlyFapFilteredHeroTest {
 
     @Test public void actuallyExhaustedFilteredSourceStopsWithoutRetryingEmptyPages() throws Exception {
         AtomicInteger requests = new AtomicInteger();
-        changeMode(ContentPreference.TRANS_MEN);
+        changeMode(ContentPreference.TRANS);
         ReflectionHelpers.setField(hub, "categoryHeroSource", new OnlyFapHubView.CategoryHeroSource() {
             public OnlyHavenRepository.CategoryPage category(ContentPreference mode, int limit, int offset) {
-                assertEquals(ContentPreference.TRANS_MEN, mode); requests.incrementAndGet();
+                assertEquals(ContentPreference.TRANS, mode); requests.incrementAndGet();
                 return new OnlyHavenRepository.CategoryPage(Collections.emptyList(), false);
             }
             public List<NativeContentItem> media(OnlyHavenRepository.Creator creator, int page, int limit) {

@@ -21,7 +21,7 @@ final class OnlyFapPreferencePicker {
 
     static void show(View anchor, Runnable changed) {
         if (!anchor.isAttachedToWindow()) {
-            ContentPreferenceUi.choose(anchor.getContext(), changed);
+            ContentPreferenceUi.chooseOnlyFap(anchor.getContext(), changed);
             return;
         }
         // A selector owns at most one window, including rapid repeated taps.
@@ -49,7 +49,7 @@ final class OnlyFapPreferencePicker {
         PreferenceGlassPanel glass = new PreferenceGlassPanel(context, controls);
         AlertDialog dialog = new ZeroChillDialog.Builder(context).setView(glass).create();
         ContentPreference current = ContentPreference.getOnlyFap(context);
-        for (ContentPreference option : ContentPreference.values()) {
+        for (ContentPreference option : ContentPreference.onlyFapValues()) {
             boolean selected = option == current;
             LinearLayout cell = new LinearLayout(context) {
                 @Override public void onInitializeAccessibilityNodeInfo(android.view.accessibility.AccessibilityNodeInfo info) {
@@ -86,7 +86,7 @@ final class OnlyFapPreferencePicker {
             label.setTypeface(null, selected ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
             cell.addView(label, new LinearLayout.LayoutParams(-1, -2));
             GridLayout.LayoutParams params = new GridLayout.LayoutParams(
-                    GridLayout.spec(GridLayout.UNDEFINED), option == ContentPreference.PAWCHIVE
+                    GridLayout.spec(GridLayout.UNDEFINED), (option == ContentPreference.ALL || option == ContentPreference.PAWCHIVE)
                             ? GridLayout.spec(0, 2, 1f) : GridLayout.spec(GridLayout.UNDEFINED, 1f));
             params.width = 0;
             params.height = -2;

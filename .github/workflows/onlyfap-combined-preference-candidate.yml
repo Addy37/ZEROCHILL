@@ -1,0 +1,138 @@
+name: OnlyFap preference signed phone-test candidate
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'app/src/**/ContentPreference*.java'
+      - 'app/src/**/OnlyFapPreferencePicker*.java'
+      - '.github/workflows/onlyfap-combined-preference-candidate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: onlyfap-preference-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  signed-beta:
+    if: github.head_ref == 'feature/onlyfap-combined-trans' || github.ref_name == 'feature/onlyfap-combined-trans'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ZEROCHILL_V7_TRAFFIC: 'true'
+      SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ANON_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/dynamic-api
+      SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
+      ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ''
+      APP_VERSION_CODE: '7005021'
+      APP_VERSION_NAME: '7.5.0-preference-test.2'
+      ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify current ZEROCHILL build lineage
+        run: bash tools/verify-android-build-lineage.sh
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+      - name: Recheck main before signing
+        run: bash tools/verify-android-build-lineage.sh
+      - name: Restore existing ZEROCHILL signing certificate
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib
+          raw = os.environ.get("SIGNING_BUNDLE", "")
+          if not raw:
+              raise SystemExit("Missing existing signing bundle")
+          data = json.loads(raw.replace("\r", "").replace("\n", ""))
+          for key in ("keystore_base64", "store_password", "key_alias", "key_password"):
+              if not data.get(key):
+                  raise SystemExit("Missing signing field: " + key)
+          for key in ("store_password", "key_alias", "key_password"):
+              print("::add-mask::" + data[key])
+          path = pathlib.Path(os.environ["RUNNER_TEMP"]) / "zerochill-consolidated-test.jks"
+          path.write_bytes(base64.b64decode(data["keystore_base64"]))
+          path.chmod(0o600)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as out:
+              for key, value in {
+                  "ANDROID_KEYSTORE_PATH": str(path),
+                  "ANDROID_KEYSTORE_PASSWORD": data["store_password"],
+                  "ANDROID_KEY_ALIAS": data["key_alias"],
+                  "ANDROID_KEY_PASSWORD": data["key_password"]
+              }.items():
+                  out.write(key + "=" + value + "\n")
+          PY
+      # Four pre-independent-feed shared-queue assertions in ContentPreferenceTest are
+      # known obsolete (PR #476, confirmed again in run 45458362596). Keep every
+      # other method and run current independent-feed regressions instead.
+      - name: Focused preference and compatibility regressions
+        run: |
+          gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest \
+            --tests com.webapp.crazyshit.OnlyFapCombinedPreferenceTest \
+            --tests com.webapp.crazyshit.OnlyFapPreferencePickerTest \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.upgradeDefaultUnknownAndRemovedModeAreAll \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.actualChangesAreAcknowledgedOncePerSurfaceAcrossRecreation \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.sharedNativePickerPersistsAndDoesNotTreatReselectionAsChange \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.settingsAndOnlyFapSelectorChangeTheSamePreference \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.glassPillAndPickerReflectEveryModeAfterRecreationAndCancelDoesNotChangeIt \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.filteredHeroAcceptsCategoryCreatorsAndRejectsUnrelatedCachedCreators \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.discoveryRestoreDoesNotApplyAnEarlierModePosition \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.openingSpecificMergedCreatorKeepsBothSourceProfilesInEveryMode \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.discoveryClearsOfferedCreatorsAcrossRapidModeChanges \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.preferenceNoticesAreCompactFiniteAndAcknowledgedOnce \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.categoryMappingUsesVerifiedProviderTokensAndConfiguredRoute \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.preferenceMixExcludesUnverifiedProviders \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.latePreferenceAdmissionKeepsHistoricalContentButRejectsStaleBlockedAndDuplicateItems \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.filteredFutureSequencingPreservesCurrentAndSeparatesCrossSourceCreator \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.onlyHavenCatalogLockCannotBlockOrdinaryProviderPagination \
+            --tests com.webapp.crazyshit.ShitTokFeedSessionStoreTest \
+            --tests com.webapp.crazyshit.ShitTokFiveFeedInventoryTest \
+            --tests com.webapp.crazyshit.ShitTokCategoryHandoffTest \
+            --tests com.webapp.crazyshit.ShitTokRetainedPlayerReturnTest \
+            --tests com.webapp.crazyshit.OnlyFapGenderShelvesTest \
+            --tests com.webapp.crazyshit.OnlyFapFilteredHeroTest \
+            --tests com.webapp.crazyshit.CreatorCategoryIndexTest \
+            --tests com.webapp.crazyshit.FapzoneCreatorSearchRepositoryTest \
+            --tests com.webapp.crazyshit.CreatorSuggestionsTest \
+            --tests com.webapp.crazyshit.ShitTokContentPreferenceTest \
+            --tests com.webapp.crazyshit.ShitTokCategoryStripTest \
+            --tests com.webapp.crazyshit.PawchiveRepositoryTest
+      - name: Assemble and verify side-by-side APK
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --console=plain --max-workers=3 :app:assembleDebug
+          mkdir -p candidate
+          bash tools/verify-android-build-lineage.sh candidate/APK-LINEAGE.txt
+          apk="candidate/ZeroChill-Preference-Test-2-feature-onlyfap-combined-trans-$(git rev-parse --short=8 HEAD).apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee candidate/APK-SIGNING.txt
+          grep -Fx 'Signer #1 certificate SHA-256 digest: 04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356' candidate/APK-SIGNING.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$apk" > "$RUNNER_TEMP/beta-badging.txt"
+          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005021' versionName='7.5.0-preference-test.2-dev'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
+          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Upload signed OnlyFap preference test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-OnlyFap-preference-signed-test-2
+          path: candidate/
+          retention-days: 14
+          if-no-files-found: error

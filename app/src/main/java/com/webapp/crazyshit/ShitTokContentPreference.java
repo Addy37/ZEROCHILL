@@ -29,7 +29,7 @@ final class ShitTokContentPreference {
     }
 
     static synchronized boolean set(Context context, ContentPreference mode) {
-        if (mode == null || mode == ContentPreference.PAWCHIVE || mode == get(context)) return false;
+        if (mode == null || mode == ContentPreference.PAWCHIVE || mode == ContentPreference.TRANS || mode == get(context)) return false;
         ContentPreference.prefs(context).edit().putString(KEY, mode.value).apply();
         return true;
     }

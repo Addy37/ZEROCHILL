@@ -127,7 +127,7 @@ final class CreatorSuggestionsController {
         if (visibilityChanged != null) visibilityChanged.accept(true);
         panel.setVisibility(View.VISIBLE);
         cancel();
-        mode = ContentPreference.get(activity);
+        mode = ContentPreference.onlyFapMode(ContentPreference.get(activity));
         final ContentPreference requestedMode = mode;
         adapter.clearNow();
         String query = value.trim();
@@ -148,13 +148,13 @@ final class CreatorSuggestionsController {
             try {
                 List<NativeContentItem> results = lookup.find(activity.getApplicationContext(), query);
                 if (!Thread.currentThread().isInterrupted() && token == generation
-                        && requestedMode == ContentPreference.get(activity)) {
+                        && requestedMode == ContentPreference.onlyFapMode(ContentPreference.get(activity))) {
                     CreatorCatalog.remember(activity, results);
                 }
             } catch (Exception failure) { error = "Live suggestions unavailable"; }
             String finalError = error;
             main.post(() -> {
-                if (closed || !active || token != generation || requestedMode != ContentPreference.get(activity) || activity.isFinishing()
+                if (closed || !active || token != generation || requestedMode != ContentPreference.onlyFapMode(ContentPreference.get(activity)) || activity.isFinishing()
                         || activity.isDestroyed() || !query.equals(input.getText().toString().trim())) return;
                 scheduleLocal(query, token, 0L, count -> hint.setText(finalError != null
                         ? finalError + (count > 0 ? " · Saved matches shown" : " · You can still tap Search")
@@ -167,7 +167,7 @@ final class CreatorSuggestionsController {
 
     void refreshLocal() {
         if (closed || !active) return;
-        if (mode != ContentPreference.get(activity)) {
+        if (mode != ContentPreference.onlyFapMode(ContentPreference.get(activity))) {
             show(input.getText().toString());
             return;
         }
@@ -194,7 +194,7 @@ final class CreatorSuggestionsController {
             List<NativeContentItem> visible = OnlyFapCreatorResults.merge(
                     CreatorCategoryIndex.filter(activity, requestedMode, local), null, 8);
             main.post(() -> {
-                if (closed || !active || token != generation || requestedMode != ContentPreference.get(activity) || activity.isFinishing()
+                if (closed || !active || token != generation || requestedMode != ContentPreference.onlyFapMode(ContentPreference.get(activity)) || activity.isFinishing()
                         || activity.isDestroyed()
                         || !requestedQuery.equals(input.getText().toString().trim())) return;
                 adapter.replace(visible, () -> {

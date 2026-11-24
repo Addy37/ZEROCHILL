@@ -21,6 +21,14 @@ final class ContentPreferenceUi {
     }
 
     static void choose(Context context, Runnable changed) {
+        choose(context, changed, false);
+    }
+
+    static void chooseOnlyFap(Context context, Runnable changed) {
+        choose(context, changed, true);
+    }
+
+    private static void choose(Context context, Runnable changed, boolean onlyFap) {
         int cyan = ZeroChillUi.color(context, R.color.zc_cyan);
         LinearLayout panel = new LinearLayout(context);
         panel.setOrientation(LinearLayout.VERTICAL);
@@ -39,8 +47,8 @@ final class ContentPreferenceUi {
         panel.addView(scroll, scrollParams);
         PreferenceGlassPanel glassPanel = new PreferenceGlassPanel(context, panel);
         android.app.AlertDialog dialog = new ZeroChillDialog.Builder(context).setView(glassPanel).create();
-        ContentPreference current = ContentPreference.get(context);
-        for (ContentPreference option : ContentPreference.standardValues()) {
+        ContentPreference current = onlyFap ? ContentPreference.getOnlyFap(context) : ContentPreference.get(context);
+        for (ContentPreference option : onlyFap ? ContentPreference.onlyFapValues() : ContentPreference.standardValues()) {
             boolean selected = current == option;
             LinearLayout row = new LinearLayout(context) {
                 @Override public void onInitializeAccessibilityNodeInfo(android.view.accessibility.AccessibilityNodeInfo info) {
@@ -87,7 +95,8 @@ final class ContentPreferenceUi {
             choices.addView(row, params);
             ZeroChillMotion.installPressFeedback(row);
             row.setOnClickListener(v -> {
-                boolean actualChange = ContentPreference.set(context, option);
+                boolean actualChange = onlyFap ? ContentPreference.setOnlyFap(context, option)
+                        : ContentPreference.set(context, option);
                 dialog.dismiss();
                 if (actualChange && changed != null) changed.run();
             });

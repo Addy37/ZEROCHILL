@@ -291,6 +291,9 @@ final class OnlyHavenRepository {
     }
 
     CategoryPage fetchCategoryPage(Context context, ContentPreference preference, int limit, int offset) throws IOException {
+        if (preference == ContentPreference.TRANS)
+            return combinedCategoryPage(limit, offset, (mode, count, start) ->
+                    fetchCategoryPage(context, mode, count, start));
         SourceConfig.OnlyHaven config = config();
         if (!config.enabled) throw new IOException("OnlyHaven is temporarily unavailable");
         int size = Math.max(1, Math.min(50, limit));
@@ -302,6 +305,48 @@ final class OnlyHavenRepository {
         CreatorCategoryIndex.remember(context, preference, page.creators);
         rememberConfirmedCreators(context, page.creators);
         return page;
+    }
+
+    interface CategoryPageSource {
+        CategoryPage fetch(ContentPreference mode, int count, int offset) throws IOException;
+    }
+
+    /** Split a virtual page between the existing two category streams without changing provider tokens. */
+    static CategoryPage combinedCategoryPage(int limit, int offset, CategoryPageSource source) throws IOException {
+        int size = Math.max(1, Math.min(50, limit));
+        int start = Math.max(0, offset);
+        int womenOffset = start / 2 + start % 2;
+        int menOffset = start / 2;
+        int womenCount = size / 2 + (size % 2 == 1 && start % 2 == 0 ? 1 : 0);
+        int menCount = size - womenCount;
+        CategoryPage women = null, men = null;
+        IOException failure = null;
+        if (womenCount > 0) {
+            try { women = source.fetch(ContentPreference.TRANS_WOMEN, womenCount, womenOffset); }
+            catch (IOException error) { failure = error; }
+        }
+        if (Thread.currentThread().isInterrupted()) throw new java.io.InterruptedIOException();
+        if (menCount > 0) {
+            try { men = source.fetch(ContentPreference.TRANS_MEN, menCount, menOffset); }
+            catch (IOException error) { failure = error; }
+        }
+        if (Thread.currentThread().isInterrupted()) throw new java.io.InterruptedIOException();
+        if (women == null && men == null) throw failure != null ? failure : new IOException("Category unavailable");
+        List<Creator> first = women == null ? java.util.Collections.emptyList() : women.creators;
+        List<Creator> second = men == null ? java.util.Collections.emptyList() : men.creators;
+        Map<String, Creator> unique = new LinkedHashMap<>();
+        for (int i = 0; i < Math.max(first.size(), second.size()); i++) {
+            if (start % 2 == 0) {
+                if (i < first.size()) unique.putIfAbsent(first.get(i).url, first.get(i));
+                if (i < second.size()) unique.putIfAbsent(second.get(i).url, second.get(i));
+            } else {
+                if (i < second.size()) unique.putIfAbsent(second.get(i).url, second.get(i));
+                if (i < first.size()) unique.putIfAbsent(first.get(i).url, first.get(i));
+            }
+        }
+        // A failed or not-yet-requested stream is not proof of exhaustion.
+        boolean more = women == null || women.hasMore || men == null || men.hasMore;
+        return new CategoryPage(new ArrayList<>(unique.values()), more);
     }
 
     CategoryPage parseCategoryPage(String body, SourceConfig.OnlyHaven config,

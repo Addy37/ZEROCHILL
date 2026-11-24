@@ -47,16 +47,22 @@ public class OnlyFapPreferencePickerTest {
         GridLayout grid = root.findViewWithTag("onlyfap_preference_grid");
         assertNotNull(grid);
         assertEquals(2, grid.getColumnCount());
-        assertEquals(7, grid.getChildCount());
+        assertEquals(6, grid.getChildCount());
+        String[] order = {"all", "women", "men", "trans", "groups", "pawchive"};
+        for (int i = 0; i < order.length; i++)
+            assertEquals("preference_" + order[i], grid.getChildAt(i).getTag());
+        assertNull(root.findViewWithTag("preference_trans_women"));
+        assertNull(root.findViewWithTag("preference_trans_men"));
         assertNotNull(root.findViewWithTag("preference_pawchive"));
         assertTrue(root.findViewWithTag("preference_all").isSelected());
-        root.findViewWithTag("preference_trans_men").performClick();
-        assertEquals(ContentPreference.TRANS_MEN, ContentPreference.get(host));
+        root.findViewWithTag("preference_trans").performClick();
+        assertEquals(ContentPreference.TRANS, ContentPreference.getOnlyFap(host));
+        assertEquals(ContentPreference.TRANS_WOMEN, ContentPreference.get(host));
         assertEquals(1, changes[0]);
         ContentPreferenceUi.chooseAnchored(anchor, () -> changes[0]++);
         dialog = ShadowAlertDialog.getLatestAlertDialog();
-        assertTrue(dialog.getWindow().getDecorView().findViewWithTag("preference_trans_men").isSelected());
-        dialog.getWindow().getDecorView().findViewWithTag("preference_trans_men").performClick();
+        assertTrue(dialog.getWindow().getDecorView().findViewWithTag("preference_trans").isSelected());
+        dialog.getWindow().getDecorView().findViewWithTag("preference_trans").performClick();
         assertEquals(1, changes[0]);
     }
     @Test public void pawchivePersistsWithoutChangingLegacyOrShitTokChoice() {
@@ -112,7 +118,7 @@ public class OnlyFapPreferencePickerTest {
         AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
         assertEquals(0, dialog.getWindow().getAttributes().windowAnimations);
         assertTrue(dialog.getWindow().getAttributes().width <= host.getResources().getDisplayMetrics().widthPixels);
-        for (ContentPreference option : ContentPreference.values())
+        for (ContentPreference option : ContentPreference.onlyFapValues())
             assertNotNull(dialog.getWindow().getDecorView().findViewWithTag("preference_" + option.value));
         dialog.getWindow().getDecorView().findViewWithTag("preference_cancel").performClick();
         assertEquals(ContentPreference.ALL, ContentPreference.get(host));
@@ -142,7 +148,7 @@ public class OnlyFapPreferencePickerTest {
         assertEquals(android.view.Gravity.CENTER, dialog.getWindow().getAttributes().gravity);
         View root = dialog.getWindow().getDecorView();
         GridLayout grid = root.findViewWithTag("onlyfap_preference_grid");
-        assertEquals(7, grid.getChildCount());
+        assertEquals(6, grid.getChildCount());
         assertNotNull(root.findViewWithTag("preference_pawchive"));
         assertTrue(root.findViewWithTag("preference_women").isSelected());
         assertTrue(grid.getParent() instanceof android.widget.ScrollView);

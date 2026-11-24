@@ -94,8 +94,8 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
                     controls = bounds();
                     if (step == 0) change(ContentPreference.MEN, "Fast category");
                     else if (step == 1) {
-                        change(ContentPreference.TRANS_MEN, "Superseded slow category");
-                        handler.postDelayed(() -> change(ContentPreference.TRANS_WOMEN,
+                        change(ContentPreference.GROUPS, "Superseded slow category");
+                        handler.postDelayed(() -> change(ContentPreference.TRANS,
                                 "Latest category with a longer name across two lines"), 40);
                     } else if (step == 2) change(ContentPreference.ALL, "All content creator");
                     else if (step == 3) change(ContentPreference.WOMEN, "Female again");
@@ -141,7 +141,7 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
         } catch (Exception error) { throw new IllegalStateException(error); }
     }
     private void change(ContentPreference mode, String title) {
-        ContentPreference.set(this, mode);
+        ContentPreference.setOnlyFap(this, mode);
         hub.preparePreference(mode); hub.clear(); // Actual pager refresh's double clear.
         if (mode == ContentPreference.ALL) {
             // All-content heroes exclude Discover creators, so use its normal qualified path.
@@ -156,8 +156,8 @@ public final class OnlyFapTransitionProbeActivity extends Activity {
                 "Controlled local artwork", "", "");
     }
     private void qualified() throws Exception {
-        ContentPreference.set(this, ContentPreference.TRANS_WOMEN);
-        hub.preparePreference(ContentPreference.TRANS_WOMEN); hub.clear();
+        ContentPreference.setOnlyFap(this, ContentPreference.TRANS);
+        hub.preparePreference(ContentPreference.TRANS); hub.clear();
         NativeContentItem creator = creator("Qualified gallery", false);
         hub.setPreferenceCreators(Collections.singletonList(creator));
         deliverQualified(creator, "https://transition.invalid/qualified.png");
