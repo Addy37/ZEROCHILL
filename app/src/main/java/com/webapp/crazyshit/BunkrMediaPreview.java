@@ -88,10 +88,14 @@ final class BunkrMediaPreview {
     }
 
     static File generate(Context context, NativeContentItem item, Task task) throws Exception {
-        CrazyShitRepository.StreamInfo stream = new BunkrRepository().resolvePlayable(context, item.url);
+        boolean pawchive = PawchiveRepository.isDirectMedia(item.url);
+        CrazyShitRepository.StreamInfo stream = pawchive
+                ? new CrazyShitRepository.StreamInfo(PawchiveRepository.original(item),
+                        PawchiveRepository.pageUrl(item), item.title, PawchiveRepository.ORIGIN)
+                : new BunkrRepository().resolvePlayable(context, item.url);
         task.check();
         if (stream == null || stream.mediaUrl == null || stream.mediaUrl.isEmpty()) return null;
-        Map<String, String> headers = headers(stream.mediaUrl, stream.requestReferer);
+        Map<String, String> headers = pawchive ? pawchiveHeaders() : headers(stream.mediaUrl, stream.requestReferer);
         Bitmap bitmap;
         if (item.isImage()) {
             bitmap = decodeImage(task.image(stream.mediaUrl, headers));
@@ -208,6 +212,14 @@ final class BunkrMediaPreview {
         while (FAILURES.size() > 256) FAILURES.remove(FAILURES.keySet().iterator().next());
     }
 
+    static Map<String, String> pawchiveHeaders() {
+        Map<String, String> headers = new java.util.LinkedHashMap<>();
+        headers.put("User-Agent", PawchiveMediaRequests.USER_AGENT);
+        headers.put("Referer", PawchiveRepository.ORIGIN);
+        headers.put("Accept-Encoding", "identity");
+        return headers;
+    }
+
     static Map<String, String> headers(String url, String referer) {
         Map<String, String> headers = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         headers.put("User-Agent", BunkrRepository.userAgent());
@@ -241,6 +253,10 @@ final class BunkrMediaPreview {
         }
         private HttpURLConnection open(String url, Map<String, String> headers) throws IOException {
             check();
+            if (PawchiveMediaRequests.USER_AGENT.equals(headers.get("User-Agent"))) {
+                PawchiveMediaRequests.awaitStart();
+                check();
+            }
             URL parsed = new URL(url);
             if (!"https".equals(parsed.getProtocol()) && !"http".equals(parsed.getProtocol()))
                 throw new IOException("Invalid preview URL");

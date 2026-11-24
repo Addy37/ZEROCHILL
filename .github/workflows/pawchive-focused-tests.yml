@@ -16,8 +16,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   signed-beta:
-    if: false # Provider diagnostic only; no Android build on this revision.
-    # if: github.head_ref == 'feature/pawchive-onlyfap' || github.ref_name == 'feature/pawchive-onlyfap'
+    if: github.head_ref == 'feature/pawchive-onlyfap' || github.ref_name == 'feature/pawchive-onlyfap'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -29,8 +28,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7005003'
-      APP_VERSION_NAME: '7.5.0-pawchive-test.3'
+      APP_VERSION_CODE: '7005004'
+      APP_VERSION_NAME: '7.5.0-pawchive-test.4'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v6
@@ -83,72 +82,31 @@ jobs:
               }.items():
                   out.write(key + "=" + value + "\n")
           PY
-      # Four shared-queue fixtures in ContentPreferenceTest predate the independent feeds.
-      # Keep all other methods and run the current independent-feed, retention and preparation
-      # tests instead. Full-suite legacy failures remain tracked separately (PRs #472/#476).
-      - name: Focused provider and isolation regressions
+      - name: Focused playback and preview regressions
         run: |
           gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest \
             --tests com.webapp.crazyshit.PawchiveRepositoryTest \
-            --tests com.webapp.crazyshit.OnlyFapPreferencePickerTest \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.upgradeDefaultUnknownAndRemovedModeAreAll \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.actualChangesAreAcknowledgedOncePerSurfaceAcrossRecreation \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.sharedNativePickerPersistsAndDoesNotTreatReselectionAsChange \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.settingsAndOnlyFapSelectorChangeTheSamePreference \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.glassPillAndPickerReflectEveryModeAfterRecreationAndCancelDoesNotChangeIt \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.filteredHeroAcceptsCategoryCreatorsAndRejectsUnrelatedCachedCreators \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.discoveryRestoreDoesNotApplyAnEarlierModePosition \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.openingSpecificMergedCreatorKeepsBothSourceProfilesInEveryMode \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.discoveryClearsOfferedCreatorsAcrossRapidModeChanges \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.preferenceNoticesAreCompactFiniteAndAcknowledgedOnce \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.categoryMappingUsesVerifiedProviderTokensAndConfiguredRoute \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.preferenceMixExcludesUnverifiedProviders \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.latePreferenceAdmissionKeepsHistoricalContentButRejectsStaleBlockedAndDuplicateItems \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.filteredFutureSequencingPreservesCurrentAndSeparatesCrossSourceCreator \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.onlyHavenCatalogLockCannotBlockOrdinaryProviderPagination \
-            --tests com.webapp.crazyshit.ShitTokFeedSessionStoreTest \
-            --tests com.webapp.crazyshit.ShitTokCategoryHandoffTest \
-            --tests com.webapp.crazyshit.ShitTokRetainedPlayerReturnTest \
-            --tests com.webapp.crazyshit.ShitTokPreferencePreparationTest \
-            --tests com.webapp.crazyshit.OnlyFapGenderShelvesTest \
-            --tests com.webapp.crazyshit.ShitTokContentPreferenceTest \
-            --tests com.webapp.crazyshit.ShitTokSourceModeTest \
-            --tests com.webapp.crazyshit.ShitTokFiveFeedInventoryTest \
-            --tests com.webapp.crazyshit.ShitTokCategoryEligibilityTest \
             --tests com.webapp.crazyshit.BunkrGalleryHttpHeadersTest \
-            --tests com.webapp.crazyshit.OnlyFapGalleryFavoritesTest \
-            --tests com.webapp.crazyshit.GalleryViewerLifecycleTest \
-            --tests com.webapp.crazyshit.OnlyFapHeroPolicyTest
+            --tests com.webapp.crazyshit.BunkrMediaPreviewTest \
+            --tests com.webapp.crazyshit.BunkrMediaPreviewLifecycleTest \
+            --tests com.webapp.crazyshit.GalleryViewerLifecycleTest
       - name: Assemble and verify side-by-side APK
         run: |
           set -euo pipefail
           gradle --no-daemon --console=plain --max-workers=3 :app:assembleDebug
           mkdir -p candidate
           bash tools/verify-android-build-lineage.sh candidate/APK-LINEAGE.txt
-          apk="candidate/ZeroChill-Pawchive-Beta-3-feature-pawchive-onlyfap-$(git rev-parse --short=8 HEAD).apk"
+          apk="candidate/ZeroChill-Pawchive-Beta-4-feature-pawchive-onlyfap-$(git rev-parse --short=8 HEAD).apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee candidate/APK-SIGNING.txt
           grep -Fx 'Signer #1 certificate SHA-256 digest: 04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356' candidate/APK-SIGNING.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$apk" > "$RUNNER_TEMP/beta-badging.txt"
-          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005003' versionName='7.5.0-pawchive-test.3-dev'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
+          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005004' versionName='7.5.0-pawchive-test.4-dev'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
       - name: Upload signed Pawchive test APK
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Pawchive-signed-beta-3
+          name: ZeroChill-Pawchive-signed-beta-4
           path: candidate/
           retention-days: 14
           if-no-files-found: error
-
-      - name: Audit the four legacy shared-queue assertions separately
-        id: legacy
-        continue-on-error: true
-        run: |
-          gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.preferenceChangePreservesPlayingGenerationAndDropsEvenPreparedNext \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.preferenceSwitchRetainsCurrentPlayerObjectAndFocusState \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.switchingFromLaterPageRemovesIncompatibleHistoryWithoutChangingPlaybackGeneration \
-            --tests com.webapp.crazyshit.ContentPreferenceTest.womenMenWomenRestoresVerifiedFutureStreamsAndKeepsCurrentClip
-      - name: Record legacy audit outcome
-        if: steps.legacy.outcome != 'skipped'
-        run: echo "Legacy shared-queue audit **${{ steps.legacy.outcome }}**. See the separate test step for individual assertions." >> "$GITHUB_STEP_SUMMARY"

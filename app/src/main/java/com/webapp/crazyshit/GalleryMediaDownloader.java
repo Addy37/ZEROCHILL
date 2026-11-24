@@ -145,7 +145,8 @@ final class GalleryMediaDownloader {
                     Environment.DIRECTORY_DOWNLOADS,
                     fileName
             );
-            request.addRequestHeader("User-Agent", userAgent(activity));
+            request.addRequestHeader("User-Agent", PawchiveRepository.isDirectMedia(item.url)
+                    ? PawchiveMediaRequests.USER_AGENT : userAgent(activity));
             if (!referer.isEmpty()) request.addRequestHeader("Referer", referer);
             String cookies = PawchiveRepository.isDirectMedia(item.url) ? "" : cookies(mediaUrl, referer);
             if (!cookies.isEmpty()) request.addRequestHeader("Cookie", cookies);

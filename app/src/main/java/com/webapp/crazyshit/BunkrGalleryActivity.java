@@ -1008,12 +1008,29 @@ public final class BunkrGalleryActivity extends Activity {
                 requestReferer.isEmpty() ? item.url : requestReferer);
         androidx.media3.datasource.DataSource.Factory data = isCreatorGallery() && !pawchive
                 ? GalleryVideoCache.factory(this, httpFactory) : httpFactory;
+        if (pawchive) {
+            data = new androidx.media3.datasource.ResolvingDataSource.Factory(data, spec -> {
+                PawchiveMediaRequests.awaitStart();
+                return spec;
+            });
+        }
         if (BunkrRepository.isBunkrUrl(item.url)
                 && value(Uri.parse(mediaUrl).getPath()).toLowerCase(java.util.Locale.US).endsWith(".mp4")) {
             data = BunkrMp4DataSource.wrap(data);
         }
         DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(this)
                 .setDataSourceFactory(data);
+        if (pawchive) {
+            mediaSourceFactory.setLoadErrorHandlingPolicy(new androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy() {
+                @Override public long getRetryDelayMsFor(LoadErrorInfo info) {
+                    if (info.exception instanceof androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) {
+                        int status = ((androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) info.exception).responseCode;
+                        if (PawchiveMediaRequests.shouldStopRetrying(status)) return androidx.media3.common.C.TIME_UNSET;
+                    }
+                    return super.getRetryDelayMsFor(info);
+                }
+            });
+        }
         player = new ExoPlayer.Builder(this).setMediaSourceFactory(mediaSourceFactory).build();
         if (viewerChrome != null) viewerChrome.updatePlayer(player);
         activeVideoPosition = position;
@@ -1137,7 +1154,8 @@ public final class BunkrGalleryActivity extends Activity {
         Map<String, String> headers = new LinkedHashMap<>();
         String referer = requestReferer;
         if (PawchiveRepository.ORIGIN.equals(referer)) {
-            return httpFactory.setDefaultRequestProperties(java.util.Collections.singletonMap("Referer", referer));
+            return httpFactory.setUserAgent(PawchiveMediaRequests.USER_AGENT)
+                    .setDefaultRequestProperties(java.util.Collections.singletonMap("Referer", referer));
         }
         if (!referer.isEmpty()) {
             headers.put("Referer", referer);

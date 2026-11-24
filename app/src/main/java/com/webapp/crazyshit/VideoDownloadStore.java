@@ -187,11 +187,13 @@ final class VideoDownloadStore {
 
         String mime = mimeType(mediaUrl);
         String fileName = fileName(title, pageUrl.isEmpty() ? mediaUrl : pageUrl, mime);
+        boolean pawchive = PawchiveRepository.isDirectMedia(pageUrl);
         Map<String, String> requestHeaders = requestHeaders(
-                mediaUrl, requestReferer, userAgent, cookies
+                mediaUrl, requestReferer, pawchive ? PawchiveMediaRequests.USER_AGENT : userAgent, cookies
         );
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // Pawchive's CDN disallows the concurrent requests of segmented downloads.
+        if (!pawchive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             long id = nextCustomId();
             try {
                 saveMetadata(context, new Entry(

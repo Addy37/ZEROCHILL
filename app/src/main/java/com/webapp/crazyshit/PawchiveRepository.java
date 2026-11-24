@@ -238,6 +238,8 @@ final class PawchiveRepository {
     }
 
     static String savedArtwork(String kind, String url, String artwork) {
+        if (NativeContentItem.KIND_MEDIA.equals(kind) && isDirectMedia(url) && isThumbnail(artwork))
+            return ""; // Older cards used the adjacent photo as their video poster.
         if (NativeContentItem.KIND_IMAGE.equals(kind) && isDirectMedia(url) && !isArtwork(artwork))
             return THUMBNAIL_BASE + url.substring(IDENTITY_BASE.length());
         return artwork;
@@ -331,18 +333,11 @@ final class PawchiveRepository {
                     detailFailure = error;
                 }
             }
-            String poster = "";
-            for (Media media : assets) {
-                if (!media.video) {
-                    poster = media.thumbnailUrl;
-                    break;
-                }
-            }
             for (Media media : assets) {
                 String title = post.title.isEmpty() ? media.name : post.title;
                 NativeContentItem item = new NativeContentItem(
                         media.video ? NativeContentItem.KIND_MEDIA : NativeContentItem.KIND_IMAGE,
-                        title, media.url, media.video ? poster : media.thumbnailUrl, "", creator.profileUrl(),
+                        title, media.url, media.thumbnailUrl, "", creator.profileUrl(),
                         "", "OnlyFap · Pawchive", creator.name).withSourceMedia(media.originalUrl, post.postUrl());
                 items.putIfAbsent(item.url, item);
             }

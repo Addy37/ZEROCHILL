@@ -92,7 +92,7 @@ public class PawchiveRepositoryTest {
         assertTrue(page.items.get(0).isImage());
         assertTrue(page.items.get(1).isVideo());
         assertEquals("https://img.pawchive.pw/thumbnail/data/ab/cd/photo.jpg", page.items.get(0).imageUrl);
-        assertEquals(page.items.get(0).imageUrl, page.items.get(1).imageUrl);
+        assertTrue(page.items.get(1).imageUrl.isEmpty());
         assertEquals("https://n4.pawchive.pw/data/ab/cd/photo.jpg", PawchiveRepository.original(page.items.get(0)));
         assertEquals(creator.profileUrl(), page.items.get(0).uploader);
         assertEquals(creator.profileUrl(), OnlyFapVideoMetadata.creator(page.items.get(1)).url);
@@ -104,6 +104,19 @@ public class PawchiveRepositoryTest {
         assertFalse(PawchiveRepository.isDirectMedia("https://file.pawchive.pw.evil.test/data/ab/cd/photo.jpg"));
         assertFalse(PawchiveRepository.isDirectMedia("https://file.pawchive.pw/data/../photo.jpg"));
         assertFalse(PawchiveRepository.isDirectMedia("https://file.pawchive.pw/data/ab/cd/archive.zip"));
+    }
+
+    @Test public void videoPostersUseTheIdentifiedClientAndRetireCopiedPhotoArt() {
+        String clip = "https://file.pawchive.pw/data/ab/cd/clip.mp4";
+        String photo = "https://img.pawchive.pw/thumbnail/data/ab/cd/photo.jpg";
+        assertEquals("", PawchiveRepository.savedArtwork(NativeContentItem.KIND_MEDIA, clip, photo));
+        assertEquals(photo, PawchiveRepository.savedArtwork(NativeContentItem.KIND_IMAGE,
+                "https://file.pawchive.pw/data/ab/cd/photo.jpg", photo));
+        assertEquals(PawchiveMediaRequests.USER_AGENT, BunkrMediaPreview.pawchiveHeaders().get("User-Agent"));
+        assertEquals(PawchiveRepository.ORIGIN, BunkrMediaPreview.pawchiveHeaders().get("Referer"));
+        assertTrue(PawchiveMediaRequests.shouldStopRetrying(403));
+        assertTrue(PawchiveMediaRequests.shouldStopRetrying(429));
+        assertFalse(PawchiveMediaRequests.shouldStopRetrying(503));
     }
 
     @Test public void savedVideoKeepsItsIdentityAndRoutesToItsDeclaredServer() throws Exception {

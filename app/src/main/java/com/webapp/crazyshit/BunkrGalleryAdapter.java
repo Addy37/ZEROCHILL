@@ -510,7 +510,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.repairPending = false;
         holder.wantsMediaPreview = false;
         holder.previewAttempted = false;
-        File cachedPreview = BunkrRepository.isBunkrUrl(item.url)
+        boolean pawchiveVideo = pawchiveVideoPreview(item);
+        File cachedPreview = BunkrRepository.isBunkrUrl(item.url) || pawchiveVideo
                 ? BunkrMediaPreview.cached(context, item) : null;
         if (cachedPreview != null) {
             holder.wantsMediaPreview = true;
@@ -521,7 +522,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             Glide.with(holder.image).clear(holder.image);
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
             if (PawchiveRepository.isDirectMedia(item.url)) {
-                if (item.isImage()) holder.unavailable.setVisibility(View.VISIBLE);
+                if (pawchiveVideo) requestMediaPreview(holder, item);
+                else if (item.isImage()) holder.unavailable.setVisibility(View.VISIBLE);
             } else repairArtwork(holder, item, item.imageUrl);
         } else {
             loadArtwork(holder, item, item.imageUrl, true);
@@ -617,8 +619,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         }
     }
 
+    private static boolean pawchiveVideoPreview(NativeContentItem item) {
+        return item.isVideo() && !PawchiveRepository.original(item).isEmpty();
+    }
+
     private void requestMediaPreview(Holder holder, NativeContentItem item) {
-        if (!BunkrRepository.isBunkrUrl(item.url) || (!item.isImage() && !item.isVideo())) return;
+        boolean pawchive = pawchiveVideoPreview(item);
+        if (!pawchive && (!BunkrRepository.isBunkrUrl(item.url) || (!item.isImage() && !item.isVideo()))) return;
         holder.wantsMediaPreview = true;
         if (!previewVisible(holder) || holder.previewAttempted) return;
         if (item.isVideo() && BunkrMaintenance.isKnown(item.url)) {
@@ -632,7 +639,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             holder.preview = null;
             holder.maintenance.refresh();
             if (file == null) {
-                holder.unavailable.setVisibility(View.VISIBLE);
+                if (!pawchive) holder.unavailable.setVisibility(View.VISIBLE);
                 return;
             }
             loadMediaPreview(holder, item, file);
