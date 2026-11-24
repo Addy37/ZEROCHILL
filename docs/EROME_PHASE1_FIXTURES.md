@@ -1,0 +1,7 @@
+# Erome Phase 1: offline UI prototype
+
+This is a debug-only phone preview based on merged PR #479. No Erome website, API, account, external media, scraping or remote configuration is used. Nine invented sample albums use generated geometric artwork and a two-second, silent, synthetic H.264 test-pattern clip. All fixture identity strings use the reserved .invalid domain; the debug Glide loader handles its artwork locally. No source registration, preferences, search integration, backend deployment, favorites/history, downloads or release publication.
+
+Open OnlyFap in the side-by-side test APK, scroll below the hero, tap Erome preview. The entry is hidden when Pawchive is selected and is not available in the release package. Browse album cards, uploader profiles and tags; load further local pages; use the deliberate retry/empty sample controls. Open albums and switch All/Pictures/Videos or two/three columns. Tap media to exercise the existing native Bunkr grid, pager, shared element transition and Media3 controls with local sample media. The isolated preview does not use the production gallery activity's source routing, persistent actions or provider pagination. Phone validation and actual provider integration are separate.
+
+Build candidate: 7.5.0-erome-fixture.1-dev (7005030), existing side-by-side package and certificate. One focused CI workflow; no merge or release without owner approval.
