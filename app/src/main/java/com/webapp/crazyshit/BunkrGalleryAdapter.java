@@ -509,6 +509,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         cancelGifResolution(holder);
         setGifRunning(holder.image.getDrawable(), false);
         holder.gifUpgradeAttempted = false;
+        holder.gifThumbnailReady = false;
         resetTileTransform(holder.itemView);
         holder.morphPulse.animate().cancel();
         holder.morphPulse.setAlpha(0f);
@@ -596,6 +597,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                             if (binding != holder.bindGeneration) return;
                             if (PawchiveRepository.isDirectMedia(item.url)) {
                                 holder.unavailable.setVisibility(View.VISIBLE);
+                                holder.gifThumbnailReady = true;
+                                updateGifTiles();
                                 return;
                             }
                             if (repair) repairArtwork(holder, item, url);
@@ -608,7 +611,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         if (adaptiveAspectRatios && binding == holder.bindGeneration)
                             applyAspectRatio(holder, item, resource);
                         if (item.isGif()) holder.image.post(() -> {
-                            if (binding == holder.bindGeneration) updateGifTiles();
+                            if (binding == holder.bindGeneration) {
+                                holder.gifThumbnailReady = true;
+                                updateGifTiles();
+                            }
                         });
                         return false;
                     }
@@ -707,7 +713,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 setGifRunning(drawable, true);
                 continue;
             }
-            if (PawchiveRepository.isDirectMedia(item.url) && !holder.gifUpgradeAttempted)
+            if (PawchiveRepository.isDirectMedia(item.url) && !holder.gifUpgradeAttempted
+                    && (holder.gifThumbnailReady || item.imageUrl == null || item.imageUrl.isEmpty()))
                 upgradeGif(holder, item);
         }
     }
@@ -1186,7 +1193,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         boolean attached, needsRepair, repairPending, wantsMediaPreview, previewAttempted;
         NativeContentItem boundItem;
         BunkrMediaPreview.Task preview;
-        boolean gifUpgradeAttempted;
+        boolean gifUpgradeAttempted, gifThumbnailReady;
         int gifResolutionGeneration;
         java.util.concurrent.Future<?> gifResolution;
         final AspectRatioFrameLayout tile;

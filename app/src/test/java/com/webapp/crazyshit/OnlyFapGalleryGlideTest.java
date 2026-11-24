@@ -91,13 +91,19 @@ public class OnlyFapGalleryGlideTest {
         return (BunkrGalleryAdapter.Holder) list.findViewHolderForAdapterPosition(0);
     }
     private void await(BooleanSupplier condition) throws Exception {
+        await("Glide completion", condition);
+    }
+    private void await(String stage, BooleanSupplier condition) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         do {
             Shadows.shadowOf(Looper.getMainLooper()).idle(); layout();
             if (condition.getAsBoolean()) return;
             Thread.sleep(5);
         } while (System.nanoTime() < deadline);
-        fail("Timed out waiting for actual Glide completion");
+        fail("Timed out waiting for " + stage + "; attached=" + list.isAttachedToWindow()
+                + ", shown=" + list.isShown() + ", windowVisibility=" + list.getWindowVisibility()
+                + ", scroll=" + list.getScrollState() + ", pending=" + pending.keySet()
+                + ", drawable=" + (first() == null ? "no holder" : first().image.getDrawable()));
     }
     private byte[] png(int w, int h) {
         Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); bitmap.eraseColor(Color.CYAN);
@@ -137,15 +143,23 @@ public class OnlyFapGalleryGlideTest {
         NativeContentItem gif = new NativeContentItem(NativeContentItem.KIND_IMAGE, "GIF fixture",
                 identity, thumbnail, "", "", "", "OnlyFap", "Fixture", 0L, 1f)
                 .withSourceMedia(original, "");
+        controller.visible();
+        assertTrue(gif.isGif());
+        assertEquals(original, PawchiveRepository.original(gif));
         adapter.replace(Collections.singletonList(gif), false);
         layout();
-        complete(gif, 16, 16);
-        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
-        await(() -> pending.containsKey(original));
+        await("initial GIF thumbnail request", () -> pending.containsKey(thumbnail));
+        pending.remove(thumbnail).onDataReady(new ByteArrayInputStream(png(16, 16)));
+        await("static GIF thumbnail decoded", () -> first() != null && first().gifThumbnailReady);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(350));
+        await("original GIF request", () -> {
+            Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(30));
+            return pending.containsKey(original);
+        });
         byte[] frames = java.util.Base64.getDecoder().decode(
                 "R0lGODlhEAAQAIEAAP8AAAAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQAFAAAACwAAAAAEAAQAAAIHQABCBxIsKDBgwgTKlzIsKHDhxAjSpxIsaLFgQEBACH5BAEUAAEALAAAAAAQABAAgQAA/wAAAAAAAAAAAAgdAAEIHEiwoMGDCBMqXMiwocOHECNKnEixosWBAQEAOw==");
         pending.remove(original).onDataReady(new ByteArrayInputStream(frames));
-        await(() -> first().image.getDrawable() instanceof com.bumptech.glide.load.resource.gif.GifDrawable);
+        await("animated original GIF decoded", () -> first().image.getDrawable() instanceof com.bumptech.glide.load.resource.gif.GifDrawable);
         com.bumptech.glide.load.resource.gif.GifDrawable drawable =
                 (com.bumptech.glide.load.resource.gif.GifDrawable) first().image.getDrawable();
         assertEquals(2, drawable.getFrameCount());
@@ -154,7 +168,10 @@ public class OnlyFapGalleryGlideTest {
         assertFalse(drawable.isRunning());
         adapter.setGifPageActive(true);
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
-        await(drawable::isRunning);
+        await("GIF resumes after page activation", () -> {
+            Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(30));
+            return drawable.isRunning();
+        });
         adapter.setPreviewsActive(false);
         assertFalse(drawable.isRunning());
     }
