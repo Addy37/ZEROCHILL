@@ -36,12 +36,21 @@ import java.util.regex.Pattern;
 
 /** Last-resort, visible-tile previews. Never creates a player or changes gallery media models. */
 final class BunkrMediaPreview {
-    private static final int SIZE = 384;
+    static final int SIZE = 384;
+    static final int PAWCHIVE_BLOCK_BYTES = 1024 * 1024;
+    private static final long PAWCHIVE_TIMEOUT_MS = 30_000L;
     private static final int MAX_IMAGE_BYTES = 12 * 1024 * 1024;
     private static final long MAX_CACHE_BYTES = 32L * 1024 * 1024;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final ThreadPoolExecutor IO = new ThreadPoolExecutor(2, 2, 0L,
             TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(24));
+    private static final ThreadPoolExecutor PAWCHIVE_IO = new ThreadPoolExecutor(1, 1, 10L,
+            TimeUnit.SECONDS, new ArrayBlockingQueue<>(12));
+
+    static {
+        PAWCHIVE_IO.allowCoreThreadTimeOut(true);
+    }
+
     private static final LinkedHashMap<String, Long> FAILURES = new LinkedHashMap<>();
     private static final Pattern RANGE = Pattern.compile("bytes (\\d+)-(\\d+)/(\\d+)");
 
@@ -59,11 +68,13 @@ final class BunkrMediaPreview {
     }
 
     static Task request(Context context, NativeContentItem item, Consumer<File> callback) {
-        Task task = new Task();
+        boolean pawchive = PawchiveRepository.isDirectMedia(item.url);
+        Task task = new Task(pawchive ? PAWCHIVE_IO : IO);
         Context app = context.getApplicationContext();
         try {
-            task.future = IO.submit(() -> {
-                task.deadline = SystemClock.elapsedRealtime() + BunkrRepository.requestTimeoutMs();
+            task.future = task.executor.submit(() -> {
+                task.deadline = SystemClock.elapsedRealtime()
+                        + (pawchive ? PAWCHIVE_TIMEOUT_MS : BunkrRepository.requestTimeoutMs());
                 File result = null;
                 try {
                     task.check();
@@ -101,7 +112,8 @@ final class BunkrMediaPreview {
             bitmap = decodeImage(task.image(stream.mediaUrl, headers));
         } else if (item.isVideo()) {
             try (BunkrPreviewDataSource source = new BunkrPreviewDataSource(
-                    (position, size) -> task.range(stream.mediaUrl, headers, position, size))) {
+                    (position, size) -> task.range(stream.mediaUrl, headers, position, size),
+                    pawchive ? PAWCHIVE_BLOCK_BYTES : BunkrPreviewDataSource.BLOCK_BYTES)) {
                 // Give the native extractor a known length so it can seek to end-of-file metadata.
                 if (source.readAt(0, new byte[1], 0, 1) < 0) return null;
                 MediaMetadataRetriever retriever = new MediaMetadataRetriever();
@@ -113,19 +125,38 @@ final class BunkrMediaPreview {
             }
         } else return null;
         if (bitmap == null) return null;
-        bitmap = scale(bitmap);
+        return writePreview(context, item, scale(bitmap), task);
+    }
+
+    /** A rendered frame already owned by the viewer needs no extra media requests. */
+    static void rememberPlaybackFrame(Context context, NativeContentItem item, Bitmap bitmap) {
+        Context app = context.getApplicationContext();
         try {
-            task.check();
+            IO.execute(() -> {
+                try { writePreview(app, item, bitmap, null); }
+                catch (Exception ignored) { }
+            });
+        } catch (RejectedExecutionException ignored) {
+            bitmap.recycle();
+        }
+    }
+
+    private static File writePreview(Context context, NativeContentItem item, Bitmap bitmap, Task task)
+            throws Exception {
+        try {
+            if (task != null) task.check();
             File file = cacheFile(context, item);
+            if (file.isFile() && file.length() > 0) return file;
             File dir = file.getParentFile();
-            if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Preview cache unavailable");
-            File partial = new File(dir, file.getName() + ".tmp");
+            if (!dir.isDirectory() && !dir.mkdirs() && !dir.isDirectory())
+                throw new IOException("Preview cache unavailable");
+            File partial = File.createTempFile("preview-", ".tmp", dir);
             try {
                 try (FileOutputStream out = new FileOutputStream(partial)) {
                     if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 80, out))
                         throw new IOException("Preview encoding failed");
                 }
-                task.check();
+                if (task != null) task.check();
                 if (!partial.renameTo(file)) throw new IOException("Preview cache write failed");
             } finally { partial.delete(); }
             trimCache(dir);
@@ -237,13 +268,18 @@ final class BunkrMediaPreview {
     static final class Task {
         volatile boolean canceled;
         private volatile HttpURLConnection connection;
+        private final ThreadPoolExecutor executor;
         private Future<?> future;
         private long deadline = SystemClock.elapsedRealtime() + BunkrRepository.requestTimeoutMs();
+
+        Task() { this(IO); }
+
+        Task(ThreadPoolExecutor executor) { this.executor = executor; }
 
         void cancel() {
             canceled = true;
             Future<?> old = future;
-            if (old != null) { old.cancel(true); if (old instanceof Runnable) IO.remove((Runnable) old); }
+            if (old != null) { old.cancel(true); if (old instanceof Runnable) executor.remove((Runnable) old); }
             HttpURLConnection active = connection;
             if (active != null) active.disconnect();
         }

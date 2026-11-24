@@ -628,6 +628,14 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         if (!pawchive && (!BunkrRepository.isBunkrUrl(item.url) || (!item.isImage() && !item.isVideo()))) return;
         holder.wantsMediaPreview = true;
         if (!previewVisible(holder) || holder.previewAttempted) return;
+        if (pawchive) {
+            File cached = BunkrMediaPreview.cached(context, item);
+            if (cached != null) {
+                holder.previewAttempted = true;
+                loadMediaPreview(holder, item, cached);
+                return;
+            }
+        }
         if (item.isVideo() && BunkrMaintenance.isKnown(item.url)) {
             holder.maintenance.refresh();
             return;
