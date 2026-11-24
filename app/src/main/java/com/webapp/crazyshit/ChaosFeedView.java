@@ -1594,8 +1594,10 @@ public final class ChaosFeedView extends FrameLayout {
 
     private void maybePrepareUnopenedPreference() {
         ExoPlayer selectedPlayer = hasSelectedPage() ? playbackOwner.player(items.get(selectedPosition).url) : null;
-        if (pendingCategoryActivation || isPaging() || interactionOverlayOpen() || failurePending
-                || maintenanceFailure || deferredReturnDiscoveryUntilMs != 0L || selectedPlayer == null
+        ChaosHolder selectedHolder = holderAt(selectedPosition);
+        if (pendingCategoryActivation || isPaging() || interactionOverlayOpen() || selectedHolder == null
+                || selectedHolder.failurePending || selectedHolder.maintenanceFailure
+                || deferredReturnDiscoveryUntilMs != 0L || selectedPlayer == null
                 || !playbackOwner.allowsSpeculativeWork() || !selectedPlayer.isPlaying()
                 || selectedPlayer.getPlaybackState() != Player.STATE_READY
                 || playbackOwner.selectedBufferedMs() < 4_000L || usableUpcomingCount() == 0
@@ -5169,6 +5171,7 @@ public final class ChaosFeedView extends FrameLayout {
                         silencePlayer(createdPlayer);
                         return;
                     }
+                    if (!isPlaying && boundPosition == selectedPosition) resetPreferencePreparationHealth();
                     updateLiveAmbientSampling();
                     if (isPlaying) {
                         if(!analyticsViewed && boundPosition==selectedPosition) {analyticsViewed=true; AnalyticsTracker.event(activity,"shittok_videos");}
