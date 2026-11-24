@@ -98,7 +98,7 @@ final class FapzoneCreatorSearchRepository {
             return new ArrayList<>();
         }
         int safeLimit = Math.max(1, Math.min(20, limit));
-        ContentPreference preference = context == null ? ContentPreference.ALL : ContentPreference.get(context);
+        ContentPreference preference = context == null ? ContentPreference.ALL : ContentPreference.onlyFapMode(ContentPreference.get(context));
         ArrayList<NativeContentItem> learned = new ArrayList<>();
         if (context != null) {
             for (NativeContentItem item : CreatorCatalog.matching(context, cleanQuery, false, safeLimit)) {
@@ -119,9 +119,14 @@ final class FapzoneCreatorSearchRepository {
         ExecutorCompletionService<List<NativeContentItem>> completed =
                 new ExecutorCompletionService<>(searchIo);
         ArrayList<Future<List<NativeContentItem>>> requests = new ArrayList<>();
-        for (SourceSearch source : preference == ContentPreference.ALL ? sources
-                : java.util.Collections.<SourceSearch>singletonList((c, q, n) ->
-                        categorySource.search(c, q, n, preference))) {
+        List<SourceSearch> selectedSources;
+        if (preference == ContentPreference.ALL) selectedSources = sources;
+        else if (preference == ContentPreference.TRANS) selectedSources = java.util.Arrays.asList(
+                (c, q, n) -> categorySource.search(c, q, n, ContentPreference.TRANS_WOMEN),
+                (c, q, n) -> categorySource.search(c, q, n, ContentPreference.TRANS_MEN));
+        else selectedSources = java.util.Collections.singletonList((c, q, n) ->
+                categorySource.search(c, q, n, preference));
+        for (SourceSearch source : selectedSources) {
             requests.add(completed.submit(() -> {
                 // Fetch the full bounded page so suggestions can serve a later full-results search.
                 List<NativeContentItem> items = source.search(context, cleanQuery, 20);

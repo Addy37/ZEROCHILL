@@ -13,7 +13,7 @@ final class CreatorCategoryIndex {
 
     static synchronized void remember(Context context, ContentPreference category,
                                       List<OnlyHavenRepository.Creator> creators) {
-        if (context == null || category == ContentPreference.ALL || creators == null) return;
+        if (context == null || category == ContentPreference.ALL || category == ContentPreference.TRANS || creators == null) return;
         SharedPreferences prefs = context.getApplicationContext().getSharedPreferences(PREFS, 0);
         SharedPreferences.Editor edit = prefs.edit();
         for (OnlyHavenRepository.Creator creator : creators) {
@@ -29,8 +29,12 @@ final class CreatorCategoryIndex {
     static boolean includes(Context context, ContentPreference category, NativeContentItem item) {
         if (category == ContentPreference.ALL) return true;
         if (context == null || item == null || !OnlyHavenRepository.isOnlyHavenUrl(item.url)) return false;
-        return context.getApplicationContext().getSharedPreferences(PREFS, 0)
-                .getStringSet(item.url, java.util.Collections.emptySet()).contains(category.value);
+        java.util.Set<String> modes = context.getApplicationContext().getSharedPreferences(PREFS, 0)
+                .getStringSet(item.url, java.util.Collections.emptySet());
+        if (category == ContentPreference.TRANS)
+            return modes.contains(ContentPreference.TRANS_WOMEN.value)
+                    || modes.contains(ContentPreference.TRANS_MEN.value);
+        return modes.contains(category.value);
     }
 
     static List<NativeContentItem> filter(Context context, ContentPreference category,
