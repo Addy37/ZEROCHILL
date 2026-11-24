@@ -48,7 +48,8 @@ jobs:
                             response.headers.get("Content-Length"), flush=True)
                       return response.read(size if size is not None else 16 * 1024 * 1024)
               except urllib.error.HTTPError as error:
-                  print(label, error.code, error.headers.get("Content-Type"), flush=True)
+                  print(label, error.code, error.headers.get("Content-Type"),
+                        error.headers.get("Server"), error.headers.get("X-Mitmproxy-Blocked-Reason"), flush=True)
               except urllib.error.URLError as error:
                   print(label, type(error.reason).__name__, flush=True)
               return b""
@@ -81,6 +82,8 @@ jobs:
           images = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
           videos = {".mp4", ".m4v", ".webm", ".mov", ".mkv"}
           samples = {}
+          print("creator services", dict(collections.Counter(row["service"] for row in catalog)), flush=True)
+          print("mixed-case ids", sum(row["id"] != row["id"].lower() for row in catalog), flush=True)
           for creator in sorted(catalog, key=lambda row: row.get("favorited") or 0, reverse=True)[:4]:
               service, key = str(creator.get("service")), str(creator.get("id"))
               if not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", service) or not re.fullmatch(r"[\w-]+", key):
@@ -90,6 +93,9 @@ jobs:
               if not isinstance(rows, list) or not rows:
                   continue
               print("listing fields", shape(rows[0]), "count", len(rows), flush=True)
+              print("listing flags", collections.Counter(
+                  (row.get("preview_state"), row.get("has_full"), row.get("detail_fetched"),
+                   bool(row.get("file")), bool(row.get("attachments"))) for row in rows), flush=True)
               counts = collections.Counter()
               for row in rows:
                   files = [row.get("file"), *(row.get("attachments") or [])]
@@ -105,6 +111,11 @@ jobs:
                       if kind:
                           samples.setdefault(kind, (profile, str(row.get("id")), path, file))
               print("listing extensions", sorted(counts.items()), flush=True)
+              public = str(creator.get("public_id", ""))
+              print("creator public ID differs", public != key, flush=True)
+              if public != key and re.fullmatch(r"[\w-]+", public):
+                  fetch("public-id icon", site + "/icons/" + service + "/" + public,
+                        "image/*", site + profile, 256)
               if len(samples) == 2:
                   break
 
@@ -116,11 +127,27 @@ jobs:
               print(kind, "detail fields", shape(detail), flush=True)
               if isinstance(detail, dict) and isinstance(detail.get("post"), dict):
                   print(kind, "detail post fields", shape(detail["post"]), flush=True)
+              server = str(file.get("server", ""))
+              print(kind, "file server", server if re.fullmatch(r"[A-Za-z0-9:/.-]{1,100}", server) else type(server).__name__, flush=True)
+              if isinstance(detail, dict):
+                  print(kind, "detail file servers",
+                        {str(asset.get("server", "")) for asset in [detail.get("file"), *(detail.get("attachments") or [])]
+                         if isinstance(asset, dict) and re.fullmatch(r"[A-Za-z0-9:/.-]{1,100}", str(asset.get("server", "")))},
+                        "listing path present", any(
+                            isinstance(asset, dict) and asset.get("path") == path
+                            for asset in [detail.get("file"), *(detail.get("attachments") or [])]), flush=True)
               print(kind, "attachment field names", sorted(file),
                     "already has data prefix", path.startswith("/data/"), flush=True)
               original = "https://file.pawchive.pw/data" + path.removeprefix("/data")
               if not path.startswith("/data/"):
                   original = "https://file.pawchive.pw/data" + path
+              if re.fullmatch(r"https://[a-z0-9-]+[.]pawchive[.]pw/?", server):
+                  native = server.rstrip("/") + "/data/" + path.removeprefix("/data/").lstrip("/")
+                  for suffix, referer in (("none", ""), ("post", site + post)):
+                      fetch(kind + " declared server " + suffix, native, "*/*", referer, 512)
+                  if kind == "video":
+                      fetch("video server poster", "https://img.pawchive.pw/thumbnail/data/" +
+                            path.removeprefix("/data/").lstrip("/"), "image/*", site + post, 256)
               for mode, referer in (("none", ""), ("profile", site + profile), ("post", site + post)):
                   fetch(kind + " original " + mode, original, "*/*", referer, 512)
               if kind == "image":
