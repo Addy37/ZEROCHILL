@@ -1,0 +1,105 @@
+name: Pawchive Beta 4 playback trace
+on:
+  pull_request:
+    branches: [main]
+    types: [synchronize]
+    paths: ['.github/workflows/pawchive-playback-probe.yml']
+permissions:
+  contents: read
+jobs:
+  trace:
+    if: github.head_ref == 'feature/pawchive-onlyfap'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Trace public player and media response
+        run: |
+          python3 - <<'PY'
+          import collections, html, http.cookiejar, json, re, urllib.parse as p, urllib.request as u, urllib.error
+          from html.parser import HTMLParser
+
+          root = "https://pawchive.pw"
+          ua = "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36"
+          jar = http.cookiejar.CookieJar()
+          class Redirect(u.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, target):
+                  url = p.urlsplit(target)
+                  print("redirect", code, url.hostname)
+                  if url.scheme != "https" or not (url.hostname == "pawchive.pw" or (url.hostname or "").endswith(".pawchive.pw")):
+                      return None
+                  return super().redirect_request(req, fp, code, msg, headers, target)
+          opener = u.build_opener(Redirect(), u.HTTPCookieProcessor(jar))
+          def req(url, label, headers=None, limit=16_000_000):
+              try:
+                  with opener.open(u.Request(url, headers={"User-Agent":ua, **(headers or {})}), timeout=8) as r:
+                      body = r.read(limit)
+                      print(label, r.status, r.headers.get("Content-Type"), r.headers.get("Content-Range"),
+                            "mp4" if b"ftyp" in body[:32] else "", flush=True)
+                      return body
+              except urllib.error.HTTPError as e:
+                  msg = e.read(200)
+                  print(label, e.code, e.headers.get("Content-Type"), e.headers.get("Server"),
+                        "plain response", repr(msg) if e.headers.get("Content-Type") == "text/plain" else "", flush=True)
+              except urllib.error.URLError as e:
+                  print(label, type(e.reason).__name__, flush=True)
+              return b""
+          def api(route):
+              return json.loads(req(root+"/api/v1"+route, "metadata", {"Accept":"application/json"}))
+          class Page(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.entries=[]
+              def handle_starttag(self, tag, attrs):
+                  self.entries.append((tag, dict(attrs)))
+
+          catalog = api("/creators")
+          for creator in sorted(catalog, key=lambda row:row.get("favorited") or 0, reverse=True)[:3]:
+              profile = "/" + creator["service"] + "/user/" + creator["id"]
+              posts = api(profile+"?o=0")
+              found=[]
+              paths=collections.Counter()
+              for post in posts:
+                  assets=[post.get("file"), *(post.get("attachments") or [])]
+                  for asset in assets:
+                      if not asset or not asset.get("path"): continue
+                      paths[asset["path"]] += 1
+                      if re.search(r"\.(mp4|webm|mov|mkv)$", asset["path"], re.I):
+                          found.append((post, asset))
+              print("posts", len(posts), "video listings", len(found), "repeated exact paths",
+                    sum(count > 1 for count in paths.values()))
+              if not found: continue
+              samples=set()
+              for post, clip in found:
+                  if clip.get("server") in samples: continue
+                  samples.add(clip.get("server"))
+                  route = profile + "/post/" + post["id"]
+                  url = root + route
+                  detail = api(route)
+                  page = Page()
+                  page.feed(req(url,"public post",{"Accept":"text/html"}).decode(errors="replace"))
+                  assets = [detail.get("file"), *(detail.get("attachments") or [])]
+                  print("detail media path match", any(x and x.get("path") == clip["path"] for x in assets))
+                  print("public-cookie scopes", sorted({c.domain for c in jar}))
+                  for tag, attrs in page.entries:
+                      if tag in {"video","source","iframe"}:
+                          print("player", tag, sorted(attrs),
+                                {k: (p.urlsplit(v).hostname, p.urlsplit(v).path.split("/")[1:2])
+                                 for k,v in attrs.items() if v and k in {"src","data-src","poster"}}, flush=True)
+                  urls=[]
+                  for tag, attrs in page.entries:
+                      for key, raw in attrs.items():
+                          if raw and clip["path"] in raw and key in {"href", "src", "data-src"}:
+                              parsed=p.urlsplit(p.urljoin(url,html.unescape(raw)))
+                              print("matching file",tag,key,parsed.hostname,sorted(p.parse_qs(parsed.query)),flush=True)
+                              if parsed.scheme=="https" and (parsed.hostname or "").endswith(".pawchive.pw"):
+                                  urls.append(parsed.geturl())
+                  for candidate in list(dict.fromkeys(urls))[:2]:
+                      for label, extra in [
+                          ("native origin-range", {"Referer":root+"/","Range":"bytes=0-1023"}),
+                          ("browser video request", {"Referer":root+"/","Range":"bytes=0-1023","Accept":"*/*",
+                           "Sec-Fetch-Dest":"video","Sec-Fetch-Mode":"no-cors","Sec-Fetch-Site":"same-site"}),
+                          ("public link request", {"Referer":url,"Accept":"*/*"})]:
+                          req(candidate,label,extra,1024)
+                  if len(samples) == 2: break
+              break
+          PY
