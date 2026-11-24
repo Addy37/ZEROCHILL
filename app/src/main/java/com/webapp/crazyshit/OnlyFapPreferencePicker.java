@@ -99,6 +99,33 @@ final class OnlyFapPreferencePicker {
                 if (actualChange && changed != null) changed.run();
             });
         }
+        // An isolated provider entry, not a new value in the shared gender preference enum.
+        LinearLayout pawchive = new LinearLayout(context);
+        pawchive.setTag("preference_pawchive");
+        pawchive.setOrientation(LinearLayout.VERTICAL);
+        pawchive.setGravity(Gravity.CENTER);
+        pawchive.setMinimumHeight(dp(context, 64));
+        pawchive.setPadding(dp(context, 4), dp(context, 6), dp(context, 4), dp(context, 6));
+        pawchive.setContentDescription("Pawchive");
+        pawchive.setClickable(true);
+        pawchive.setFocusable(true);
+        pawchive.setBackground(ZeroChillUi.rounded(context, 0x12000000, 0x18FFFFFF, R.dimen.zc_radius_medium));
+        pawchive.addView(text(context, "🐾", 23, accent), new LinearLayout.LayoutParams(-1, dp(context, 26)));
+        pawchive.addView(text(context, "Pawchive", 12, Color.WHITE), new LinearLayout.LayoutParams(-1, -2));
+        GridLayout.LayoutParams pawParams = new GridLayout.LayoutParams(
+                GridLayout.spec(GridLayout.UNDEFINED), GridLayout.spec(0, 2, 1f));
+        pawParams.width = 0;
+        pawParams.height = -2;
+        pawParams.setMargins(dp(context, 3), dp(context, 3), dp(context, 3), dp(context, 3));
+        grid.addView(pawchive, pawParams);
+        ZeroChillMotion.installPressFeedback(pawchive);
+        pawchive.setOnClickListener(v -> {
+            if (!dialog.isShowing()) return;
+            dialog.dismiss();
+            android.content.Intent intent = new android.content.Intent(context, PawchiveBrowseActivity.class);
+            if (!(context instanceof android.app.Activity)) intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+        });
         TextView cancel = text(context, "Cancel", 13, Color.WHITE);
         cancel.setTag("preference_cancel");
         cancel.setMinimumHeight(dp(context, 48));
