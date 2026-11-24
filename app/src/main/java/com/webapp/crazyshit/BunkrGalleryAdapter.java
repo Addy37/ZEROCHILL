@@ -79,6 +79,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private boolean previewsActive = true;
     private boolean gifPageActive = true;
     private final GalleryGifPlayback gifPlayback = new GalleryGifPlayback();
+    private final LinkedHashSet<String> failedOriginalGifs = new LinkedHashSet<>();
     private final Runnable resumeGifs = this::updateGifPlayback;
     private final RecyclerView.OnScrollListener gifScroll = new RecyclerView.OnScrollListener() {
         @Override public void onScrollStateChanged(@NonNull RecyclerView recycler, int state) {
@@ -352,6 +353,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         image.setBackgroundColor(Color.rgb(20, 20, 23));
         tile.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
+        ImageView originalGif = new ImageView(parent.getContext());
+        originalGif.setBackgroundColor(Color.rgb(20, 20, 23));
+        originalGif.setVisibility(View.INVISIBLE);
+        originalGif.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        tile.addView(originalGif, new FrameLayout.LayoutParams(-1, -1));
+
         TextView unavailable = new TextView(parent.getContext());
         unavailable.setText(R.string.media_preview_unavailable);
         unavailable.setTextColor(Color.LTGRAY);
@@ -480,7 +487,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 fresh,
                 play,
                 morphPulse,
-                unavailable, favorite, maintenance, gif
+                unavailable, favorite, maintenance, gif, originalGif
         );
     }
 
@@ -505,6 +512,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
         stopHolderGif(holder);
+        clearOriginalGif(holder);
         resetTileTransform(holder.itemView);
         holder.morphPulse.animate().cancel();
         holder.morphPulse.setAlpha(0f);
@@ -514,6 +522,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         ViewCompat.setTransitionName(holder.image, GalleryMediaTransition.transitionName(item));
         holder.image.setScaleType(adaptiveAspectRatios && !BunkrRepository.isBunkrUrl(item.url)
                 ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
+        holder.originalGif.setScaleType(holder.image.getScaleType());
         holder.tile.setAspectRatio(adaptiveAspectRatios
                 ? aspectRatios.getOrDefault(item.url, item.aspectRatioHint > 0f ? item.aspectRatioHint : 1f)
                 : 1f);
@@ -679,8 +688,80 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.animatedGif = null;
     }
 
+    private void clearOriginalGif(Holder holder) {
+        if (holder.originalAnimation != null) gifPlayback.stop(holder.originalAnimation);
+        holder.originalAnimation = null;
+        holder.originalGif.setVisibility(View.INVISIBLE);
+        com.bumptech.glide.request.target.CustomTarget<GifDrawable> target = holder.originalTarget;
+        holder.originalTarget = null;
+        holder.originalGif.setImageDrawable(null);
+        if (target != null) Glide.with(holder.image).clear(target);
+    }
+
+    private void rememberOriginalGifFailure(String identity) {
+        failedOriginalGifs.add(identity);
+        if (failedOriginalGifs.size() > 256)
+            failedOriginalGifs.remove(failedOriginalGifs.iterator().next());
+    }
+
+    private void requestOriginalGif(Holder holder) {
+        NativeContentItem item = holder.boundItem;
+        if (item == null || !item.isGif() || !PawchiveRepository.isDirectMedia(item.url)
+                || holder.originalTarget != null || failedOriginalGifs.contains(item.url)) return;
+        String delivery = PawchiveRepository.original(item);
+        if (delivery.isEmpty()) return; // No background metadata lookup for an unknown shard.
+        final int binding = holder.bindGeneration;
+        com.bumptech.glide.request.target.CustomTarget<GifDrawable> target =
+                new com.bumptech.glide.request.target.CustomTarget<GifDrawable>(384, 384) {
+            @Override public void onResourceReady(@NonNull GifDrawable resource,
+                    Transition<? super GifDrawable> transition) {
+                if (holder.originalTarget != this || binding != holder.bindGeneration) return;
+                resource.stop();
+                resource.setLoopCount(GifDrawable.LOOP_FOREVER);
+                if (resource.getFrameCount() > 1) {
+                    holder.originalAnimation = resource;
+                    holder.originalGif.setImageDrawable(resource);
+                } else rememberOriginalGifFailure(item.url);
+                holder.originalGif.post(() -> {
+                    if (holder.originalTarget == this && holder.originalAnimation == null)
+                        clearOriginalGif(holder);
+                    updateGifPlayback();
+                });
+            }
+            @Override public void onLoadFailed(Drawable errorDrawable) {
+                if (holder.originalTarget != this || binding != holder.bindGeneration) return;
+                rememberOriginalGifFailure(item.url);
+                holder.originalGif.post(() -> {
+                    if (holder.originalTarget == this) clearOriginalGif(holder);
+                    updateGifPlayback();
+                });
+            }
+            @Override public void onLoadCleared(Drawable placeholder) {
+                if (holder.originalTarget != this) return;
+                if (holder.originalAnimation != null) gifPlayback.stop(holder.originalAnimation);
+                holder.originalAnimation = null;
+                holder.originalGif.setVisibility(View.INVISIBLE);
+                holder.originalGif.setImageDrawable(null);
+                holder.originalTarget = null;
+            }
+        };
+        holder.originalTarget = target;
+        Glide.with(holder.image).asGif()
+                .load(PawchiveOriginalImageLoader.galleryGif(context, item.url, delivery))
+                .diskCacheStrategy(DiskCacheStrategy.DATA)
+                .priority(com.bumptech.glide.Priority.LOW)
+                .dontAnimate()
+                .override(384, 384)
+                .into(target);
+    }
+
     private void delayGifPlayback() {
         gifPlayback.defer(android.os.SystemClock.uptimeMillis());
+        for (Holder holder : previewHolders) {
+            holder.originalGif.setVisibility(View.INVISIBLE);
+            if (holder.originalTarget != null && holder.originalAnimation == null)
+                clearOriginalGif(holder);
+        }
         RecyclerView recycler = previewViewport;
         if (recycler != null) {
             recycler.removeCallbacks(resumeGifs);
@@ -692,6 +773,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         if (gifPageActive == active) return;
         gifPageActive = active;
         delayGifPlayback();
+        if (!active) for (Holder holder : previewHolders) clearOriginalGif(holder);
     }
 
     private static boolean isTwoColumnGrid(RecyclerView recycler) {
@@ -711,21 +793,53 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 || recycler.getScrollState() != RecyclerView.SCROLL_STATE_IDLE
                 || !ZeroChillMotion.animationsEnabled(recycler.getContext())) {
             gifPlayback.stopAll();
+            boolean release = recycler == null || !previewsActive || !gifPageActive
+                    || !isTwoColumnGrid(recycler) || !recycler.isAttachedToWindow()
+                    || recycler.getWindowVisibility() != View.VISIBLE;
+            for (Holder holder : previewHolders) {
+                holder.originalGif.setVisibility(View.INVISIBLE);
+                if (release && holder.originalTarget != null) clearOriginalGif(holder);
+            }
             return;
         }
-        List<Animatable> visible = new ArrayList<>(GalleryGifPlayback.MAX_RUNNING);
-        // RecyclerView child order prioritizes the visible upper portion of the grid.
+        long now = android.os.SystemClock.uptimeMillis();
+        if (!gifPlayback.ready(now)) return;
+        List<Holder> selected = new ArrayList<>(GalleryGifPlayback.MAX_RUNNING);
         for (int i = 0; i < recycler.getChildCount()
-                && visible.size() < GalleryGifPlayback.MAX_RUNNING; i++) {
+                && selected.size() < GalleryGifPlayback.MAX_RUNNING; i++) {
             RecyclerView.ViewHolder raw = recycler.getChildViewHolder(recycler.getChildAt(i));
             if (!(raw instanceof Holder)) continue;
             Holder holder = (Holder) raw;
-            if (holder.animatedGif != null && previewVisible(holder)
+            if (!previewVisible(holder) || holder.boundItem == null) continue;
+            boolean animatedThumbnail = holder.animatedGif != null
+                    && holder.animatedGif.getFrameCount() > 1
+                    && holder.image.getDrawable() == holder.animatedGif;
+            NativeContentItem item = holder.boundItem;
+            boolean eligibleOriginal = item.isGif() && PawchiveRepository.isDirectMedia(item.url)
+                    && !PawchiveRepository.original(item).isEmpty()
+                    && !failedOriginalGifs.contains(item.url);
+            if (animatedThumbnail || eligibleOriginal) selected.add(holder);
+        }
+        for (Holder holder : previewHolders)
+            if (holder.originalTarget != null && !selected.contains(holder)) clearOriginalGif(holder);
+        boolean loading = false;
+        for (Holder holder : selected)
+            if (holder.originalTarget != null && holder.originalAnimation == null) loading = true;
+        List<Animatable> visible = new ArrayList<>(GalleryGifPlayback.MAX_RUNNING);
+        for (Holder holder : selected) {
+            if (holder.animatedGif != null && holder.animatedGif.getFrameCount() > 1
                     && holder.image.getDrawable() == holder.animatedGif) {
+                if (holder.originalTarget != null) clearOriginalGif(holder);
                 visible.add(holder.animatedGif);
+            } else if (holder.originalAnimation != null) {
+                holder.originalGif.setVisibility(View.VISIBLE);
+                visible.add(holder.originalAnimation);
+            } else if (!loading && holder.originalTarget == null) {
+                requestOriginalGif(holder);
+                loading = holder.originalTarget != null;
             }
         }
-        gifPlayback.update(visible, android.os.SystemClock.uptimeMillis());
+        gifPlayback.update(visible, now);
     }
 
     private void repairArtwork(Holder holder, NativeContentItem item, String rejected) {
@@ -843,6 +957,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         delayGifPlayback();
         if (!active) stopFavoriteMoves();
         for (Holder holder : previewHolders) {
+            if (!active) clearOriginalGif(holder);
             if (!active) {
                 cancelPreview(holder);
                 holder.previewAttempted = false;
@@ -866,6 +981,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     @Override public void onDetachedFromRecyclerView(@NonNull RecyclerView recycler) {
         stopFavoriteMoves();
         gifPlayback.stopAll();
+        for (Holder holder : previewHolders) clearOriginalGif(holder);
         recycler.removeCallbacks(resumeGifs);
         recycler.removeOnScrollListener(gifScroll);
         BunkrMediaPreview.removePlaybackPreviewListener(playbackPreviewListener);
@@ -892,6 +1008,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         resetTileTransform(holder.itemView);
         previewHolders.remove(holder);
         stopHolderGifAnimation(holder);
+        clearOriginalGif(holder);
         holder.attached = false;
         cancelPreview(holder);
         holder.previewAttempted = false;
@@ -934,6 +1051,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         resetTileTransform(holder.itemView);
         previewHolders.remove(holder);
         stopHolderGif(holder);
+        clearOriginalGif(holder);
         holder.bindGeneration++;
         cancelPreview(holder);
         holder.boundItem = null;
@@ -1115,7 +1233,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         boolean attached, needsRepair, repairPending, wantsMediaPreview, previewAttempted;
         NativeContentItem boundItem;
         BunkrMediaPreview.Task preview;
-        GifDrawable animatedGif;
+        GifDrawable animatedGif, originalAnimation;
+        com.bumptech.glide.request.target.CustomTarget<GifDrawable> originalTarget;
+        final ImageView originalGif;
         final AspectRatioFrameLayout tile;
         final ImageView image;
         final FrameLayout source;
@@ -1139,7 +1259,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 View play,
                 View morphPulse,
                 TextView unavailable, ImageView favorite, BunkrMaintenanceUi.Badge maintenance,
-                TextView gif
+                TextView gif, ImageView originalGif
         ) {
             super(itemView);
             this.tile = itemView;
@@ -1154,6 +1274,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             this.favorite = favorite;
             this.maintenance = maintenance;
             this.gif = gif;
+            this.originalGif = originalGif;
         }
     }
 

@@ -17,6 +17,8 @@ final class GalleryGifPlayback {
         stopAll();
     }
 
+    boolean ready(long now) { return now >= resumeAt; }
+
     void update(List<Animatable> visible, long now) {
         if (now < resumeAt) {
             stopAll();
