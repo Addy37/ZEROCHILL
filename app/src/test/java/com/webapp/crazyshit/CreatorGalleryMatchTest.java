@@ -52,6 +52,17 @@ public final class CreatorGalleryMatchTest {
         assertTrue(CreatorGalleryMatch.exactName("Belle Delphi", "Belle Delphine"));
     }
 
+    @Test public void pawchiveBunkrSearchUsesDisplayIdentityNotProviderId() {
+        PawchiveRepository.Creator creator = new PawchiveRepository.Creator("patreon", "12345", "ExampleHandle", 0);
+        String identity = BunkrCreatorGalleryRepository.pawchiveBunkrQuery(creator);
+        assertEquals("ExampleHandle", identity);
+        assertTrue(CreatorGalleryMatch.albumMatches("ExampleHandle Part 2", identity));
+        assertFalse(CreatorGalleryMatch.albumMatches("ExampleHandle2", identity));
+        assertFalse(CreatorGalleryMatch.albumMatches("Other Creator - ExampleHandle", identity));
+        assertEquals("", BunkrCreatorGalleryRepository.pawchiveBunkrQuery(
+                new PawchiveRepository.Creator("patreon", "12345", "12345", 0)));
+    }
+
     @Test public void albumsRequireWholeIdentityAndAllowExplicitMultipartTitles() {
         assertTrue(CreatorGalleryMatch.albumMatches("Rynkerbelle", "rynkerbelle"));
         assertTrue(CreatorGalleryMatch.albumMatches("RYNKERBELLE - Pt. 2", "@rynkerbelle"));

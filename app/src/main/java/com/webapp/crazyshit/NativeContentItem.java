@@ -25,6 +25,8 @@ public final class NativeContentItem {
     public final String searchQuery;
     public final long publishedAtMillis;
     public final float aspectRatioHint;
+    final String sourceMediaUrl;
+    final String sourcePageUrl;
     final List<String> creatorAliases;
     final List<String> creatorProfileUrls;
 
@@ -108,13 +110,14 @@ public final class NativeContentItem {
             float aspectRatioHint
     ) {
         this(kind, title, url, imageUrl, views, uploader, comments, description, searchQuery,
-                publishedAtMillis, aspectRatioHint, Collections.emptyList(), Collections.emptyList());
+                publishedAtMillis, aspectRatioHint, Collections.emptyList(), Collections.emptyList(), "", "");
     }
 
     private NativeContentItem(
             String kind, String title, String url, String imageUrl, String views, String uploader,
             String comments, String description, String searchQuery, long publishedAtMillis,
-            float aspectRatioHint, List<String> creatorAliases, List<String> creatorProfileUrls
+            float aspectRatioHint, List<String> creatorAliases, List<String> creatorProfileUrls,
+            String sourceMediaUrl, String sourcePageUrl
     ) {
         this.kind = kind == null ? KIND_MEDIA : kind;
         this.title = title == null ? "" : title;
@@ -129,6 +132,8 @@ public final class NativeContentItem {
         this.aspectRatioHint = aspectRatioHint > 0f && Float.isFinite(aspectRatioHint)
                 ? aspectRatioHint
                 : 0f;
+        this.sourceMediaUrl = sourceMediaUrl;
+        this.sourcePageUrl = sourcePageUrl;
         this.creatorAliases = creatorAliases;
         this.creatorProfileUrls = creatorProfileUrls;
     }
@@ -140,7 +145,14 @@ public final class NativeContentItem {
         }
         return new NativeContentItem(kind, title, url, imageUrl, views, uploader, comments,
                 description, searchQuery, publishedAtMillis, aspectRatioHint,
-                boundedIdentityValues(aliases), boundedIdentityValues(profileUrls));
+                boundedIdentityValues(aliases), boundedIdentityValues(profileUrls), sourceMediaUrl, sourcePageUrl);
+    }
+
+    NativeContentItem withSourceMedia(String mediaUrl, String pageUrl) {
+        if (sourceMediaUrl.equals(mediaUrl) && sourcePageUrl.equals(pageUrl)) return this;
+        return new NativeContentItem(kind, title, url, imageUrl, views, uploader, comments,
+                description, searchQuery, publishedAtMillis, aspectRatioHint, creatorAliases,
+                creatorProfileUrls, mediaUrl, pageUrl);
     }
 
     private static List<String> boundedIdentityValues(List<String> input) {
@@ -169,6 +181,20 @@ public final class NativeContentItem {
         return KIND_IMAGE.equals(kind) || KIND_MEME.equals(kind);
     }
 
+    public boolean isGif() {
+        return isImage() && (gifPath(url) || gifPath(sourceMediaUrl));
+    }
+
+    private static boolean gifPath(String value) {
+        if (value == null || value.isEmpty()) return false;
+        int query = value.indexOf('?');
+        int fragment = value.indexOf('#');
+        int end = value.length();
+        if (query >= 0) end = Math.min(end, query);
+        if (fragment >= 0) end = Math.min(end, fragment);
+        return value.substring(0, end).toLowerCase(java.util.Locale.ROOT).endsWith(".gif");
+    }
+
     public boolean isVideo() {
         return KIND_MEDIA.equals(kind);
     }
@@ -195,7 +221,8 @@ public final class NativeContentItem {
                 choose(searchQuery, other.searchQuery),
                 publishedAtMillis > 0L ? publishedAtMillis : other.publishedAtMillis,
                 aspectRatioHint > 0f ? aspectRatioHint : other.aspectRatioHint,
-                creatorAliases, creatorProfileUrls
+                creatorAliases, creatorProfileUrls,
+                choose(sourceMediaUrl, other.sourceMediaUrl), choose(sourcePageUrl, other.sourcePageUrl)
         );
     }
 

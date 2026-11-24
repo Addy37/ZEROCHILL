@@ -563,7 +563,10 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void finishViewer() {
         if (isFinishing() || returningToGallery) return;
-        if (adapter != null) adapter.stopReveals();
+        if (adapter != null) {
+            adapter.rememberCurrentPawchiveFrame();
+            adapter.stopReveals();
+        }
         NativeContentItem current = adapter == null || pager == null
                 ? null
                 : adapter.itemAt(pager.getCurrentItem());
@@ -727,7 +730,7 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void resolvePhoto(int position, boolean prefetch, boolean useListingOriginal) {
         NativeContentItem item = adapter.itemAt(position);
-        if (item == null || !item.isImage()) return;
+        if (item == null || !item.isImage() || (prefetch && PawchiveRepository.isDirectMedia(item.url))) return;
         if (!adapter.resolvedUrl(position).isEmpty()) {
             if (prefetch) adapter.preloadImage(position);
             return;
@@ -739,6 +742,7 @@ public final class BunkrGalleryActivity extends Activity {
         // An explicit retry asks the primary source again if the listing original failed.
         String directPhoto = useListingOriginal ? FapelloRepository.photoUrlFromItem(item) : "";
         if (directPhoto.isEmpty() && isOnlyHavenDirectImage(item)) directPhoto = item.url;
+        if (directPhoto.isEmpty()) directPhoto = PawchiveRepository.original(item);
         if (!directPhoto.isEmpty()) {
             adapter.setResolvedUrl(position, directPhoto);
             BunkrGallerySessionStore.setResolvedUrl(sessionId, item.url, directPhoto);
@@ -770,7 +774,8 @@ public final class BunkrGalleryActivity extends Activity {
                             item.url,
                             resolved.mediaUrl
                     );
-                    if (position != pager.getCurrentItem() && withinPreloadWindow(position)) {
+                    if (!PawchiveRepository.isDirectMedia(item.url)
+                            && position != pager.getCurrentItem() && withinPreloadWindow(position)) {
                         adapter.preloadImage(position);
                     }
                 });
@@ -797,7 +802,8 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void preloadVideo(int position, NativeContentItem item) {
-        if (resolvingMedia.contains(item.url) || BunkrMaintenance.isKnown(item.url)) return;
+        if (PawchiveRepository.isDirectMedia(item.url) || resolvingMedia.contains(item.url)
+                || BunkrMaintenance.isKnown(item.url)) return;
         String cached = cachedVideoUrl(position, item);
         if (!cached.isEmpty() || isOnlyHavenDirectVideo(item)) {
             String url = cached.isEmpty() ? item.url : cached;
@@ -881,6 +887,11 @@ public final class BunkrGalleryActivity extends Activity {
         if (showVideoMaintenance(position, item, null)) return;
         playbackRecovery.reset();
         releasePlayer();
+        String original = PawchiveRepository.original(item);
+        if (!original.isEmpty()) {
+            startPlayer(position, item, original, PawchiveRepository.ORIGIN);
+            return;
+        }
         String cached = cachedVideoUrl(position, item);
         if (!cached.isEmpty()) {
             startPlayer(position, item, cached, videoReferers.getOrDefault(item.url, item.url));
@@ -936,6 +947,8 @@ public final class BunkrGalleryActivity extends Activity {
 
     private String cachedVideoUrl(int position, NativeContentItem item) {
         String cached = adapter.resolvedUrl(position);
+        if (PawchiveRepository.isDirectMedia(item.url))
+            return PawchiveRepository.isDeliveryFor(item.url, cached) ? cached : "";
         if (!cached.isEmpty() && BunkrRepository.isBunkrUrl(item.url)
                 && !videoReferers.containsKey(item.url)) {
             adapter.setResolvedUrl(position, "");
@@ -987,7 +1000,8 @@ public final class BunkrGalleryActivity extends Activity {
             String requestReferer
     ) {
         if (mediaUrl == null || mediaUrl.isEmpty()) return;
-        if (BunkrRepository.isBunkrUrl(item.url)
+        boolean pawchive = PawchiveRepository.isDirectMedia(item.url);
+        if ((pawchive || BunkrRepository.isBunkrUrl(item.url))
                 && LegacyVideoFormatSupport.requiresVlc(mediaUrl)) {
             launchLegacyPlayer(position, item, mediaUrl, requestReferer);
             return;
@@ -996,14 +1010,31 @@ public final class BunkrGalleryActivity extends Activity {
 
         DefaultHttpDataSource.Factory httpFactory = videoHttpFactory(mediaUrl,
                 requestReferer.isEmpty() ? item.url : requestReferer);
-        androidx.media3.datasource.DataSource.Factory data = isCreatorGallery()
+        androidx.media3.datasource.DataSource.Factory data = isCreatorGallery() && !pawchive
                 ? GalleryVideoCache.factory(this, httpFactory) : httpFactory;
+        if (pawchive) {
+            data = new androidx.media3.datasource.ResolvingDataSource.Factory(data, spec -> {
+                PawchiveMediaRequests.awaitStart();
+                return spec;
+            });
+        }
         if (BunkrRepository.isBunkrUrl(item.url)
                 && value(Uri.parse(mediaUrl).getPath()).toLowerCase(java.util.Locale.US).endsWith(".mp4")) {
             data = BunkrMp4DataSource.wrap(data);
         }
         DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(this)
                 .setDataSourceFactory(data);
+        if (pawchive) {
+            mediaSourceFactory.setLoadErrorHandlingPolicy(new androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy() {
+                @Override public long getRetryDelayMsFor(LoadErrorInfo info) {
+                    if (info.exception instanceof androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) {
+                        int status = ((androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) info.exception).responseCode;
+                        if (PawchiveMediaRequests.shouldStopRetrying(status)) return androidx.media3.common.C.TIME_UNSET;
+                    }
+                    return super.getRetryDelayMsFor(info);
+                }
+            });
+        }
         player = new ExoPlayer.Builder(this).setMediaSourceFactory(mediaSourceFactory).build();
         if (viewerChrome != null) viewerChrome.updatePlayer(player);
         activeVideoPosition = position;
@@ -1054,7 +1085,7 @@ public final class BunkrGalleryActivity extends Activity {
             @Override
             public void onPlayerError(PlaybackException error) {
                 if (player != startedPlayer || !canApplyMediaResult(generation)) return;
-                if (BunkrRepository.isBunkrUrl(item.url)
+                if ((pawchive || BunkrRepository.isBunkrUrl(item.url))
                         && LegacyVideoFormatSupport.retryWithVlc(mediaUrl, error.errorCode)) {
                     launchLegacyPlayer(position, item, mediaUrl, requestReferer);
                     return;
@@ -1067,7 +1098,7 @@ public final class BunkrGalleryActivity extends Activity {
                     showVideoMaintenance(position, item, error);
                     return;
                 }
-                if (playbackRecovery.recover(BunkrGalleryActivity.this, error, recovered -> {
+                if (!pawchive && playbackRecovery.recover(BunkrGalleryActivity.this, error, recovered -> {
                     if (!canApplyMediaResult(generation) || pager.getCurrentItem() != position) return;
                     if (recovered == null || !hasPlayableStream(recovered.stream)) {
                         adapter.setFailed(position, true);
@@ -1126,6 +1157,10 @@ public final class BunkrGalleryActivity extends Activity {
                 .setUserAgent(USER_AGENT);
         Map<String, String> headers = new LinkedHashMap<>();
         String referer = requestReferer;
+        if (PawchiveRepository.ORIGIN.equals(referer)) {
+            return httpFactory.setUserAgent(PawchiveMediaRequests.USER_AGENT)
+                    .setDefaultRequestProperties(java.util.Collections.singletonMap("Referer", referer));
+        }
         if (!referer.isEmpty()) {
             headers.put("Referer", referer);
             try {
@@ -1209,7 +1244,8 @@ public final class BunkrGalleryActivity extends Activity {
         viewerChrome.updateMedia(item == null ? "" : item.url, item == null ? albumTitle : item.title,
                 item == null ? 0 : position + 1, adapter.getItemCount(), item != null && item.isVideo());
         String name = ""; Runnable open = null;
-        if (savedFavoriteImage(item)) {
+        if (savedFavoriteImage(item) || (item != null && PawchiveRepository.isDirectMedia(item.url)
+                && savedCreatorGallery() != null)) {
             Intent gallery = savedCreatorGallery();
             name = gallery == null ? item.title : value(gallery.getStringExtra(NativeFeedBrowserActivity.EXTRA_TITLE));
             if (name.isEmpty()) name = item.title;
@@ -1350,7 +1386,7 @@ public final class BunkrGalleryActivity extends Activity {
                 Menu.NONE,
                 2,
                 2,
-                isCreatorGallery() ? "Open creator search page" : "Open album page"
+                isCreatorGallery() ? "Open creator page" : "Open album page"
         );
         menu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 3) {
@@ -1358,11 +1394,11 @@ public final class BunkrGalleryActivity extends Activity {
                 return true;
             }
             if (item.getItemId() == 1) {
-                if (current != null) openPage(current.url);
+                if (current != null) openPage(PawchiveRepository.pageUrl(current));
                 return true;
             }
             if (item.getItemId() == 2) {
-                openPage(albumUrl);
+                openPage(PawchiveRepository.isProfile(fapelloProfileUrl) ? fapelloProfileUrl : albumUrl);
                 return true;
             }
             return false;
@@ -1406,11 +1442,11 @@ public final class BunkrGalleryActivity extends Activity {
                                 snapshot == null ? value(creatorQuery) : snapshot.creatorQuery);
                     }),
                     () -> startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND)
-                            .setType("text/plain").putExtra(Intent.EXTRA_TEXT, item.url), "Share")),
+                            .setType("text/plain").putExtra(Intent.EXTRA_TEXT, PawchiveRepository.pageUrl(item)), "Share")),
                     () -> {
                         android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
                                 getSystemService(CLIPBOARD_SERVICE);
-                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Media link", item.url));
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Media link", PawchiveRepository.pageUrl(item)));
                     },
                     () -> downloadGalleryItem(position, item)
                 }, () -> mediaContextMenu = null);
@@ -1461,7 +1497,7 @@ public final class BunkrGalleryActivity extends Activity {
         if (item == null || item.url.isEmpty()) return;
         Intent share = new Intent(Intent.ACTION_SEND);
         share.setType("text/plain");
-        share.putExtra(Intent.EXTRA_TEXT, item.url);
+        share.putExtra(Intent.EXTRA_TEXT, PawchiveRepository.pageUrl(item));
         share.putExtra(Intent.EXTRA_SUBJECT, item.title);
         startActivity(Intent.createChooser(share, "Share"));
     }
@@ -1482,6 +1518,8 @@ public final class BunkrGalleryActivity extends Activity {
         if (items == null) return filtered;
         for (NativeContentItem item : items) {
             if (item == null || WikiFeetRepository.isRetiredItem(item)) continue;
+            if (isCreatorGallery() && PawchiveRepository.isProfile(fapelloProfileUrl)
+                    && PawchiveRepository.isNativeVideo(item)) continue;
             if (FILTER_PICTURES.equals(mediaFilter) && !item.isImage()) continue;
             if (FILTER_VIDEOS.equals(mediaFilter) && !item.isVideo()) continue;
             filtered.add(item);

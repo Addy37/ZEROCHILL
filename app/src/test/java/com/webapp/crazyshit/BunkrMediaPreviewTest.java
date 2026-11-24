@@ -93,6 +93,70 @@ public class BunkrMediaPreviewTest {
         assertEquals(1, Repository.calls.get()); assertEquals(1, Retriever.calls.get());
         file.delete();
     }
+    @Test public void playedFrameIsPublishedByClipIdentityAfterTheFileIsReady() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        String url = "https://file.pawchive.pw/data/ab/cd/played-frame.mp4";
+        NativeContentItem item = new NativeContentItem(NativeContentItem.KIND_MEDIA, "video",
+                url, "", "", "", "");
+        File file = BunkrMediaPreview.cacheFile(context, item);
+        file.delete();
+        AtomicInteger delivered = new AtomicInteger();
+        java.util.function.Consumer<String> listener = identity -> {
+            assertEquals(url, identity);
+            assertEquals(file, BunkrMediaPreview.cached(context, item));
+            delivered.incrementAndGet();
+        };
+        BunkrMediaPreview.addPlaybackPreviewListener(listener);
+        try {
+            Bitmap frame = Bitmap.createBitmap(96, 54, Bitmap.Config.ARGB_8888);
+            frame.eraseColor(android.graphics.Color.GREEN);
+            BunkrMediaPreview.rememberPlaybackFrame(context, item, frame);
+            await(delivered, 1);
+            assertEquals(0, Repository.calls.get());
+        } finally {
+            BunkrMediaPreview.removePlaybackPreviewListener(listener);
+            file.delete();
+        }
+    }
+
+    @Test public void pawchiveBlankColdFrameCannotPoisonCacheOrBlockLaterCapture() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        NativeContentItem item = new NativeContentItem(NativeContentItem.KIND_MEDIA, "video",
+                "https://file.pawchive.pw/data/ab/cd/blank-cache.mp4", "", "", "", "");
+        File file = BunkrMediaPreview.cacheFile(context, item);
+        file.delete();
+        try {
+            Bitmap blank = Bitmap.createBitmap(96, 54, Bitmap.Config.ARGB_8888);
+            blank.eraseColor(android.graphics.Color.BLACK);
+            assertNull(BunkrMediaPreview.writePreview(context, item, blank, null));
+            assertNull(BunkrMediaPreview.cached(context, item));
+            Bitmap frame = Bitmap.createBitmap(96, 54, Bitmap.Config.ARGB_8888);
+            frame.eraseColor(android.graphics.Color.GREEN);
+            assertEquals(file, BunkrMediaPreview.writePreview(context, item, frame, null));
+            assertEquals(file, BunkrMediaPreview.cached(context, item));
+        } finally { file.delete(); }
+    }
+
+    @Test public void coldSavedPawchiveVideoDoesNotStartRemoteExtraction() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        NativeContentItem item = new NativeContentItem(NativeContentItem.KIND_MEDIA, "saved clip",
+                "https://file.pawchive.pw/data/ab/cd/cold-saved.mp4", "", "", "", "")
+                .withSourceMedia("https://n3.pawchive.pw/data/ab/cd/cold-saved.mp4", "");
+        File cached = BunkrMediaPreview.cacheFile(context, item);
+        cached.delete();
+        assertTrue(PawchiveRepository.isNativeVideo(item));
+        assertNull(BunkrMediaPreview.generate(context, item, new BunkrMediaPreview.Task()));
+        AtomicInteger delivered = new AtomicInteger();
+        BunkrMediaPreview.request(context, item, ready -> {
+            assertNull(ready);
+            delivered.incrementAndGet();
+        });
+        await(delivered, 1);
+        assertFalse(cached.exists());
+        assertEquals(0, Repository.calls.get());
+        assertEquals(0, Retriever.calls.get());
+    }
+
     @Test public void canceledRequestNeverCallsRecycledTile() throws Exception {
         AtomicInteger delivered = new AtomicInteger();
         BunkrMediaPreview.Task task = BunkrMediaPreview.request(RuntimeEnvironment.getApplication(),

@@ -59,7 +59,8 @@ final class VideoDownloadStore {
         RESOLVER.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             try {
-                stream = PlayableSourceRouter.resolve(context, pageUrl);
+                stream = content == null ? PlayableSourceRouter.resolve(context, pageUrl)
+                        : PlayableSourceRouter.resolve(context, content);
             } catch (Exception ignored) {
             }
             CrazyShitRepository.StreamInfo resolved = stream;
@@ -78,7 +79,7 @@ final class VideoDownloadStore {
                         imageUrl,
                         resolved.mediaUrl,
                         defaultUserAgent(app),
-                        cookiesFor(resolved.mediaUrl, pageUrl),
+                        PawchiveRepository.isDirectMedia(pageUrl) ? "" : cookiesFor(resolved.mediaUrl, pageUrl),
                         resolved.requestReferer, enriched
                 );
             });
@@ -148,7 +149,8 @@ final class VideoDownloadStore {
         if (context == null || content == null) return;
         enqueue(context.getApplicationContext(), content.title, content.url, content.imageUrl,
                 safe(mediaUrl), safe(userAgent).isEmpty() ? defaultUserAgent(context) : userAgent,
-                safe(cookies).isEmpty() ? cookiesFor(mediaUrl, content.url) : cookies,
+                PawchiveRepository.isDirectMedia(content.url) ? ""
+                        : safe(cookies).isEmpty() ? cookiesFor(mediaUrl, content.url) : cookies,
                 safe(requestReferer).isEmpty() ? content.url : requestReferer, content);
     }
 
@@ -185,11 +187,13 @@ final class VideoDownloadStore {
 
         String mime = mimeType(mediaUrl);
         String fileName = fileName(title, pageUrl.isEmpty() ? mediaUrl : pageUrl, mime);
+        boolean pawchive = PawchiveRepository.isDirectMedia(pageUrl);
         Map<String, String> requestHeaders = requestHeaders(
-                mediaUrl, requestReferer, userAgent, cookies
+                mediaUrl, requestReferer, pawchive ? PawchiveMediaRequests.USER_AGENT : userAgent, cookies
         );
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // Pawchive's CDN disallows the concurrent requests of segmented downloads.
+        if (!pawchive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             long id = nextCustomId();
             try {
                 saveMetadata(context, new Entry(

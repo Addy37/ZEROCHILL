@@ -47,7 +47,8 @@ public class OnlyFapPreferencePickerTest {
         GridLayout grid = root.findViewWithTag("onlyfap_preference_grid");
         assertNotNull(grid);
         assertEquals(2, grid.getColumnCount());
-        assertEquals(6, grid.getChildCount());
+        assertEquals(7, grid.getChildCount());
+        assertNotNull(root.findViewWithTag("preference_pawchive"));
         assertTrue(root.findViewWithTag("preference_all").isSelected());
         root.findViewWithTag("preference_trans_men").performClick();
         assertEquals(ContentPreference.TRANS_MEN, ContentPreference.get(host));
@@ -58,6 +59,42 @@ public class OnlyFapPreferencePickerTest {
         dialog.getWindow().getDecorView().findViewWithTag("preference_trans_men").performClick();
         assertEquals(1, changes[0]);
     }
+    @Test public void pawchivePersistsWithoutChangingLegacyOrShitTokChoice() {
+        ContentPreference.set(host, ContentPreference.MEN);
+        ShitTokContentPreference.set(host, ContentPreference.WOMEN);
+        int[] changes = {0};
+        ContentPreferenceUi.chooseAnchored(anchor, () -> changes[0]++);
+        AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
+        dialog.getWindow().getDecorView().findViewWithTag("preference_pawchive").performClick();
+        assertEquals(ContentPreference.PAWCHIVE, ContentPreference.getOnlyFap(host));
+        assertEquals(ContentPreference.MEN, ContentPreference.get(host));
+        assertEquals(ContentPreference.WOMEN, ShitTokContentPreference.get(host));
+        assertEquals(1, changes[0]);
+        ContentPreferenceUi.chooseAnchored(anchor, () -> changes[0]++);
+        dialog = ShadowAlertDialog.getLatestAlertDialog();
+        assertTrue(dialog.getWindow().getDecorView().findViewWithTag("preference_pawchive").isSelected());
+        dialog.getWindow().getDecorView().findViewWithTag("preference_men").performClick();
+        assertEquals(ContentPreference.MEN, ContentPreference.getOnlyFap(host));
+        assertEquals(2, changes[0]);
+        assertEquals(ContentPreference.WOMEN, ShitTokContentPreference.get(host));
+    }
+    @Test public void pawchiveUsesATintableIconInTheActiveAppearance() {
+        AppearanceTheme.setAccent(host, AppearanceTheme.Accent.PINK);
+        ContentPreference.setOnlyFap(host, ContentPreference.PAWCHIVE);
+        ContentPreferenceUi.bindSelector(anchor);
+        assertEquals(R.drawable.ic_content_pawchive, ContentPreference.PAWCHIVE.icon());
+        assertNotNull(anchor.getCompoundDrawablesRelative()[0]);
+        assertEquals("▾", anchor.getText().toString());
+
+        ContentPreferenceUi.chooseAnchored(anchor, null);
+        AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
+        android.widget.LinearLayout cell = dialog.getWindow().getDecorView().findViewWithTag("preference_pawchive");
+        android.widget.ImageView icon = (android.widget.ImageView) cell.getChildAt(0);
+        assertTrue(icon.getColorFilter() instanceof android.graphics.PorterDuffColorFilter);
+        assertEquals(AppearanceTheme.Accent.PINK.color,
+                org.robolectric.Shadows.shadowOf((android.graphics.PorterDuffColorFilter) icon.getColorFilter()).getColor());
+    }
+
     @Test public void rapidTapIsIgnoredAndDetachClosesTheOwnedWindow() {
         ContentPreferenceUi.chooseAnchored(anchor, null);
         AlertDialog first = ShadowAlertDialog.getLatestAlertDialog();
@@ -105,7 +142,8 @@ public class OnlyFapPreferencePickerTest {
         assertEquals(android.view.Gravity.CENTER, dialog.getWindow().getAttributes().gravity);
         View root = dialog.getWindow().getDecorView();
         GridLayout grid = root.findViewWithTag("onlyfap_preference_grid");
-        assertEquals(6, grid.getChildCount());
+        assertEquals(7, grid.getChildCount());
+        assertNotNull(root.findViewWithTag("preference_pawchive"));
         assertTrue(root.findViewWithTag("preference_women").isSelected());
         assertTrue(grid.getParent() instanceof android.widget.ScrollView);
         root.findViewWithTag("preference_cancel").performClick();

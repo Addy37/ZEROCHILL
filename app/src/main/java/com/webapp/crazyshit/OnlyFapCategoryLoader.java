@@ -58,6 +58,8 @@ final class OnlyFapCategoryLoader {
     }
 
     static String identity(NativeContentItem item) {
+        PawchiveRepository.Creator paw = PawchiveRepository.profile(item.url, "");
+        if (paw != null) return paw.profileUrl();
         return item.url.split("[?#]", 2)[0].replaceAll("/+$", "").toLowerCase(java.util.Locale.US);
     }
 

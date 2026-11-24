@@ -36,12 +36,24 @@ import java.util.regex.Pattern;
 
 /** Last-resort, visible-tile previews. Never creates a player or changes gallery media models. */
 final class BunkrMediaPreview {
-    private static final int SIZE = 384;
+    static final int SIZE = 384;
+    static final int PAWCHIVE_BLOCK_BYTES = 1024 * 1024;
+    private static final long PAWCHIVE_TIMEOUT_MS = 30_000L;
     private static final int MAX_IMAGE_BYTES = 12 * 1024 * 1024;
     private static final long MAX_CACHE_BYTES = 32L * 1024 * 1024;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final ThreadPoolExecutor IO = new ThreadPoolExecutor(2, 2, 0L,
             TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(24));
+    private static final ThreadPoolExecutor PAWCHIVE_IO = new ThreadPoolExecutor(1, 1, 10L,
+            TimeUnit.SECONDS, new ArrayBlockingQueue<>(12));
+
+    static {
+        PAWCHIVE_IO.allowCoreThreadTimeOut(true);
+    }
+
+    // RecyclerView can retain its adapter while the view is detached and collected.
+    private static final java.util.Set<Consumer<String>> PLAYBACK_PREVIEW_LISTENERS =
+            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
     private static final LinkedHashMap<String, Long> FAILURES = new LinkedHashMap<>();
     private static final Pattern RANGE = Pattern.compile("bytes (\\d+)-(\\d+)/(\\d+)");
 
@@ -59,23 +71,38 @@ final class BunkrMediaPreview {
     }
 
     static Task request(Context context, NativeContentItem item, Consumer<File> callback) {
-        Task task = new Task();
+        boolean pawchive = PawchiveRepository.isDirectMedia(item.url);
+        Task task = new Task(pawchive ? PAWCHIVE_IO : IO);
+        if (pawchive) task.traceIdentity = item.url;
         Context app = context.getApplicationContext();
         try {
-            task.future = IO.submit(() -> {
-                task.deadline = SystemClock.elapsedRealtime() + BunkrRepository.requestTimeoutMs();
+            task.future = task.executor.submit(() -> {
+                task.deadline = SystemClock.elapsedRealtime()
+                        + (pawchive ? PAWCHIVE_TIMEOUT_MS : BunkrRepository.requestTimeoutMs());
                 File result = null;
                 try {
                     task.check();
                     File cached = cached(app, item);
                     if (cached != null) {
                         result = cached;
+                        task.trace("poster cache hit");
+                    } else if (PawchiveRepository.isNativeVideo(item)) {
+                        // Saved videos may use a cached playback frame, but never fetch video bytes
+                        // for a cold gallery thumbnail.
                     } else if (!recentFailure(item.url)) {
+                        task.trace("poster extraction start");
                         result = generate(app, item, task);
-                        if (result == null && !task.canceled) rememberFailure(item.url);
+                        if (result == null && !task.canceled) {
+                            task.trace("poster no usable frame");
+                            rememberFailure(item.url);
+                        }
+                    } else task.trace("poster cooling down");
+                } catch (Exception error) {
+                    if (!task.canceled) {
+                        task.trace("poster failed " + error.getClass().getSimpleName()
+                                + (error.getCause() == null ? "" : "/" + error.getCause().getClass().getSimpleName()));
+                        rememberFailure(item.url);
                     }
-                } catch (Exception ignored) {
-                    if (!task.canceled) rememberFailure(item.url);
                 }
                 File ready = result;
                 MAIN.post(() -> { if (!task.canceled) callback.accept(ready); });
@@ -88,17 +115,22 @@ final class BunkrMediaPreview {
     }
 
     static File generate(Context context, NativeContentItem item, Task task) throws Exception {
-        CrazyShitRepository.StreamInfo stream = new BunkrRepository().resolvePlayable(context, item.url);
+        if (PawchiveRepository.isNativeVideo(item)) return null;
+        boolean pawchive = PawchiveRepository.isDirectMedia(item.url);
+        CrazyShitRepository.StreamInfo stream = pawchive
+                ? new CrazyShitRepository.StreamInfo(PawchiveRepository.original(item),
+                        PawchiveRepository.pageUrl(item), item.title, PawchiveRepository.ORIGIN)
+                : new BunkrRepository().resolvePlayable(context, item.url);
         task.check();
         if (stream == null || stream.mediaUrl == null || stream.mediaUrl.isEmpty()) return null;
-        Map<String, String> headers = headers(stream.mediaUrl, stream.requestReferer);
+        Map<String, String> headers = pawchive ? pawchiveHeaders() : headers(stream.mediaUrl, stream.requestReferer);
         Bitmap bitmap;
         if (item.isImage()) {
             bitmap = decodeImage(task.image(stream.mediaUrl, headers));
         } else if (item.isVideo()) {
             try (BunkrPreviewDataSource source = new BunkrPreviewDataSource(
                     (position, size) -> task.range(stream.mediaUrl, headers, position, size))) {
-                // Give the native extractor a known length so it can seek to end-of-file metadata.
+                // Give the platform retriever a known length so it can seek to end-of-file metadata.
                 if (source.readAt(0, new byte[1], 0, 1) < 0) return null;
                 MediaMetadataRetriever retriever = new MediaMetadataRetriever();
                 try {
@@ -109,20 +141,81 @@ final class BunkrMediaPreview {
             }
         } else return null;
         if (bitmap == null) return null;
-        bitmap = scale(bitmap);
+        task.trace("poster decoded " + bitmap.getWidth() + "x" + bitmap.getHeight());
+        return writePreview(context, item, scale(bitmap), task);
+    }
+
+    static void addPlaybackPreviewListener(Consumer<String> listener) {
+        PLAYBACK_PREVIEW_LISTENERS.add(listener);
+    }
+
+    static void removePlaybackPreviewListener(Consumer<String> listener) {
+        PLAYBACK_PREVIEW_LISTENERS.remove(listener);
+    }
+
+    /** A rendered frame already owned by the viewer needs no extra media requests. */
+    static void rememberPlaybackFrame(Context context, NativeContentItem item, Bitmap bitmap) {
+        if (!hasVisiblePixels(bitmap)) {
+            PawchiveMediaRequests.trace(item.url, "capture blank");
+            bitmap.recycle();
+            return;
+        }
+        Context app = context.getApplicationContext();
         try {
-            task.check();
+            IO.execute(() -> {
+                try {
+                    File ready = writePreview(app, item, bitmap, null);
+                    if (ready == null) return;
+                    PawchiveMediaRequests.trace(item.url, "capture cached");
+                    MAIN.post(() -> {
+                        for (Consumer<String> listener : new java.util.ArrayList<>(PLAYBACK_PREVIEW_LISTENERS))
+                            listener.accept(item.url);
+                    });
+                } catch (Exception error) {
+                    PawchiveMediaRequests.trace(item.url, "capture write failed " + error.getClass().getSimpleName());
+                }
+            });
+        } catch (RejectedExecutionException ignored) {
+            bitmap.recycle();
+        }
+    }
+
+    private static boolean hasVisiblePixels(Bitmap bitmap) {
+        for (int y = 1; y <= 7; y++) {
+            for (int x = 1; x <= 7; x++) {
+                int color = bitmap.getPixel(bitmap.getWidth() * x / 8, bitmap.getHeight() * y / 8);
+                if ((color >>> 24) != 0 && (color & 0x00ffffff) != 0) return true;
+            }
+        }
+        return false;
+    }
+
+    static File writePreview(Context context, NativeContentItem item, Bitmap bitmap, Task task)
+            throws Exception {
+        try {
+            if (task != null) task.check();
+            if (PawchiveRepository.isDirectMedia(item.url) && item.isVideo() && !hasVisiblePixels(bitmap)) {
+                PawchiveMediaRequests.trace(item.url, "poster rejected blank");
+                return null;
+            }
             File file = cacheFile(context, item);
+            if (file.isFile() && file.length() > 0) return file;
             File dir = file.getParentFile();
-            if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Preview cache unavailable");
-            File partial = new File(dir, file.getName() + ".tmp");
+            if (!dir.isDirectory() && !dir.mkdirs() && !dir.isDirectory())
+                throw new IOException("Preview cache unavailable");
+            File partial = File.createTempFile("preview-", ".tmp", dir);
             try {
                 try (FileOutputStream out = new FileOutputStream(partial)) {
                     if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 80, out))
                         throw new IOException("Preview encoding failed");
                 }
-                task.check();
-                if (!partial.renameTo(file)) throw new IOException("Preview cache write failed");
+                synchronized (BunkrMediaPreview.class) {
+                    if (task != null) task.check();
+                    if (file.isFile() && file.length() > 0) return file;
+                    if (!partial.renameTo(file)) throw new IOException("Preview cache write failed");
+                }
+                if (PawchiveRepository.isDirectMedia(item.url))
+                    PawchiveMediaRequests.trace(item.url, "poster JPEG published");
             } finally { partial.delete(); }
             trimCache(dir);
             return file;
@@ -179,8 +272,10 @@ final class BunkrMediaPreview {
 
     static File cacheFile(Context context, NativeContentItem item) throws Exception {
         // File-page identity remains stable when a resolved signed CDN URL expires.
+        String version = PawchiveRepository.isDirectMedia(item.url)
+                ? (item.isVideo() ? "v3" : "v2") : "v1";
         byte[] hash = MessageDigest.getInstance("SHA-256")
-                .digest(("v1\n" + item.kind + "\n" + item.url).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                .digest((version + "\n" + item.kind + "\n" + item.url).getBytes(java.nio.charset.StandardCharsets.UTF_8));
         StringBuilder key = new StringBuilder();
         for (byte value : hash) key.append(String.format(Locale.US, "%02x", value));
         return new File(new File(context.getCacheDir(), "bunkr_media_previews"), key + ".jpg");
@@ -208,6 +303,14 @@ final class BunkrMediaPreview {
         while (FAILURES.size() > 256) FAILURES.remove(FAILURES.keySet().iterator().next());
     }
 
+    static Map<String, String> pawchiveHeaders() {
+        Map<String, String> headers = new java.util.LinkedHashMap<>();
+        headers.put("User-Agent", PawchiveMediaRequests.USER_AGENT);
+        headers.put("Referer", PawchiveRepository.ORIGIN);
+        headers.put("Accept-Encoding", "identity");
+        return headers;
+    }
+
     static Map<String, String> headers(String url, String referer) {
         Map<String, String> headers = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         headers.put("User-Agent", BunkrRepository.userAgent());
@@ -225,22 +328,38 @@ final class BunkrMediaPreview {
     static final class Task {
         volatile boolean canceled;
         private volatile HttpURLConnection connection;
+        private final ThreadPoolExecutor executor;
         private Future<?> future;
         private long deadline = SystemClock.elapsedRealtime() + BunkrRepository.requestTimeoutMs();
+        private String traceIdentity = "";
+        void trace(String stage) { PawchiveMediaRequests.trace(traceIdentity, stage); }
+
+        Task() { this(IO); }
+
+        Task(ThreadPoolExecutor executor) { this.executor = executor; }
 
         void cancel() {
             canceled = true;
             Future<?> old = future;
-            if (old != null) { old.cancel(true); if (old instanceof Runnable) IO.remove((Runnable) old); }
+            if (old != null) { old.cancel(true); if (old instanceof Runnable) executor.remove((Runnable) old); }
             HttpURLConnection active = connection;
             if (active != null) active.disconnect();
         }
+        long remainingMillis() throws IOException {
+            check();
+            return Math.max(1L, deadline - SystemClock.elapsedRealtime());
+        }
+
         void check() throws IOException {
             if (canceled || Thread.currentThread().isInterrupted()) throw new IOException("Preview canceled");
             if (SystemClock.elapsedRealtime() >= deadline) throw new IOException("Preview budget exhausted");
         }
         private HttpURLConnection open(String url, Map<String, String> headers) throws IOException {
             check();
+            if (PawchiveMediaRequests.USER_AGENT.equals(headers.get("User-Agent"))) {
+                PawchiveMediaRequests.awaitStart();
+                check();
+            }
             URL parsed = new URL(url);
             if (!"https".equals(parsed.getProtocol()) && !"http".equals(parsed.getProtocol()))
                 throw new IOException("Invalid preview URL");
@@ -272,6 +391,7 @@ final class BunkrMediaPreview {
             try {
                 conn.setRequestProperty("Range", "bytes=" + start + "-" + (start + size - 1));
                 int status = conn.getResponseCode();
+                trace("range HTTP " + status + " start=" + start + " requested=" + size);
                 if (contentType(conn).contains("html")) throw new IOException("No source video");
                 long total;
                 int expected;
@@ -295,6 +415,7 @@ final class BunkrMediaPreview {
                 try (InputStream in = conn.getInputStream()) {
                     byte[] bytes = read(in, expected, true);
                     if (bytes.length != expected) throw new IOException("Incomplete preview range");
+                    trace("range received=" + bytes.length + " total=" + total);
                     return new BunkrPreviewDataSource.Block(bytes, total);
                 }
             } finally { conn.disconnect(); connection = null; }

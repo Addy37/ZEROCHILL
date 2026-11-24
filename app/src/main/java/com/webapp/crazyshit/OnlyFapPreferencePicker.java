@@ -48,7 +48,7 @@ final class OnlyFapPreferencePicker {
         controls.addView(scroll, new LinearLayout.LayoutParams(-1, -2));
         PreferenceGlassPanel glass = new PreferenceGlassPanel(context, controls);
         AlertDialog dialog = new ZeroChillDialog.Builder(context).setView(glass).create();
-        ContentPreference current = ContentPreference.get(context);
+        ContentPreference current = ContentPreference.getOnlyFap(context);
         for (ContentPreference option : ContentPreference.values()) {
             boolean selected = option == current;
             LinearLayout cell = new LinearLayout(context) {
@@ -86,7 +86,8 @@ final class OnlyFapPreferencePicker {
             label.setTypeface(null, selected ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
             cell.addView(label, new LinearLayout.LayoutParams(-1, -2));
             GridLayout.LayoutParams params = new GridLayout.LayoutParams(
-                    GridLayout.spec(GridLayout.UNDEFINED), GridLayout.spec(GridLayout.UNDEFINED, 1f));
+                    GridLayout.spec(GridLayout.UNDEFINED), option == ContentPreference.PAWCHIVE
+                            ? GridLayout.spec(0, 2, 1f) : GridLayout.spec(GridLayout.UNDEFINED, 1f));
             params.width = 0;
             params.height = -2;
             params.setMargins(dp(context, 3), dp(context, 3), dp(context, 3), dp(context, 3));
@@ -94,7 +95,7 @@ final class OnlyFapPreferencePicker {
             ZeroChillMotion.installPressFeedback(cell);
             cell.setOnClickListener(v -> {
                 if (!dialog.isShowing()) return;
-                boolean actualChange = ContentPreference.set(context, option);
+                boolean actualChange = ContentPreference.setOnlyFap(context, option);
                 dialog.dismiss();
                 if (actualChange && changed != null) changed.run();
             });

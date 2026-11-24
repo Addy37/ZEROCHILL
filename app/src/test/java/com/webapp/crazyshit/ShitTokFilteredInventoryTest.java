@@ -76,7 +76,7 @@ public class ShitTokFilteredInventoryTest {
         assertTrue(ready.stream().anyMatch(i -> i.url.contains("bunkr")));
         for (NativeContentItem item : ready) {
             assertTrue(inv.matches(item, ContentPreference.WOMEN));
-            for (ContentPreference mode : ContentPreference.values()) if (mode != ContentPreference.ALL && mode != ContentPreference.WOMEN)
+            for (ContentPreference mode : ContentPreference.standardValues()) if (mode != ContentPreference.ALL && mode != ContentPreference.WOMEN)
                 assertFalse(inv.matches(item, mode));
         }
         NativeContentItem guessed = new NativeContentItem("media", "Women", "https://fapello.com/unverified/1/",
@@ -86,7 +86,7 @@ public class ShitTokFilteredInventoryTest {
         for (NativeContentItem item : ready) assertFalse(inv.matches(item, ContentPreference.WOMEN));
     }
     @Test public void showIsDirectOnlyInWomenAndNoOtherFilteredModeRequestsIt() {
-        for (ContentPreference mode : ContentPreference.values()) {
+        for (ContentPreference mode : ContentPreference.standardValues()) {
             Fake backend = new Fake();
             ShitTokFilteredInventory inv = new ShitTokFilteredInventory(new Direct(), () -> 0L, backend);
             inv.request(mode, true, () -> {});

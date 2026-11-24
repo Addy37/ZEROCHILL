@@ -43,9 +43,9 @@ final class GalleryMediaDownloader {
         if (!item.isImage()) return;
 
         String mediaUrl = value(resolvedUrl);
-        if (mediaUrl.isEmpty() && isOnlyHavenDirectImage(item)) {
-            mediaUrl = value(item.url);
-        }
+        if (PawchiveRepository.isDirectMedia(item.url) && !PawchiveRepository.isDeliveryFor(item.url, mediaUrl))
+            mediaUrl = PawchiveRepository.original(item);
+        if (mediaUrl.isEmpty() && isOnlyHavenDirectImage(item)) mediaUrl = value(item.url);
         String referer = value(requestReferer);
         if (referer.isEmpty()) referer = imageReferer(item);
 
@@ -94,26 +94,19 @@ final class GalleryMediaDownloader {
             String requestReferer
     ) {
         String mediaUrl = value(resolvedUrl);
-        if (mediaUrl.isEmpty() && isOnlyHavenDirectVideo(item)) {
-            mediaUrl = value(item.url);
-        }
+        boolean pawchive = PawchiveRepository.isDirectMedia(item.url);
+        if (pawchive && !PawchiveRepository.isDeliveryFor(item.url, mediaUrl))
+            mediaUrl = PawchiveRepository.original(item);
+        if (mediaUrl.isEmpty() && isOnlyHavenDirectVideo(item)) mediaUrl = value(item.url);
         if (mediaUrl.isEmpty()) {
             VideoDownloadStore.downloadPage(activity, item);
             return;
         }
 
-        String referer = value(requestReferer);
+        String referer = pawchive ? PawchiveRepository.ORIGIN : value(requestReferer);
         if (referer.isEmpty()) referer = value(item.url);
-        VideoDownloadStore.downloadKnown(
-                activity,
-                item.title,
-                item.url,
-                item.imageUrl,
-                mediaUrl,
-                userAgent(activity),
-                cookies(mediaUrl, referer),
-                referer
-        );
+        VideoDownloadStore.downloadKnown(activity, item, mediaUrl, userAgent(activity),
+                pawchive ? "" : cookies(mediaUrl, referer), referer);
     }
 
     private static void enqueueImage(
@@ -152,9 +145,10 @@ final class GalleryMediaDownloader {
                     Environment.DIRECTORY_DOWNLOADS,
                     fileName
             );
-            request.addRequestHeader("User-Agent", userAgent(activity));
+            request.addRequestHeader("User-Agent", PawchiveRepository.isDirectMedia(item.url)
+                    ? PawchiveMediaRequests.USER_AGENT : userAgent(activity));
             if (!referer.isEmpty()) request.addRequestHeader("Referer", referer);
-            String cookies = cookies(mediaUrl, referer);
+            String cookies = PawchiveRepository.isDirectMedia(item.url) ? "" : cookies(mediaUrl, referer);
             if (!cookies.isEmpty()) request.addRequestHeader("Cookie", cookies);
             manager.enqueue(request);
             toast(activity, "Download started in Downloads.");
@@ -165,6 +159,7 @@ final class GalleryMediaDownloader {
 
     private static String imageReferer(NativeContentItem item) {
         if (item == null) return "";
+        if (PawchiveRepository.isDirectMedia(item.url)) return PawchiveRepository.ORIGIN;
         String wikiFeetReferer = WikiFeetRepository.imageReferer(item);
         if (!wikiFeetReferer.isEmpty()) return wikiFeetReferer;
         if (!FapelloRepository.isPostUrl(item.url)

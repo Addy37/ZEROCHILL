@@ -70,6 +70,8 @@ final class CreatorProfileHeader extends LinearLayout {
                 "",
                 query
         );
+        PawchiveRepository.Creator pawchive = PawchiveRepository.profile(url, title);
+        if (pawchive != null) found = PawchiveRepository.creatorItem(pawchive);
         String profileKey = OnlyFapCreatorResults.profileKey(url);
         NativeContentItem matching = null;
         for (NativeContentItem item : CreatorCatalog.all(context)) {
@@ -192,7 +194,7 @@ final class CreatorProfileHeader extends LinearLayout {
         loadAvatar(avatar);
         showHero(creator.imageUrl, creator.url);
 
-        loadOnlyHavenHero(query, url, aliases);
+        if (pawchive == null) loadOnlyHavenHero(query, url, aliases);
         refresh();
     }
 

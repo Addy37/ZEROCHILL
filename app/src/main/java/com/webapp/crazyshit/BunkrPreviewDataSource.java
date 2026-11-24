@@ -20,12 +20,18 @@ final class BunkrPreviewDataSource extends MediaDataSource {
     }
 
     private final Reader reader;
+    private final int blockBytes;
     private final LinkedHashMap<Long, byte[]> blocks = new LinkedHashMap<>(4, .75f, true);
     private long length = -1;
     private int received, requests;
     private volatile boolean closed;
 
-    BunkrPreviewDataSource(Reader reader) { this.reader = reader; }
+    BunkrPreviewDataSource(Reader reader) { this(reader, BLOCK_BYTES); }
+
+    BunkrPreviewDataSource(Reader reader, int blockBytes) {
+        this.reader = reader;
+        this.blockBytes = blockBytes;
+    }
 
     @Override public int readAt(long position, byte[] buffer, int offset, int size) throws IOException {
         if (closed || Thread.currentThread().isInterrupted()) throw new IOException("Preview canceled");
@@ -33,14 +39,14 @@ final class BunkrPreviewDataSource extends MediaDataSource {
             throw new IOException("Invalid preview read");
         if (size == 0) return 0;
         if (length >= 0 && position >= length) return -1;
-        long start = position - position % BLOCK_BYTES;
+        long start = position - position % blockBytes;
         byte[] bytes = blocks.get(start);
         if (bytes == null) {
             if (requests >= MAX_REQUESTS || received >= MAX_BYTES)
                 throw new IOException("Preview budget exhausted");
             requests++;
-            Block block = reader.read(start, Math.min(BLOCK_BYTES, MAX_BYTES - received));
-            if (block.bytes.length > BLOCK_BYTES || block.bytes.length > MAX_BYTES - received
+            Block block = reader.read(start, Math.min(blockBytes, MAX_BYTES - received));
+            if (block.bytes.length > blockBytes || block.bytes.length > MAX_BYTES - received
                     || block.total < 0 || start > block.total
                     || block.bytes.length > block.total - start)
                 throw new IOException("Invalid preview range");

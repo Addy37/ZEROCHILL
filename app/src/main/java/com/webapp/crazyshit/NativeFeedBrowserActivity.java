@@ -360,7 +360,7 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private static boolean isCreatorProfileHint(String url) {
-        return FapelloRepository.isModelUrl(url) || OnlyHavenRepository.isOnlyHavenUrl(url)
+        return PawchiveRepository.isProfile(url) || FapelloRepository.isModelUrl(url) || OnlyHavenRepository.isOnlyHavenUrl(url)
                 || WikiFeetRepository.isXProfileUrl(url);
     }
 
@@ -421,7 +421,8 @@ public class NativeFeedBrowserActivity extends Activity {
         );
         if (!creatorQuery.isEmpty()) {
             source = SOURCE_BUNKR;
-            baseUrl = BunkrRepository.searchUrl(creatorQuery);
+            baseUrl = PawchiveRepository.isProfile(fapelloProfileUrl)
+                    ? fapelloProfileUrl : BunkrRepository.searchUrl(creatorQuery);
         } else if (BunkrRepository.isAlbumUrl(baseUrl)) source = SOURCE_BUNKR;
         else if (WebVideoSourceRepository.isKaoticUrl(baseUrl)) source = SOURCE_KAOTIC;
         else if (BaddieHubRepository.isBaddieHubUrl(baseUrl)) source = SOURCE_BADDIEHUB;
@@ -1615,8 +1616,9 @@ public class NativeFeedBrowserActivity extends Activity {
                     if (isCreatorGallery()) {
                         updateCreatorEmptyState();
                         FapelloSourceException failure = fapelloFailure(e);
-                        if (failure != null && itemCount() == 0) {
-                            empty.setText(failure.userMessage() + "\nTap to try again.");
+                        if (itemCount() == 0 && (failure != null || PawchiveRepository.isProfile(fapelloProfileUrl))) {
+                            String message = failure == null ? "Couldn't load this Pawchive gallery." : failure.userMessage();
+                            empty.setText(message + "\nTap to try again.");
                             empty.setVisibility(View.VISIBLE);
                         }
                         if (itemCount() > 0) {
@@ -1784,6 +1786,7 @@ public class NativeFeedBrowserActivity extends Activity {
         if (items == null) return filtered;
         for (NativeContentItem item : items) {
             if (item == null) continue;
+            if (PawchiveRepository.isProfile(fapelloProfileUrl) && PawchiveRepository.isNativeVideo(item)) continue;
             if (tab == CREATOR_TAB_PICTURES && !item.isImage()) continue;
             if (tab == CREATOR_TAB_VIDEOS && !item.isVideo()) continue;
             filtered.add(item);

@@ -73,6 +73,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final LinkedHashSet<View> favoriteMovingTiles = new LinkedHashSet<>();
     private int favoriteMoveGeneration;
     private boolean previewsActive = true;
+    private final java.util.function.Consumer<String> playbackPreviewListener = this::showPlaybackPreview;
     private final LinkedHashSet<Holder> previewHolders = new LinkedHashSet<>();
     private final Rect previewBounds = new Rect();
     private final android.view.ViewTreeObserver.OnPreDrawListener previewVisibility = () -> {
@@ -427,6 +428,21 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         playIcon.setPadding(dp(parent, 11), dp(parent, 11), dp(parent, 9), dp(parent, 11));
         play.addView(playIcon, new FrameLayout.LayoutParams(-1, -1));
 
+        TextView gif = new TextView(parent.getContext());
+        gif.setText("GIF");
+        gif.setTextColor(Color.WHITE);
+        gif.setTextSize(11);
+        gif.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        gif.setIncludeFontPadding(false);
+        gif.setGravity(Gravity.CENTER);
+        gif.setPadding(dp(parent, 6), dp(parent, 4), dp(parent, 6), dp(parent, 4));
+        gif.setBackground(BrowseUi.rounded(parent.getContext(), Color.argb(215, 0, 0, 0), 7));
+        gif.setElevation(dp(parent, 5));
+        gif.setVisibility(View.GONE);
+        FrameLayout.LayoutParams gifParams = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END);
+        gifParams.setMargins(0, 0, dp(parent, 6), dp(parent, 6));
+        tile.addView(gif, gifParams);
+
         View morphPulse = new View(parent.getContext());
         GradientDrawable morphPulseBackground = new GradientDrawable();
         morphPulseBackground.setColor(Color.TRANSPARENT);
@@ -447,7 +463,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 fresh,
                 play,
                 morphPulse,
-                unavailable, favorite, maintenance
+                unavailable, favorite, maintenance, gif
         );
     }
 
@@ -484,6 +500,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 ? aspectRatios.getOrDefault(item.url, item.aspectRatioHint > 0f ? item.aspectRatioHint : 1f)
                 : 1f);
         holder.play.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
+        holder.gif.setVisibility(item.isGif() ? View.VISIBLE : View.GONE);
         applyOverlayDensity(holder);
         boolean fresh = isHighlighted(item);
         holder.fresh.setVisibility(fresh ? View.VISIBLE : View.GONE);
@@ -497,7 +514,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             holder.sourceVariant.setVisibility(View.GONE);
         }
         holder.itemView.setContentDescription(
-                (item.isVideo() ? "Video, " : "Photo, ") + item.title +
+                (item.isVideo() ? "Video, " : item.isGif() ? "GIF, " : "Photo, ") + item.title +
                         (source == null ? "" : ", source " + source.name) +
                         (fresh ? ", new from Updates" : "")
         );
@@ -510,7 +527,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.repairPending = false;
         holder.wantsMediaPreview = false;
         holder.previewAttempted = false;
-        File cachedPreview = BunkrRepository.isBunkrUrl(item.url)
+        boolean pawchiveVideo = pawchiveVideoPreview(item);
+        File cachedPreview = BunkrRepository.isBunkrUrl(item.url) || pawchiveVideo
                 ? BunkrMediaPreview.cached(context, item) : null;
         if (cachedPreview != null) {
             holder.wantsMediaPreview = true;
@@ -520,7 +538,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 || (BunkrRepository.isBunkrUrl(item.url) && !BunkrRepository.isUsableArtwork(item.imageUrl))) {
             Glide.with(holder.image).clear(holder.image);
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
-            repairArtwork(holder, item, item.imageUrl);
+            if (PawchiveRepository.isDirectMedia(item.url)) {
+                if (item.isImage()) holder.unavailable.setVisibility(View.VISIBLE);
+            } else repairArtwork(holder, item, item.imageUrl);
         } else {
             loadArtwork(holder, item, item.imageUrl, true);
         }
@@ -552,6 +572,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         // Glide forbids starting another request synchronously inside its listener.
                         holder.image.post(() -> {
                             if (binding != holder.bindGeneration) return;
+                            if (PawchiveRepository.isDirectMedia(item.url)) {
+                                holder.unavailable.setVisibility(View.VISIBLE);
+                                return;
+                            }
                             if (repair) repairArtwork(holder, item, url);
                             else requestMediaPreview(holder, item);
                         });
@@ -611,7 +635,17 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         }
     }
 
+    private static boolean pawchiveVideoPreview(NativeContentItem item) {
+        return item.isVideo() && !PawchiveRepository.original(item).isEmpty();
+    }
+
     private void requestMediaPreview(Holder holder, NativeContentItem item) {
+        boolean pawchive = PawchiveRepository.isNativeVideo(item);
+        if (pawchive) {
+            File saved = BunkrMediaPreview.cached(context, item);
+            if (saved != null) loadMediaPreview(holder, item, saved);
+            return;
+        }
         if (!BunkrRepository.isBunkrUrl(item.url) || (!item.isImage() && !item.isVideo())) return;
         holder.wantsMediaPreview = true;
         if (!previewVisible(holder) || holder.previewAttempted) return;
@@ -626,11 +660,25 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             holder.preview = null;
             holder.maintenance.refresh();
             if (file == null) {
-                holder.unavailable.setVisibility(View.VISIBLE);
+                if (!pawchive) holder.unavailable.setVisibility(View.VISIBLE);
+                else PawchiveMediaRequests.trace(item.url, "tile no poster");
                 return;
             }
             loadMediaPreview(holder, item, file);
         });
+    }
+
+    private void showPlaybackPreview(String url) {
+        for (Holder holder : previewHolders) {
+            NativeContentItem item = holder.boundItem;
+            if (item == null || !item.url.equals(url) || !previewVisible(holder)) continue;
+            File cached = BunkrMediaPreview.cached(context, item);
+            if (cached != null) {
+                cancelPreview(holder);
+                holder.previewAttempted = true;
+                loadMediaPreview(holder, item, cached);
+            }
+        }
     }
 
     private void loadMediaPreview(Holder holder, NativeContentItem item, File file) {
@@ -644,11 +692,15 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         if (binding == holder.bindGeneration) {
                             file.delete(); // Regenerate an evicted/corrupt entry on the next attachment.
                             holder.unavailable.setVisibility(View.VISIBLE);
+                            if (PawchiveRepository.isDirectMedia(item.url))
+                                PawchiveMediaRequests.trace(item.url, "tile Glide failed");
                         }
                         return false;
                     }
                     @Override public boolean onResourceReady(Drawable resource, Object model,
                             Target<Drawable> target, DataSource source, boolean firstResource) {
+                        if (binding == holder.bindGeneration && PawchiveRepository.isDirectMedia(item.url))
+                            PawchiveMediaRequests.trace(item.url, "tile displayed");
                         if (adaptiveAspectRatios && binding == holder.bindGeneration)
                             applyAspectRatio(holder, item, resource);
                         return false;
@@ -688,11 +740,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     @Override public void onAttachedToRecyclerView(@NonNull RecyclerView recycler) {
         super.onAttachedToRecyclerView(recycler);
         previewViewport = recycler;
+        BunkrMediaPreview.addPlaybackPreviewListener(playbackPreviewListener);
         recycler.getViewTreeObserver().addOnPreDrawListener(previewVisibility);
     }
 
     @Override public void onDetachedFromRecyclerView(@NonNull RecyclerView recycler) {
         stopFavoriteMoves();
+        BunkrMediaPreview.removePlaybackPreviewListener(playbackPreviewListener);
         recycler.getViewTreeObserver().removeOnPreDrawListener(previewVisibility);
         for (int i = 0; i < recycler.getChildCount(); i++) {
             RecyclerView.ViewHolder raw = recycler.getChildViewHolder(recycler.getChildAt(i));
@@ -740,6 +794,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.maintenance.setPivotY(0f);
         holder.maintenance.setScaleX(scale);
         holder.maintenance.setScaleY(scale);
+
+        holder.gif.setPivotX(holder.gif.getWidth());
+        holder.gif.setPivotY(holder.gif.getHeight());
+        holder.gif.setScaleX(scale);
+        holder.gif.setScaleY(scale);
 
         holder.play.setPivotX(dp(holder.play, 42));
         holder.play.setPivotY(dp(holder.play, 42));
@@ -827,6 +886,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private GlideUrl withHeaders(String imageUrl, String pageUrl) {
+        if (PawchiveRepository.isArtwork(imageUrl) || PawchiveRepository.isDeliveryFor(pageUrl, imageUrl))
+            return new GlideUrl(imageUrl, new LazyHeaders.Builder()
+                    .setHeader("User-Agent", USER_AGENT).setHeader("Referer", PawchiveRepository.ORIGIN).build());
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
                 .addHeader("User-Agent", USER_AGENT)
                 .addHeader("Referer", pageUrl == null
@@ -871,6 +933,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     private SourceBadge sourceBadge(NativeContentItem item) {
         if (item == null) return null;
+        if (PawchiveRepository.isDirectMedia(item.url))
+            return new SourceBadge(R.drawable.ic_content_pawchive, "Pawchive", false);
         if (FapelloRepository.isFapelloUrl(item.url) ||
                 FapelloRepository.isModelUrl(item.uploader)) {
             return new SourceBadge(R.drawable.ic_source_fapello, "Fapello", false);
@@ -938,6 +1002,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final TextView unavailable;
         final ImageView favorite;
         final BunkrMaintenanceUi.Badge maintenance;
+        final TextView gif;
 
         Holder(
                 AspectRatioFrameLayout itemView,
@@ -948,7 +1013,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 ImageView fresh,
                 View play,
                 View morphPulse,
-                TextView unavailable, ImageView favorite, BunkrMaintenanceUi.Badge maintenance
+                TextView unavailable, ImageView favorite, BunkrMaintenanceUi.Badge maintenance,
+                TextView gif
         ) {
             super(itemView);
             this.tile = itemView;
@@ -962,6 +1028,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             this.unavailable = unavailable;
             this.favorite = favorite;
             this.maintenance = maintenance;
+            this.gif = gif;
         }
     }
 

@@ -40,7 +40,7 @@ final class ContentPreferenceUi {
         PreferenceGlassPanel glassPanel = new PreferenceGlassPanel(context, panel);
         android.app.AlertDialog dialog = new ZeroChillDialog.Builder(context).setView(glassPanel).create();
         ContentPreference current = ContentPreference.get(context);
-        for (ContentPreference option : ContentPreference.values()) {
+        for (ContentPreference option : ContentPreference.standardValues()) {
             boolean selected = current == option;
             LinearLayout row = new LinearLayout(context) {
                 @Override public void onInitializeAccessibilityNodeInfo(android.view.accessibility.AccessibilityNodeInfo info) {
@@ -136,7 +136,7 @@ final class ContentPreferenceUi {
 
     static void bindSelector(TextView selector) {
         Context context = selector.getContext();
-        ContentPreference mode = ContentPreference.get(context);
+        ContentPreference mode = ContentPreference.getOnlyFap(context);
         Object previous = selector.getTag(R.id.content_preference_mode);
         selector.setTag(R.id.content_preference_mode, mode);
         String compact = (mode.symbol.isEmpty() ? "" : mode.symbol + "  ") + "▾";
@@ -151,7 +151,8 @@ final class ContentPreferenceUi {
         android.graphics.drawable.Drawable icon = mode.icon() == 0 ? null
                 : androidx.core.content.ContextCompat.getDrawable(context, mode.icon());
         if (icon != null) {
-            icon = icon.mutate(); icon.setTint(Color.WHITE);
+            icon = icon.mutate();
+            icon.setTint(mode == ContentPreference.PAWCHIVE ? AppearanceTheme.accent(context) : Color.WHITE);
             icon.setBounds(0, 0, dp(context, 22), dp(context, 22));
         }
         selector.setCompoundDrawablesRelative(icon, null, null, null);
@@ -201,7 +202,7 @@ final class ContentPreferenceUi {
         if (!surface.isShown() || !ContentPreference.acknowledge(surface.getContext(), shittok ? "shittok" : "onlyfap")) return;
         clearPresentation(surface);
         Context context = surface.getContext();
-        ContentPreference mode = ContentPreference.get(context);
+        ContentPreference mode = shittok ? ContentPreference.get(context) : ContentPreference.getOnlyFap(context);
         PreferenceNotice notice = new PreferenceNotice(context);
         notice.setTag("content_preference_presentation");
         notice.setOrientation(LinearLayout.HORIZONTAL);

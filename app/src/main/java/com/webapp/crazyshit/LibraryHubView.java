@@ -612,9 +612,11 @@ final class LibraryHubView extends ScrollView {
         for (int i = 0; i < count; i++) {
             FavoriteStore.Item item = items.get(i);
             PlaybackHistoryStore.Item historyItem = historyByUrl.get(item.url);
-            String poster = historyItem == null ? "" : historyItem.posterUrl;
-            rail.addCard(compactMediaCard(item.title, item.url, poster, "", false),
-                    item.url, portraitThumbnails.getOrDefault(item.url, false));
+            boolean pawchive = item.content != null && PawchiveRepository.isDirectMedia(item.url);
+            String poster = pawchive ? item.content.imageUrl : historyItem == null ? "" : historyItem.posterUrl;
+            View card = compactMediaCard(item.title, item.url, poster, "", false);
+            if (pawchive) card.setOnClickListener(v -> SavedGalleryMedia.open(activity, item));
+            rail.addCard(card, item.url, portraitThumbnails.getOrDefault(item.url, false));
         }
     }
 
@@ -1074,7 +1076,8 @@ final class LibraryHubView extends ScrollView {
     static Object remoteImage(String imageUrl, String pageUrl) {
         LazyHeaders.Builder headers = new LazyHeaders.Builder()
                 .addHeader("User-Agent", USER_AGENT);
-        if (pageUrl != null && !pageUrl.isEmpty()) headers.addHeader("Referer", pageUrl);
+        if (PawchiveRepository.isArtwork(imageUrl)) headers.setHeader("Referer", PawchiveRepository.ORIGIN);
+        else if (pageUrl != null && !pageUrl.isEmpty()) headers.addHeader("Referer", pageUrl);
         return new GlideUrl(imageUrl, headers.build());
     }
 

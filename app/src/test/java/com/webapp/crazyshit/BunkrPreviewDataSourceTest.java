@@ -49,6 +49,21 @@ public class BunkrPreviewDataSourceTest {
         }
     }
 
+    @Test public void pacedProviderCanUseFewerRequestsWithoutIncreasingItsByteBudget() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        int block = BunkrMediaPreview.PAWCHIVE_BLOCK_BYTES;
+        try (BunkrPreviewDataSource source = new BunkrPreviewDataSource((at, size) -> {
+            calls.incrementAndGet();
+            return new BunkrPreviewDataSource.Block(new byte[size], 1_000_000_000L);
+        }, block)) {
+            byte[] buffer = new byte[1];
+            for (long at = 0; at < BunkrPreviewDataSource.MAX_BYTES; at += BunkrPreviewDataSource.BLOCK_BYTES)
+                assertEquals(1, source.readAt(at, buffer, 0, 1));
+            assertEquals(8, calls.get());
+            assertThrows(IOException.class, () -> source.readAt(BunkrPreviewDataSource.MAX_BYTES, buffer, 0, 1));
+        }
+    }
+
     @Test public void malformedAndChangingRangesFailClosed() throws Exception {
         try (BunkrPreviewDataSource source = new BunkrPreviewDataSource((at, size) ->
                 new BunkrPreviewDataSource.Block(new byte[size], 4))) {

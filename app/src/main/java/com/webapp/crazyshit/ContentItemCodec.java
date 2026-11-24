@@ -20,17 +20,22 @@ final class ContentItemCodec {
         if (!item.creatorProfileUrls.isEmpty()) {
             encoded.put("creatorProfiles", new JSONArray(item.creatorProfileUrls));
         }
+        if (!item.sourceMediaUrl.isEmpty()) encoded.put("sourceMediaUrl", item.sourceMediaUrl);
+        if (!item.sourcePageUrl.isEmpty()) encoded.put("sourcePageUrl", item.sourcePageUrl);
         return encoded;
     }
 
     static NativeContentItem decode(JSONObject item) {
-        return new NativeContentItem(item.optString("kind", NativeContentItem.KIND_CREATOR),
-                item.optString("name"), item.optString("url"), item.optString("image"),
+        String kind = item.optString("kind", NativeContentItem.KIND_CREATOR);
+        String url = item.optString("url");
+        return new NativeContentItem(kind, item.optString("name"), url,
+                PawchiveRepository.savedArtwork(kind, url, item.optString("image")),
                 item.optString("views", item.optString("rank")), item.optString("referer"),
                 item.optString("comments"), item.optString("description"),
                 item.optString("query", item.optString("name")), 0L, (float) item.optDouble("aspectRatio", 0))
                 .withCreatorIdentity(strings(item.optJSONArray("creatorAliases")),
-                        strings(item.optJSONArray("creatorProfiles")));
+                        strings(item.optJSONArray("creatorProfiles")))
+                .withSourceMedia(item.optString("sourceMediaUrl"), item.optString("sourcePageUrl"));
     }
 
     private static List<String> strings(JSONArray values) {

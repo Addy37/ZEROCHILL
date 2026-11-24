@@ -69,7 +69,7 @@ public class PreferenceGlassPanelTest {
         assertTrue(ContentPreferenceUi.pickerWidth(host) <= host.getResources().getDisplayMetrics().widthPixels * .81f);
         ContentPreferenceUi.choose(host, null);
         View root = ShadowAlertDialog.getLatestAlertDialog().getWindow().getDecorView();
-        for (ContentPreference mode : ContentPreference.values())
+        for (ContentPreference mode : ContentPreference.standardValues())
             assertNotNull(root.findViewWithTag("preference_" + mode.value));
         assertNotNull(root.findViewWithTag("preference_cancel"));
     }

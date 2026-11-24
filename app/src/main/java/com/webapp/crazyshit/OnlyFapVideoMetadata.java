@@ -12,7 +12,8 @@ final class OnlyFapVideoMetadata {
     private OnlyFapVideoMetadata() { }
 
     static boolean applies(NativeContentItem item) {
-        return item != null && (WikiFeetRepository.isWikiFeetUrl(item.uploader)
+        return item != null && (PawchiveRepository.isDirectMedia(item.url)
+                || WikiFeetRepository.isWikiFeetUrl(item.uploader)
                 || WikiFeetRepository.isWikiFeetUrl(item.url) || FapelloRepository.isFapelloUrl(item.url)
                 || OnlyHavenRepository.isOnlyHavenUrl(item.url)
                 || BunkrRepository.isBunkrUrl(item.url)
@@ -39,6 +40,10 @@ final class OnlyFapVideoMetadata {
 
     static NativeContentItem creator(NativeContentItem item) {
         if (!applies(item)) return null;
+        if (PawchiveRepository.isDirectMedia(item.url) && PawchiveRepository.isProfile(item.uploader)) {
+            PawchiveRepository.Creator profile = PawchiveRepository.profile(item.uploader, item.searchQuery);
+            return PawchiveRepository.creatorItem(profile);
+        }
         if (!FapelloRepository.isFapelloUrl(item.url) && !FapelloRepository.isModelUrl(item.uploader)
                 && (item.searchQuery.trim().isEmpty() || !item.searchQuery.trim().equals(
                 ShitTokCreatorMetadata.creatorName(item)))) return null;

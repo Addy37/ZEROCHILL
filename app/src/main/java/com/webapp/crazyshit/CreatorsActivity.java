@@ -594,8 +594,12 @@ public final class CreatorsActivity extends Activity {
             }
             if (card.avatarUrl != null) {
                 // MaterialCardView clips the original drawable to a circle. No bitmap circle/crop copy.
-                avatarRequest(card)
-                        .priority(Priority.HIGH)
+                RequestBuilder<Drawable> request = avatarRequest(card);
+                if (avatarOverride == null && PawchiveRepository.isProfile(item.url)) {
+                    request.listener(PawchiveAvatarArtwork.fallback(holder.avatar, item,
+                            () -> !stopped && holder.bound == group, card.decodeSide));
+                }
+                request.priority(Priority.HIGH)
                         .transition(ThumbnailFades.avatar())
                         .placeholder(holder.placeholder)
                         .error(R.drawable.ic_more_account)
