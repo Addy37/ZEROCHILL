@@ -38,6 +38,34 @@ public class PawchiveRepositoryTest {
         assertEquals(1, PawchiveRepository.creatorShelf(creators, "artist", 1, 16).size());
     }
 
+    @Test public void discoveryShelvesRankAndSeparateServicesWithoutRepeatingCreators() throws Exception {
+        java.util.ArrayList<PawchiveRepository.Creator> source = new java.util.ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            String service = i % 3 == 0 ? "patreon" : i % 3 == 1 ? "fanbox" : "fantia";
+            source.add(new PawchiveRepository.Creator(service, Integer.toString(i), "Creator " + i, 1000 - i));
+        }
+        java.util.Collections.reverse(source);
+        List<List<NativeContentItem>> rows = PawchiveRepository.discoveryShelves(source, new java.util.Random(7));
+        assertEquals(4, rows.size());
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (List<NativeContentItem> row : rows) {
+            assertEquals(16, row.size());
+            for (NativeContentItem item : row) assertTrue(seen.add(item.url));
+        }
+        assertEquals("Creator 0", rows.get(0).get(0).title);
+        assertEquals("Creator 15", rows.get(0).get(15).title);
+        for (NativeContentItem item : rows.get(1)) assertTrue(item.url.contains("/patreon/user/"));
+        for (NativeContentItem item : rows.get(2)) assertTrue(item.url.contains("/fanbox/user/"));
+        assertFalse(rows.get(3).get(0).url.equals(PawchiveRepository.discoveryShelves(source,
+                new java.util.Random(8)).get(3).get(0).url));
+        List<List<NativeContentItem>> sparse = PawchiveRepository.discoveryShelves(
+                java.util.Collections.singletonList(source.get(0)), new java.util.Random(1));
+        assertEquals(1, sparse.get(0).size());
+        assertTrue(sparse.get(1).isEmpty());
+        assertTrue(sparse.get(2).isEmpty());
+        assertTrue(sparse.get(3).isEmpty());
+    }
+
     @Test public void creatorPostsCannotMixAnotherCreatorOrService() throws Exception {
         PawchiveRepository.PostPage result = PawchiveRepository.parsePosts(
                 "[{\"service\":\"fanbox\",\"user\":\"1\",\"id\":\"2\",\"title\":\"Drawing\"},"

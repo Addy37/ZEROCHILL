@@ -1318,8 +1318,13 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             page.onlyFapHubTasks.add(io.submit(() -> {
                 OnlyHavenRepository haven = new OnlyHavenRepository();
                 PawchiveRepository pawchive = new PawchiveRepository();
+                // A single catalog snapshot supplies the complete Pawchive shelf set.
+                List<List<NativeContentItem>> pawShelves = new java.util.ArrayList<>();
                 OnlyFapCategoryLoader.load(preference, (mode, limit, offset) -> {
-                    if (mode == ContentPreference.PAWCHIVE) return pawchive.shelf("", offset, limit);
+                    if (mode == ContentPreference.PAWCHIVE) {
+                        if (pawShelves.isEmpty()) pawShelves.addAll(pawchive.discoveryShelves());
+                        return new OnlyFapCategoryLoader.Batch(pawShelves.get(offset / limit), true);
+                    }
                     OnlyHavenRepository.CategoryPage batch = haven.fetchCategoryPage(activity, mode, limit, offset);
                     List<NativeContentItem> items = new java.util.ArrayList<>();
                     for (OnlyHavenRepository.Creator creator : batch.creators)

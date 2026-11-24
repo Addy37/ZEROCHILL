@@ -11,6 +11,11 @@ import java.util.function.BooleanSupplier;
 final class OnlyFapCategoryLoader {
     static final int PAGE_SIZE = 16;
     static final int SHELF_COUNT = 3;
+    static final int PAWCHIVE_SHELF_COUNT = 4;
+
+    static int shelfCount(ContentPreference preference) {
+        return preference == ContentPreference.PAWCHIVE ? PAWCHIVE_SHELF_COUNT : SHELF_COUNT;
+    }
 
     interface Source {
         Batch fetch(ContentPreference preference, int limit, int offset) throws Exception;
@@ -32,7 +37,7 @@ final class OnlyFapCategoryLoader {
         if (preference == ContentPreference.ALL) throw new IllegalArgumentException("Category required");
         Set<String> seen = new HashSet<>();
         boolean failed = false;
-        for (int index = 0; index < SHELF_COUNT; index++) {
+        for (int index = 0; index < shelfCount(preference); index++) {
             if (!live(current)) return;
             Batch batch;
             try {
@@ -52,7 +57,7 @@ final class OnlyFapCategoryLoader {
                 if (!identity.isEmpty() && seen.add(identity)) unique.add(item);
             }
             listener.shelf(index, Collections.unmodifiableList(unique), false);
-            if (!batch.hasMore) break;
+            if (!batch.hasMore && preference != ContentPreference.PAWCHIVE) break;
         }
         if (live(current)) listener.finished(failed);
     }
