@@ -36,7 +36,7 @@ public class OnlyFapGenderShelvesTest {
     @After public void close() { hub.close(); }
 
     private void mode(ContentPreference mode) {
-        ContentPreference.set(activity, mode);
+        ContentPreference.setOnlyFap(activity, mode);
         hub.preparePreference(mode);
         hub.beginRefresh();
     }
@@ -49,8 +49,8 @@ public class OnlyFapGenderShelvesTest {
         };
     }
     @Test public void everyFilteredModeUsesDistinctPagesAndPublishesThreeCategoryShelves() {
-        for (ContentPreference preference : ContentPreference.standardValues()) {
-            if (preference == ContentPreference.ALL) continue;
+        for (ContentPreference preference : ContentPreference.onlyFapValues()) {
+            if (preference == ContentPreference.ALL || preference == ContentPreference.PAWCHIVE) continue;
             mode(preference);
             List<Integer> offsets = new ArrayList<>();
             OnlyFapCategoryLoader.load(preference, (selected, limit, offset) -> {
@@ -205,9 +205,9 @@ public class OnlyFapGenderShelvesTest {
     }
     @Test public void rapidSwitchesRejectQueuedShelvesAndCompletionFromEachOldMode() {
         for (ContentPreference selected : new ContentPreference[]{ContentPreference.WOMEN, ContentPreference.MEN,
-                ContentPreference.TRANS_WOMEN, ContentPreference.ALL, ContentPreference.WOMEN}) {
+                ContentPreference.TRANS, ContentPreference.ALL, ContentPreference.WOMEN}) {
             mode(selected);
-            for (ContentPreference old : ContentPreference.standardValues()) if (old != selected) {
+            for (ContentPreference old : ContentPreference.onlyFapValues()) if (old != selected) {
                 hub.setPreferenceShelf(old, 1, creators(old.value, 0, 16), false);
                 hub.finishPreferenceShelves(old, false);
             }
@@ -242,7 +242,7 @@ public class OnlyFapGenderShelvesTest {
         activity.getSharedPreferences("creator_favorites", 0).edit()
                 .putStringSet("creators", Collections.singleton(CreatorFavoriteStore.key(saved))).commit();
         CreatorCatalog.remember(activity, Collections.singletonList(saved));
-        for (ContentPreference selected : ContentPreference.standardValues()) {
+        for (ContentPreference selected : ContentPreference.onlyFapValues()) {
             mode(selected);
             assertTrue(CreatorFavoriteStore.contains(activity, saved));
             assertTrue(CreatorCatalog.favoriteGroups(activity).stream().anyMatch(group -> group.item.url.equals(saved.url)));

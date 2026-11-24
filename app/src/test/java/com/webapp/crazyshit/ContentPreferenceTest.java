@@ -101,11 +101,12 @@ public class ContentPreferenceTest {
             Activity activity = controller.get();
             android.widget.TextView pill = new android.widget.TextView(activity);
             ContentPreferenceUi.bindSelector(pill);
+            ContentPreference onlyFapMode = ContentPreference.onlyFapMode(mode);
             assertEquals((mode.symbol.isEmpty() ? "" : mode.symbol + "  ") + "▾", pill.getText().toString());
             assertFalse(pill.getText().toString().contains(mode.label));
             assertEquals(mode.icon() != 0, pill.getCompoundDrawablesRelative()[0] != null);
-            assertEquals("Content preference: " + mode.label, pill.getContentDescription());
-            assertEquals(mode, pill.getTag(R.id.content_preference_mode));
+            assertEquals("Content preference: " + onlyFapMode.label, pill.getContentDescription());
+            assertEquals(onlyFapMode, pill.getTag(R.id.content_preference_mode));
             assertNotNull(pill.getBackground());
             ContentPreferenceUi.choose(activity, () -> fail("Cancel cannot change preference"));
             AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
