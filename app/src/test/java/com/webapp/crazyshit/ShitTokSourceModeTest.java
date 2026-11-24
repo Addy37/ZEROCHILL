@@ -466,7 +466,11 @@ public class ShitTokSourceModeTest {
             ReflectionHelpers.setField(feed, "queuePreference", ContentPreference.ALL);
             ShitTokFilteredInventory filtered = inventory();
             filtered.request(ShitTokSourceMode.ONLY_FAP, ContentPreference.ALL, true, () -> {});
-            List<NativeContentItem> known = filtered.take(ContentPreference.ALL);
+            List<NativeContentItem> known = new java.util.ArrayList<>(filtered.take(ContentPreference.ALL));
+            // This fixture needs a deep playlist. Cold inventory publishes its first creator
+            // page early, so request the follow-up refill before constructing the playlist.
+            filtered.request(ShitTokSourceMode.ONLY_FAP, ContentPreference.ALL, true, () -> {});
+            known.addAll(filtered.take(ContentPreference.ALL));
             assertTrue(known.size() >= 5);
             for (int i = 1; i <= 10; i++) {
                 NativeContentItem item = new NativeContentItem("media", "Deep " + i,
