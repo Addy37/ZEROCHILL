@@ -198,6 +198,35 @@ final class PawchiveRepository {
         return new OnlyFapCategoryLoader.Batch(items, matches.size() == limit);
     }
 
+    List<List<NativeContentItem>> discoveryShelves() throws IOException {
+        return discoveryShelves(browseCatalog(), new java.util.Random());
+    }
+
+    static List<List<NativeContentItem>> discoveryShelves(List<Creator> source, java.util.Random random) {
+        List<Creator> ranked = new ArrayList<>(source);
+        ranked.sort(POPULARITY);
+        java.util.Set<String> used = new java.util.HashSet<>();
+        List<List<NativeContentItem>> shelves = new ArrayList<>();
+        int limit = OnlyFapCategoryLoader.PAGE_SIZE;
+        for (String service : new String[]{"", "patreon", "fanbox"}) {
+            List<NativeContentItem> items = new ArrayList<>();
+            for (Creator creator : ranked) {
+                if (!service.isEmpty() && !service.equals(creator.service)) continue;
+                if (!used.add(creator.key())) continue;
+                items.add(creatorItem(creator));
+                if (items.size() == limit) break;
+            }
+            shelves.add(items);
+        }
+        List<Creator> remaining = new ArrayList<>();
+        for (Creator creator : ranked) if (used.add(creator.key())) remaining.add(creator);
+        Collections.shuffle(remaining, random);
+        List<NativeContentItem> explore = new ArrayList<>();
+        for (int i = 0; i < Math.min(limit, remaining.size()); i++) explore.add(creatorItem(remaining.get(i)));
+        shelves.add(explore);
+        return shelves;
+    }
+
     static NativeContentItem creatorItem(Creator creator) {
         String profile = creator.profileUrl();
         return new NativeContentItem(NativeContentItem.KIND_CREATOR, creator.name, profile,
