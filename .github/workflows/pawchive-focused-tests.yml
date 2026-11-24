@@ -82,6 +82,31 @@ jobs:
               }.items():
                   out.write(key + "=" + value + "\n")
           PY
+      - name: Diagnose GIF integration before full suite
+        run: |
+          gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest \
+            --tests com.webapp.crazyshit.OnlyFapGalleryGlideTest.visiblePawchiveGifUsesOriginalAndPausesWhenGalleryPageIsHidden
+      - name: Print failed test details
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for path in Path("app/build/test-results/testDebugUnitTest").glob("TEST-*.xml"):
+              for case in ET.parse(path).getroot().iter("testcase"):
+                  for failure in case.findall("failure") + case.findall("error"):
+                      print(case.get("classname"), case.get("name"))
+                      print(failure.get("message", ""))
+                      print(failure.text or "")
+          PY
+      - name: Upload failed test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-GIF-diagnostic-test-results
+          path: app/build/test-results/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Focused playback and preview regressions
         run: |
           gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest \
