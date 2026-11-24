@@ -482,7 +482,9 @@ final class SearchPanel {
         else {
             int count = recycler.getAdapter().getItemCount();
             boolean shortQuery = input.getText().toString().trim().length() < 2;
-            shell.setResultCount(shortQuery ? 0 : Math.max(1, count), scope == Scope.ONLYFAP ? 76 : 104);
+            int rowHeight = scope == Scope.ONLYFAP ? 76
+                    : scope == Scope.EROME ? GlobalSearchAdapter.ALBUM_ROW_HEIGHT_DP : 104;
+            shell.setResultCount(shortQuery ? 0 : Math.max(1, count), rowHeight);
         }
     }
 
@@ -1214,7 +1216,7 @@ final class SearchPanel {
         } else if (scope == Scope.BUNKR_ALBUMS) {
             appendSection(output, "Albums", bunkrResults, GlobalSearchAdapter.SOURCE_REMOTE, 48);
         } else if (scope == Scope.EROME) {
-            appendSection(output, "Albums", eromeResults, GlobalSearchAdapter.SOURCE_REMOTE, 180);
+            appendSection(output, "Albums", eromeResults, GlobalSearchAdapter.SOURCE_ALBUM, 180);
         } else if (scope == Scope.BADDIEHUB) {
             appendKind(output, "Videos", baddieResults, false);
             appendKind(output, "Categories", baddieResults, true);
