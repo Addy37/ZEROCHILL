@@ -82,7 +82,8 @@ final class ChaosSourceMixer {
     private long categoryRetryAfter;
 
     private volatile ShitTokFilteredInventory filtered;
-    final ShitTokPreferencePreparation preferencePreparation = new ShitTokPreferencePreparation();
+    final ShitTokPreferencePreparation preferencePreparation =
+            new ShitTokPreferencePreparation(android.os.SystemClock::elapsedRealtime);
 
     ShitTokSourcePool.Health preferenceHealth() { return filtered == null ? ShitTokSourcePool.Health.IDLE : filtered.health(); }
 

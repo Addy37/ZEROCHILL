@@ -5,6 +5,7 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.BooleanSupplier;
+import java.util.function.LongSupplier;
 
 /** One unopened inventory may borrow an acquisition lane while selected playback has runway. */
 final class ShitTokPreferencePreparation {
@@ -31,6 +32,12 @@ final class ShitTokPreferencePreparation {
         }
     }
 
+    private final LongSupplier clock;
+
+    ShitTokPreferencePreparation(LongSupplier clock) {
+        this.clock = clock;
+    }
+
     private final Set<String> opened = new HashSet<>(), attempted = new HashSet<>();
     private volatile Job running;
     private volatile boolean healthy;
@@ -46,7 +53,7 @@ final class ShitTokPreferencePreparation {
             if (!job.foreground) {
                 job.foreground = true;
                 promoted++;
-                ShitTokPoolDiagnostics.record("preferencePreparationReused", key);
+                ShitTokPoolDiagnostics.recordAt(clock.getAsLong(), "preferencePreparationReused", key);
             }
         } else if (job.foreground || !key.equals(job.origin)) {
             job.cancelled = true;
@@ -59,7 +66,7 @@ final class ShitTokPreferencePreparation {
         healthy = false;
         if (running != null && !running.foreground && !running.cancelled) {
             bufferingWhilePreparing++;
-            ShitTokPoolDiagnostics.record("preferencePreparationBuffering", running.key);
+            ShitTokPoolDiagnostics.recordAt(clock.getAsLong(), "preferencePreparationBuffering", running.key);
         }
     }
 
@@ -90,7 +97,7 @@ final class ShitTokPreferencePreparation {
         try {
             executor.execute(() -> {
                 Outcome outcome = Outcome.DEFERRED;
-                long started = android.os.SystemClock.elapsedRealtime();
+                long started = clock.getAsLong();
                 try {
                     if (job.allowed()) outcome = prepare.run(job);
                 } catch (Exception failure) {
@@ -103,9 +110,9 @@ final class ShitTokPreferencePreparation {
                         }
                         running = null;
                     }
-                    ShitTokPoolDiagnostics.record("preferencePreparation", key + " result=" + outcome
-                            + " promoted=" + job.foreground + " ms="
-                            + (android.os.SystemClock.elapsedRealtime() - started));
+                    long ended = clock.getAsLong();
+                    ShitTokPoolDiagnostics.recordAt(ended, "preferencePreparation", key + " result=" + outcome
+                            + " promoted=" + job.foreground + " ms=" + (ended - started));
                     if (job.foreground) available.run();
                 }
             });

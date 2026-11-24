@@ -14,7 +14,7 @@ import static org.junit.Assert.*;
 
 public class ShitTokPreferencePreparationTest {
     @Test public void selectedPreferencePromotesTheSameReservedProviderAndWakesForeground() {
-        ShitTokPreferencePreparation preparation = new ShitTokPreferencePreparation();
+        ShitTokPreferencePreparation preparation = new ShitTokPreferencePreparation(() -> 0L);
         ArrayDeque<Runnable> work = new ArrayDeque<>();
         AtomicBoolean networkAllowed = new AtomicBoolean(true);
         AtomicInteger discovery = new AtomicInteger(), wakeups = new AtomicInteger();
@@ -53,7 +53,7 @@ public class ShitTokPreferencePreparationTest {
     }
 
     @Test public void returningToThePlayingPreferenceRevokesPromotedNetworkWork() {
-        ShitTokPreferencePreparation preparation = new ShitTokPreferencePreparation();
+        ShitTokPreferencePreparation preparation = new ShitTokPreferencePreparation(() -> 0L);
         preparation.select("all:chaos");
         preparation.playbackHealthy(true);
         assertTrue(preparation.start("all:women", Runnable::run, () -> true, job -> {

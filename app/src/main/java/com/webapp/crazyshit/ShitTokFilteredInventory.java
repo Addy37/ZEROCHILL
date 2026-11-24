@@ -249,8 +249,9 @@ final class ShitTokFilteredInventory {
                     }
                 }
             } finally {
-                ShitTokPoolDiagnostics.record("preferenceProviderDiscovery",
-                        discoveryMode.value + " ms=" + (clock.getAsLong() - started));
+                long ended = clock.getAsLong();
+                ShitTokPoolDiagnostics.recordAt(ended, "preferenceProviderDiscovery",
+                        discoveryMode.value + " ms=" + (ended - started));
             }
         }
         List<List<NativeContentItem>> pages = new ArrayList<>();
