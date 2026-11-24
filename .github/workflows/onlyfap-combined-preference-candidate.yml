@@ -27,8 +27,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7005020'
-      APP_VERSION_NAME: '7.5.0-preference-test.1'
+      APP_VERSION_CODE: '7005021'
+      APP_VERSION_NAME: '7.5.0-preference-test.2'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v6
@@ -81,12 +81,33 @@ jobs:
               }.items():
                   out.write(key + "=" + value + "\n")
           PY
+      # Four pre-independent-feed shared-queue assertions in ContentPreferenceTest are
+      # known obsolete (PR #476, confirmed again in run 45458362596). Keep every
+      # other method and run current independent-feed regressions instead.
       - name: Focused preference and compatibility regressions
         run: |
           gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest \
             --tests com.webapp.crazyshit.OnlyFapCombinedPreferenceTest \
             --tests com.webapp.crazyshit.OnlyFapPreferencePickerTest \
-            --tests com.webapp.crazyshit.ContentPreferenceTest \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.upgradeDefaultUnknownAndRemovedModeAreAll \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.actualChangesAreAcknowledgedOncePerSurfaceAcrossRecreation \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.sharedNativePickerPersistsAndDoesNotTreatReselectionAsChange \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.settingsAndOnlyFapSelectorChangeTheSamePreference \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.glassPillAndPickerReflectEveryModeAfterRecreationAndCancelDoesNotChangeIt \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.filteredHeroAcceptsCategoryCreatorsAndRejectsUnrelatedCachedCreators \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.discoveryRestoreDoesNotApplyAnEarlierModePosition \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.openingSpecificMergedCreatorKeepsBothSourceProfilesInEveryMode \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.discoveryClearsOfferedCreatorsAcrossRapidModeChanges \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.preferenceNoticesAreCompactFiniteAndAcknowledgedOnce \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.categoryMappingUsesVerifiedProviderTokensAndConfiguredRoute \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.preferenceMixExcludesUnverifiedProviders \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.latePreferenceAdmissionKeepsHistoricalContentButRejectsStaleBlockedAndDuplicateItems \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.filteredFutureSequencingPreservesCurrentAndSeparatesCrossSourceCreator \
+            --tests com.webapp.crazyshit.ContentPreferenceTest.onlyHavenCatalogLockCannotBlockOrdinaryProviderPagination \
+            --tests com.webapp.crazyshit.ShitTokFeedSessionStoreTest \
+            --tests com.webapp.crazyshit.ShitTokFiveFeedInventoryTest \
+            --tests com.webapp.crazyshit.ShitTokCategoryHandoffTest \
+            --tests com.webapp.crazyshit.ShitTokRetainedPlayerReturnTest \
             --tests com.webapp.crazyshit.OnlyFapGenderShelvesTest \
             --tests com.webapp.crazyshit.OnlyFapFilteredHeroTest \
             --tests com.webapp.crazyshit.CreatorCategoryIndexTest \
@@ -101,17 +122,17 @@ jobs:
           gradle --no-daemon --console=plain --max-workers=3 :app:assembleDebug
           mkdir -p candidate
           bash tools/verify-android-build-lineage.sh candidate/APK-LINEAGE.txt
-          apk="candidate/ZeroChill-Preference-Test-1-feature-onlyfap-combined-trans-$(git rev-parse --short=8 HEAD).apk"
+          apk="candidate/ZeroChill-Preference-Test-2-feature-onlyfap-combined-trans-$(git rev-parse --short=8 HEAD).apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee candidate/APK-SIGNING.txt
           grep -Fx 'Signer #1 certificate SHA-256 digest: 04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356' candidate/APK-SIGNING.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$apk" > "$RUNNER_TEMP/beta-badging.txt"
-          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005020' versionName='7.5.0-preference-test.1-dev'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
+          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005021' versionName='7.5.0-preference-test.2-dev'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
       - name: Upload signed OnlyFap preference test APK
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-OnlyFap-preference-signed-test-1
+          name: ZeroChill-OnlyFap-preference-signed-test-2
           path: candidate/
           retention-days: 14
           if-no-files-found: error
