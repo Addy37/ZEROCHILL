@@ -51,8 +51,9 @@ final class BunkrMediaPreview {
         PAWCHIVE_IO.allowCoreThreadTimeOut(true);
     }
 
+    // RecyclerView can retain its adapter while the view is detached and collected.
     private static final java.util.Set<Consumer<String>> PLAYBACK_PREVIEW_LISTENERS =
-            new java.util.LinkedHashSet<>();
+            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
     private static final LinkedHashMap<String, Long> FAILURES = new LinkedHashMap<>();
     private static final Pattern RANGE = Pattern.compile("bytes (\\d+)-(\\d+)/(\\d+)");
 
