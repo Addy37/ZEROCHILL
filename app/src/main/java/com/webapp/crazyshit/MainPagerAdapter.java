@@ -243,7 +243,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             page.showsHub.clear();
         }
         if (page.kind == PageKind.ONLYFAP && page.onlyFapHub != null) {
-            page.onlyFapHub.preparePreference(ContentPreference.get(activity));
+            page.onlyFapHub.preparePreference(ContentPreference.getOnlyFap(activity));
             page.onlyFapHub.clear();
             page.currentPage = 0;
             page.endReached = false;
@@ -301,7 +301,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             } else if (position == PAGE_SERIES) {
                 pages[PAGE_SERIES].showsHub.refreshContinueWatching();
             } else if (position == PAGE_ONLYFAP) {
-                if (onlyFapPreference != ContentPreference.get(activity)) refresh(PAGE_ONLYFAP);
+                if (onlyFapPreference != ContentPreference.getOnlyFap(activity)) refresh(PAGE_ONLYFAP);
                 pages[PAGE_ONLYFAP].onlyFapHub.setActive(true);
             }
             if (position == PAGE_CHAOS || position == PAGE_LIBRARY) return;
@@ -1074,7 +1074,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                         }
                     }
             );
-            page.onlyFapHub.preparePreference(ContentPreference.get(activity));
+            page.onlyFapHub.preparePreference(ContentPreference.getOnlyFap(activity));
             page.onlyFapHub.setPreferenceChanged(() -> refresh(PAGE_ONLYFAP));
             page.onlyFapHub.setNavigationScrollListener(
                     (v, scrollX, scrollY, oldScrollX, oldScrollY) ->
@@ -1309,7 +1309,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         page.empty.setVisibility(View.GONE);
         page.progress.setVisibility(View.GONE);
 
-        onlyFapPreference = ContentPreference.get(activity);
+        onlyFapPreference = ContentPreference.getOnlyFap(activity);
         page.onlyFapHub.preparePreference(onlyFapPreference);
         page.onlyFapHub.beginRefresh();
         final int generation = page.generation;
@@ -1317,23 +1317,25 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         if (preference != ContentPreference.ALL) {
             page.onlyFapHubTasks.add(io.submit(() -> {
                 OnlyHavenRepository haven = new OnlyHavenRepository();
+                PawchiveRepository pawchive = new PawchiveRepository();
                 OnlyFapCategoryLoader.load(preference, (mode, limit, offset) -> {
+                    if (mode == ContentPreference.PAWCHIVE) return pawchive.shelf("", offset, limit);
                     OnlyHavenRepository.CategoryPage batch = haven.fetchCategoryPage(activity, mode, limit, offset);
                     List<NativeContentItem> items = new java.util.ArrayList<>();
                     for (OnlyHavenRepository.Creator creator : batch.creators)
                         items.add(OnlyHavenRepository.creatorItem(creator));
                     return new OnlyFapCategoryLoader.Batch(items, batch.hasMore);
-                }, () -> generation == page.generation && preference == ContentPreference.get(activity),
+                }, () -> generation == page.generation && preference == ContentPreference.getOnlyFap(activity),
                 new OnlyFapCategoryLoader.Listener() {
                     @Override public void shelf(int index, List<NativeContentItem> items, boolean failed) {
                         postPrimaryResult(page, generation, "category-shelf-" + index, () -> {
-                            if (preference != ContentPreference.get(activity)) return;
+                            if (preference != ContentPreference.getOnlyFap(activity)) return;
                             page.onlyFapHub.setPreferenceShelf(preference, index, items, failed);
                         });
                     }
                     @Override public void finished(boolean failed) {
                         postPrimaryResult(page, generation, "category-finished", () -> {
-                            if (preference != ContentPreference.get(activity)) return;
+                            if (preference != ContentPreference.getOnlyFap(activity)) return;
                             page.loading = false;
                             page.endReached = true;
                             page.onlyFapLastLoadedElapsedMs = android.os.SystemClock.elapsedRealtime();

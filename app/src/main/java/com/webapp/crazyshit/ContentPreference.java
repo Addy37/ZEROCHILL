@@ -10,8 +10,24 @@ enum ContentPreference {
     MEN("men", "Men", "♂"),
     TRANS_WOMEN("trans_women", "Trans women", "⚧"),
     TRANS_MEN("trans_men", "Trans men", "⚧"),
-    GROUPS("groups", "Groups", "");
+    GROUPS("groups", "Groups", ""),
+    PAWCHIVE("pawchive", "Pawchive", "🐾");
 
+    private static final String PAWCHIVE_SELECTED = "onlyfap_pawchive_selected";
+    static ContentPreference[] standardValues() {
+        return new ContentPreference[]{ALL, WOMEN, MEN, TRANS_WOMEN, TRANS_MEN, GROUPS};
+    }
+    static ContentPreference getOnlyFap(Context context) {
+        return prefs(context).getBoolean(PAWCHIVE_SELECTED, false) ? PAWCHIVE : get(context);
+    }
+    static synchronized boolean setOnlyFap(Context context, ContentPreference value) {
+        if (value == null || value == getOnlyFap(context)) return false;
+        if (value != PAWCHIVE) return set(context, value);
+        SharedPreferences prefs = prefs(context);
+        prefs.edit().putBoolean(PAWCHIVE_SELECTED, true)
+                .putLong(REVISION, prefs.getLong(REVISION, 0L) + 1L).apply();
+        return true;
+    }
     static final String KEY = "content_preference";
     private static final String REVISION = "content_preference_revision";
     final String value, label, symbol;
@@ -23,13 +39,13 @@ enum ContentPreference {
     }
     static ContentPreference get(Context context) {
         String value = prefs(context).getString(KEY, "all");
-        for (ContentPreference option : values()) if (option.value.equals(value)) return option;
+        for (ContentPreference option : standardValues()) if (option.value.equals(value)) return option;
         return ALL;
     }
     static synchronized boolean set(Context context, ContentPreference value) {
-        if (value == null || value == get(context)) return false;
+        if (value == null || value == PAWCHIVE || (value == get(context) && getOnlyFap(context) != PAWCHIVE)) return false;
         SharedPreferences prefs = prefs(context);
-        prefs.edit().putString(KEY, value.value)
+        prefs.edit().putBoolean(PAWCHIVE_SELECTED, false).putString(KEY, value.value)
                 .putLong(REVISION, prefs.getLong(REVISION, 0L) + 1L).apply();
         return true;
     }

@@ -22,14 +22,14 @@ final class ShitTokContentPreference {
             prefs.edit().putString(KEY, previous.value).commit();
             return previous;
         }
-        for (ContentPreference option : ContentPreference.values()) {
+        for (ContentPreference option : ContentPreference.standardValues()) {
             if (option.value.equals(value)) return option;
         }
         return ContentPreference.ALL;
     }
 
     static synchronized boolean set(Context context, ContentPreference mode) {
-        if (mode == null || mode == get(context)) return false;
+        if (mode == null || mode == ContentPreference.PAWCHIVE || mode == get(context)) return false;
         ContentPreference.prefs(context).edit().putString(KEY, mode.value).apply();
         return true;
     }

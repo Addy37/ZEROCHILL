@@ -137,7 +137,7 @@ final class CreatorGallerySpec {
 
     private static boolean knownGallerySource(String url) {
         if (url.isEmpty()) return false;
-        if (FapelloRepository.isModelUrl(url)
+        if (PawchiveRepository.isProfile(url) || FapelloRepository.isModelUrl(url)
                 || OnlyHavenRepository.isOnlyHavenUrl(url)
                 || BunkrRepository.isAlbumUrl(url)) {
             return true;

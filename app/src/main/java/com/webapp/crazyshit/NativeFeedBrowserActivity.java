@@ -360,7 +360,7 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private static boolean isCreatorProfileHint(String url) {
-        return FapelloRepository.isModelUrl(url) || OnlyHavenRepository.isOnlyHavenUrl(url)
+        return PawchiveRepository.isProfile(url) || FapelloRepository.isModelUrl(url) || OnlyHavenRepository.isOnlyHavenUrl(url)
                 || WikiFeetRepository.isXProfileUrl(url);
     }
 

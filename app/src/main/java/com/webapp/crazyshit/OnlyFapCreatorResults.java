@@ -61,7 +61,9 @@ final class OnlyFapCreatorResults {
                         && compatibleSources(existingProfiles, itemProfiles);
                 boolean placeholder = sameName && uniqueName
                         && canEnrichPlaceholder(result.get(i), existingProfiles, item, itemProfiles);
-                if (overlaps(existingProfiles, itemProfiles) || reviewed || placeholder) {
+                boolean isolatedPawchive = PawchiveRepository.isProfile(item.url)
+                        || PawchiveRepository.isProfile(result.get(i).url);
+                if (overlaps(existingProfiles, itemProfiles) || (!isolatedPawchive && (reviewed || placeholder))) {
                     match = i;
                     break;
                 }

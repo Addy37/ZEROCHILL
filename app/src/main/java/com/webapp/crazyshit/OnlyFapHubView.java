@@ -113,8 +113,8 @@ final class OnlyFapHubView extends FrameLayout {
                 shelfCopy(hotShelf, "Hot", "Creators getting attention right now");
                 shelfCopy(popularShelf, "Popular", "Popular across OnlyFap sources");
             } else {
-                shelfCopy(trendingShelf, "Featured " + mode.label, "OnlyHaven · " + mode.label);
-                shelfCopy(newShelf, "Explore " + mode.label, "More creators from OnlyHaven");
+                shelfCopy(trendingShelf, "Featured " + mode.label, mode == ContentPreference.PAWCHIVE ? "Pawchive creators" : "OnlyHaven · " + mode.label);
+                shelfCopy(newShelf, "Explore " + mode.label, mode == ContentPreference.PAWCHIVE ? "More creators from Pawchive" : "More creators from OnlyHaven");
                 shelfCopy(hotShelf, "More " + mode.label, "Keep exploring " + mode.label);
             }
         }
@@ -128,7 +128,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     private void presentPreference() {
         if (active && heroMorph == null && heroArtworkReady && !preferenceHeroPending
-                && discoveryPreference == ContentPreference.get(getContext()))
+                && discoveryPreference == ContentPreference.getOnlyFap(getContext()))
             ContentPreferenceUi.present(this, false, preferenceSelector);
     }
 
@@ -140,7 +140,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     void setPreferenceShelf(ContentPreference mode, int index, List<NativeContentItem> items, boolean failed) {
         if (closed || mode == ContentPreference.ALL || mode != discoveryPreference
-                || mode != ContentPreference.get(getContext())) return;
+                || mode != ContentPreference.getOnlyFap(getContext())) return;
         if (index < 0 || index >= OnlyFapCategoryLoader.SHELF_COUNT || failed) return;
         List<NativeContentItem> result = safe(items);
         CreatorShelf shelf;
@@ -185,7 +185,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     void finishPreferenceShelves(ContentPreference mode, boolean failed) {
         if (closed || mode == ContentPreference.ALL || mode != discoveryPreference
-                || mode != ContentPreference.get(getContext())) return;
+                || mode != ContentPreference.getOnlyFap(getContext())) return;
         shelvesFinished = true;
         heroCategoryRevision++;
         publishedPreference = mode;
@@ -1365,6 +1365,11 @@ final class OnlyFapHubView extends FrameLayout {
     private void requestMoreCategoryHeroes() {
         if (closed || !active || !shelvesFinished || heroDiscoveryLoading || heroResolveInFlight > 0
                 || heroItems.size() >= HERO_MAX_ITEMS) return;
+        if (discoveryPreference == ContentPreference.PAWCHIVE) {
+            heroDiscoveryExhausted = true;
+            if (heroItems.isEmpty()) showPreferenceEmptyState();
+            return;
+        }
         if (heroDiscoveryExhausted || heroCategoryOffset > HERO_CATEGORY_LAST_OFFSET) {
             heroDiscoveryExhausted = true;
             if (heroItems.isEmpty()) showPreferenceEmptyState();
@@ -1481,6 +1486,23 @@ final class OnlyFapHubView extends FrameLayout {
 
             ArrayList<OnlyFapHeroPolicy.Artwork> portraitArtwork = new ArrayList<>();
             ArrayList<OnlyFapHeroPolicy.Artwork> videoPosters = new ArrayList<>();
+
+            if (mode == ContentPreference.PAWCHIVE) {
+                try {
+                    PawchiveRepository.Creator profile = PawchiveRepository.profile(creator.url, creator.title);
+                    if (profile != null && active && !closed && generation == heroGeneration) {
+                        List<NativeContentItem> media = new PawchiveRepository().galleryPage(profile, 0).items;
+                        ArrayList<OnlyFapHeroPolicy.Artwork> candidates = new ArrayList<>();
+                        OnlyFapHeroPolicy.addDirectImages(candidates, media, profile.profileUrl());
+                        for (OnlyFapHeroPolicy.Artwork choice : candidates) {
+                            if (!active || closed || generation != heroGeneration || !portraitArtwork.isEmpty()) break;
+                            qualifyPortraitArtwork(generation, creator, portraitArtwork, choice, trace);
+                        }
+                    }
+                } catch (IOException ignored) { }
+                postHeroWork(generation, "hero-resolution", () -> finishHeroResolution(generation, creator, portraitArtwork));
+                return;
+            }
 
             // Use a selected OnlyHaven profile directly. A cross-source lookup can block
             // artwork for a creator whose exact profile is already on the card.

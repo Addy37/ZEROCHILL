@@ -78,6 +78,8 @@ final class CreatorGalleryPreloader {
         if (context == null || spec == null || spec.item == null
                 || WikiFeetRepository.isRetiredItem(spec.item) && spec.seedUrls.isEmpty()) return;
 
+        // Pawchive is user-selected only; do not prefetch whole public post pages from cards.
+        if (PawchiveRepository.isProfile(spec.profileHint)) return;
         String cleanName = clean(spec.item.title);
         String cleanQuery = clean(spec.query);
         String cleanCacheKey = spec.sessionKey;

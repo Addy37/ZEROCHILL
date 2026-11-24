@@ -39,6 +39,10 @@ final class PlayableSourceRouter {
 
     private static CrazyShitRepository.StreamInfo resolveInternal(Context context, String pageUrl, String origin)
             throws IOException {
+        if (PawchiveRepository.isDirectMedia(pageUrl)) {
+            return new CrazyShitRepository.StreamInfo(pageUrl, pageUrl, "Pawchive",
+                    PawchiveRepository.isProfile(origin) ? origin : "https://pawchive.pw/");
+        }
         if (BaddieHubRepository.isBaddieHubUrl(pageUrl)) {
             return new BaddieHubRepository().resolvePlayable(context, pageUrl);
         }

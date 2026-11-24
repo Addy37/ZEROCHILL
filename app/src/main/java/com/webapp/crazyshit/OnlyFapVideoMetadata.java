@@ -39,6 +39,10 @@ final class OnlyFapVideoMetadata {
 
     static NativeContentItem creator(NativeContentItem item) {
         if (!applies(item)) return null;
+        if (PawchiveRepository.isDirectMedia(item.url) && PawchiveRepository.isProfile(item.uploader)) {
+            PawchiveRepository.Creator profile = PawchiveRepository.profile(item.uploader, item.searchQuery);
+            return PawchiveRepository.creatorItem(profile);
+        }
         if (!FapelloRepository.isFapelloUrl(item.url) && !FapelloRepository.isModelUrl(item.uploader)
                 && (item.searchQuery.trim().isEmpty() || !item.searchQuery.trim().equals(
                 ShitTokCreatorMetadata.creatorName(item)))) return null;

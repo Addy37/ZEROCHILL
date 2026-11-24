@@ -729,7 +729,7 @@ final class SearchPanel {
     private void startOnlyFapSearch(String query) {
         cancelSearchWork();
         applyScopeAdapter();
-        searchPreference = ContentPreference.get(activity);
+        searchPreference = ContentPreference.getOnlyFap(activity);
         creatorResults = new ArrayList<>();
         if (onlyFapAdapter != null) onlyFapAdapter.replace(creatorResults);
         activeQuery = query.trim();
@@ -743,6 +743,26 @@ final class SearchPanel {
         status.setVisibility(View.GONE);
         searchState.setVisibility(View.VISIBLE);
         searchState.setText("Finding saved creators · Checking sources…");
+        if (searchPreference == ContentPreference.PAWCHIVE) {
+            requests.add(io.submit(() -> {
+                List<NativeContentItem> found = null;
+                try { found = new PawchiveRepository().shelf(requestedQuery, 0, 50).items; }
+                catch (Exception ignored) { }
+                final List<NativeContentItem> result = found;
+                activity.runOnUiThread(() -> {
+                    if (!delivers(token, requestedScope, requestedQuery)) return;
+                    pendingSources = 0;
+                    publishCreators(result);
+                    progress.setVisibility(View.GONE);
+                    searchState.setText(result == null ? "Pawchive search incomplete · Tap to retry"
+                            : creatorResults.size() + " creators");
+                    status.setText(result == null ? "Pawchive could not load." : "No creator matches.");
+                    status.setVisibility(creatorResults.isEmpty() ? View.VISIBLE : View.GONE);
+                    restoreScroll();
+                });
+            }));
+            return;
+        }
         requests.add(io.submit(() -> {
             BundledCreatorIndex index = BundledCreatorIndex.get(activity.getApplicationContext());
             List<NativeContentItem> local = OnlyFapCreatorResults.merge(
@@ -800,13 +820,13 @@ final class SearchPanel {
     private boolean delivers(int token, Scope requested, String query) {
         return !destroyed && !activity.isFinishing() && !activity.isDestroyed()
                 && token == generation && requested == scope && query.equals(activeQuery)
-                && (requested != Scope.ONLYFAP || searchPreference == ContentPreference.get(activity));
+                && (requested != Scope.ONLYFAP || searchPreference == ContentPreference.getOnlyFap(activity));
     }
 
     private void startShowsSearch(String query) {
         cancelSearchWork();
         applyScopeAdapter();
-        searchPreference = ContentPreference.get(activity);
+        searchPreference = ContentPreference.getOnlyFap(activity);
         clearResults();
         activeQuery = query.trim();
         beginSearchTrace();
@@ -967,7 +987,7 @@ final class SearchPanel {
         try {
             JSONObject data = new JSONObject().put("query", activeQuery);
             data.put("scope", scope.name());
-            data.put("preference", ContentPreference.get(activity).value);
+            data.put("preference", ContentPreference.getOnlyFap(activity).value);
             data.put("complete", pendingSources == 0);
             data.put("crazyVideos", ContentItemCodec.encodeList(crazyVideos, 80));
             data.put("efuktVideos", ContentItemCodec.encodeList(efuktVideos, 80));
@@ -984,8 +1004,8 @@ final class SearchPanel {
         if (data == null || !activeQuery.equals(data.optString("query"))) return false;
         if (!scope.name().equals(data.optString("scope"))) return false;
         if (scope == Scope.ONLYFAP
-                && !ContentPreference.get(activity).value.equals(data.optString("preference"))) return false;
-        searchPreference = ContentPreference.get(activity);
+                && !ContentPreference.getOnlyFap(activity).value.equals(data.optString("preference"))) return false;
+        searchPreference = ContentPreference.getOnlyFap(activity);
         crazyVideos = ContentItemCodec.decodeList(data.optJSONArray("crazyVideos"), 80);
         efuktVideos = ContentItemCodec.decodeList(data.optJSONArray("efuktVideos"), 80);
         kaoticVideos = ContentItemCodec.decodeList(data.optJSONArray("kaoticVideos"), 80);
@@ -1385,7 +1405,7 @@ final class SearchPanel {
     }
 
     void resume() {
-        if (searchPreference != null && searchPreference != ContentPreference.get(activity)
+        if (searchPreference != null && searchPreference != ContentPreference.getOnlyFap(activity)
                 && scope == Scope.ONLYFAP && activeQuery.length() >= 2) {
             startOnlyFapSearch(activeQuery);
             return;

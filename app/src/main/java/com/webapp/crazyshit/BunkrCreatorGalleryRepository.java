@@ -155,6 +155,23 @@ final class BunkrCreatorGalleryRepository {
                     String creatorName, List<String> seedNames, List<String> seedUrls,
                     List<String> seedImages, List<String> aliases, ProgressListener listener)
             throws IOException {
+        PawchiveRepository.Creator paw = PawchiveRepository.profile(sourceProfileUrl, creatorName);
+        if (paw != null) {
+            State guard = state(context, sessionId, query);
+            synchronized (guard) {
+                BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.restore(context, sessionId);
+                if (snapshot != null && snapshot.endReached) return new Batch(new ArrayList<>(), true);
+                int offset = snapshot == null ? 0 : snapshot.currentPage * PawchiveRepository.PAGE_SIZE;
+                PawchiveRepository.GalleryPage page = new PawchiveRepository().galleryPage(paw, offset);
+                if (listener != null) listener.onItems(page.items);
+                try {
+                    BunkrGallerySessionStore.recordCreatorBatch(context, sessionId, page.items, !page.hasMore,
+                            new org.json.JSONObject().put("query", query).put("source", "pawchive")
+                                    .put("profile", sourceProfileUrl).put("offset", offset + PawchiveRepository.PAGE_SIZE));
+                } catch (org.json.JSONException error) { throw new IOException("Could not save gallery cursor", error); }
+                return new Batch(page.items, !page.hasMore);
+            }
+        }
         State state = state(context, sessionId, query);
         synchronized (state) {
             seedKnownProfiles(state, sourceProfileUrl, creatorName, seedNames, seedUrls, seedImages, aliases);

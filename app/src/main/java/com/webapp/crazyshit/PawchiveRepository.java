@@ -59,6 +59,7 @@ final class PawchiveRepository {
 
     static final class Post {
         final String service, creatorId, id, title;
+        List<Media> listingMedia = Collections.emptyList();
 
         Post(String service, String creatorId, String id, String title) {
             this.service = service;
@@ -130,6 +131,75 @@ final class PawchiveRepository {
             this.posts = Collections.unmodifiableList(new ArrayList<>(posts));
             this.hasMore = hasMore;
         }
+    }
+
+    private static List<Creator> cachedCreators;
+    private static long cachedAt;
+    private List<Creator> browseCatalog() throws IOException {
+        synchronized (PawchiveRepository.class) {
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (cachedCreators != null && now - cachedAt < 300_000L) return cachedCreators;
+            List<Creator> creators = listCreators();
+            cachedCreators = creators;
+            cachedAt = now;
+            return creators;
+        }
+    }
+
+    OnlyFapCategoryLoader.Batch shelf(String query, int offset, int limit) throws IOException {
+        List<Creator> matches = creatorShelf(browseCatalog(), query, offset, limit);
+        List<NativeContentItem> items = new ArrayList<>();
+        for (Creator creator : matches) items.add(creatorItem(creator));
+        return new OnlyFapCategoryLoader.Batch(items, matches.size() == limit);
+    }
+
+    static NativeContentItem creatorItem(Creator creator) {
+        String profile = creator.profileUrl();
+        return new NativeContentItem(NativeContentItem.KIND_CREATOR, creator.name, profile,
+                "https://pawchive.pw/icons/" + creator.service + "/" + creator.id,
+                "", profile, "", "Pawchive", "pawchive:" + creator.key());
+    }
+
+    static Creator profile(String url, String name) {
+        if (url == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "^https://pawchive[.]pw/([a-z][a-z0-9_-]{0,31})/user/([A-Za-z0-9_-]{1,160})/?$").matcher(url);
+        if (!m.matches()) return null;
+        return new Creator(m.group(1), m.group(2), name == null ? "" : name, 0);
+    }
+
+    static boolean isProfile(String url) { return profile(url, "") != null; }
+
+    static boolean isDirectMedia(String url) {
+        if (url == null || !url.startsWith("https://file.pawchive.pw/data/")) return false;
+        String path = url.substring("https://file.pawchive.pw/data".length());
+        return path.matches("/[A-Za-z0-9_./-]{1,1024}") && !path.contains("..") && !path.contains("//")
+                && path.toLowerCase(Locale.ROOT).matches(".*[.](jpg|jpeg|png|gif|webp|avif|mp4|webm|m4v|mov|mkv)");
+    }
+
+    static final class GalleryPage {
+        final ArrayList<NativeContentItem> items;
+        final boolean hasMore;
+        GalleryPage(ArrayList<NativeContentItem> items, boolean hasMore) {
+            this.items = items; this.hasMore = hasMore;
+        }
+    }
+
+    GalleryPage galleryPage(Creator creator, int offset) throws IOException {
+        PostPage page = creatorPosts(creator.service, creator.id, null, offset);
+        Map<String, NativeContentItem> items = new LinkedHashMap<>();
+        for (Post post : page.posts) {
+            for (Media media : post.listingMedia) {
+                if (!isDirectMedia(media.url)) continue;
+                String title = post.title.isEmpty() ? media.name : post.title;
+                NativeContentItem item = new NativeContentItem(
+                        media.video ? NativeContentItem.KIND_MEDIA : NativeContentItem.KIND_IMAGE,
+                        title, media.url, media.video ? "" : media.url, "", creator.profileUrl(),
+                        "", "OnlyFap · Pawchive", creator.name);
+                items.putIfAbsent(item.url, item);
+            }
+        }
+        return new GalleryPage(new ArrayList<>(items.values()), page.hasMore);
     }
 
     List<Creator> listCreators() throws IOException {
@@ -227,6 +297,7 @@ final class PawchiveRepository {
             if (expectedService != null && !expectedService.equals(service)) continue;
             if (expectedCreator != null && !expectedCreator.equals(creator)) continue;
             Post post = new Post(service, creator, id, value(row, "title"));
+            post.listingMedia = parseMedia(row);
             if (!unique.containsKey(post.key())) unique.put(post.key(), post);
         }
         if (rows.length() > 0 && unique.isEmpty()) throw new IOException("Invalid Pawchive post response");
