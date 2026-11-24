@@ -6,6 +6,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Animatable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -32,6 +33,9 @@ import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.load.resource.bitmap.DrawableTransformation;
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.bumptech.glide.request.target.Target;
+import com.bumptech.glide.request.target.DrawableImageViewTarget;
+import com.bumptech.glide.load.resource.gif.GifDrawable;
+import com.bumptech.glide.request.transition.Transition;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -73,6 +77,17 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final LinkedHashSet<View> favoriteMovingTiles = new LinkedHashSet<>();
     private int favoriteMoveGeneration;
     private boolean previewsActive = true;
+    private boolean gifPageActive = true;
+    private final GalleryGifPlayback gifPlayback = new GalleryGifPlayback();
+    private final Runnable resumeGifs = this::updateGifPlayback;
+    private final RecyclerView.OnScrollListener gifScroll = new RecyclerView.OnScrollListener() {
+        @Override public void onScrollStateChanged(@NonNull RecyclerView recycler, int state) {
+            delayGifPlayback();
+        }
+        @Override public void onScrolled(@NonNull RecyclerView recycler, int dx, int dy) {
+            if (dx != 0 || dy != 0) delayGifPlayback();
+        }
+    };
     private final java.util.function.Consumer<String> playbackPreviewListener = this::showPlaybackPreview;
     private final LinkedHashSet<Holder> previewHolders = new LinkedHashSet<>();
     private final Rect previewBounds = new Rect();
@@ -91,6 +106,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 else if (holder.needsRepair) repairArtwork(holder, holder.boundItem, holder.boundItem.imageUrl);
             }
         }
+        updateGifPlayback();
         return true;
     };
     private final PreloadRequestTracker imagePreloads =
@@ -278,6 +294,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         int next = Math.max(1, columns);
         if (gridColumns == next) return;
         gridColumns = next;
+        delayGifPlayback();
         if (!items.isEmpty()) {
             notifyItemRangeChanged(0, items.size(), PAYLOAD_OVERLAY_DENSITY);
         }
@@ -487,6 +504,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
+        stopHolderGif(holder);
         resetTileTransform(holder.itemView);
         holder.morphPulse.animate().cancel();
         holder.morphPulse.setAlpha(0f);
@@ -609,7 +627,105 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             });
             request = request.error(fallback);
         }
-        request.into(holder.image);
+        request.into(galleryTarget(holder, item));
+    }
+
+    // Glide's usual ImageViewTarget auto-starts GIFs, including while a grid is scrolling.
+    // Keep ownership in this adapter; the viewer and other image surfaces are unchanged.
+    private DrawableImageViewTarget galleryTarget(Holder holder, NativeContentItem item) {
+        final int binding = holder.bindGeneration;
+        return new DrawableImageViewTarget(holder.image) {
+            @Override public void onResourceReady(@NonNull Drawable resource,
+                    Transition<? super Drawable> transition) {
+                if (binding != holder.bindGeneration) return;
+                stopHolderGif(holder);
+                super.onResourceReady(resource, transition);
+                if (resource instanceof GifDrawable) {
+                    GifDrawable gif = (GifDrawable) resource;
+                    gif.stop();
+                    if (item.isImage()) {
+                        holder.animatedGif = gif;
+                        gif.setLoopCount(GifDrawable.LOOP_FOREVER);
+                        holder.gif.setVisibility(View.VISIBLE);
+                        updateGifPlayback();
+                    }
+                }
+            }
+            @Override public void onStart() {
+                // The adapter's active-page, visibility and scroll gates own starts.
+                updateGifPlayback();
+            }
+            @Override public void onStop() {
+                if (binding == holder.bindGeneration) stopHolderGifAnimation(holder);
+                super.onStop();
+            }
+            @Override public void onLoadCleared(Drawable placeholder) {
+                if (binding == holder.bindGeneration) stopHolderGif(holder);
+                super.onLoadCleared(placeholder);
+            }
+            @Override public void onLoadFailed(Drawable errorDrawable) {
+                if (binding == holder.bindGeneration) stopHolderGif(holder);
+                super.onLoadFailed(errorDrawable);
+            }
+        };
+    }
+
+    private void stopHolderGifAnimation(Holder holder) {
+        if (holder.animatedGif != null) gifPlayback.stop(holder.animatedGif);
+    }
+
+    private void stopHolderGif(Holder holder) {
+        stopHolderGifAnimation(holder);
+        holder.animatedGif = null;
+    }
+
+    private void delayGifPlayback() {
+        gifPlayback.defer(android.os.SystemClock.uptimeMillis());
+        RecyclerView recycler = previewViewport;
+        if (recycler != null) {
+            recycler.removeCallbacks(resumeGifs);
+            recycler.postDelayed(resumeGifs, GalleryGifPlayback.RESUME_DELAY_MS);
+        }
+    }
+
+    void setGifPageActive(boolean active) {
+        if (gifPageActive == active) return;
+        gifPageActive = active;
+        delayGifPlayback();
+    }
+
+    private static boolean isTwoColumnGrid(RecyclerView recycler) {
+        RecyclerView.LayoutManager layout = recycler.getLayoutManager();
+        if (layout instanceof androidx.recyclerview.widget.StaggeredGridLayoutManager)
+            return ((androidx.recyclerview.widget.StaggeredGridLayoutManager) layout).getSpanCount() == 2;
+        if (layout instanceof androidx.recyclerview.widget.GridLayoutManager)
+            return ((androidx.recyclerview.widget.GridLayoutManager) layout).getSpanCount() == 2;
+        return false;
+    }
+
+    private void updateGifPlayback() {
+        RecyclerView recycler = previewViewport;
+        if (recycler == null || !previewsActive || !gifPageActive || !isTwoColumnGrid(recycler)
+                || !recycler.isAttachedToWindow() || !recycler.isShown()
+                || recycler.getWindowVisibility() != View.VISIBLE
+                || recycler.getScrollState() != RecyclerView.SCROLL_STATE_IDLE
+                || !ZeroChillMotion.animationsEnabled(recycler.getContext())) {
+            gifPlayback.stopAll();
+            return;
+        }
+        List<Animatable> visible = new ArrayList<>(GalleryGifPlayback.MAX_RUNNING);
+        // RecyclerView child order prioritizes the visible upper portion of the grid.
+        for (int i = 0; i < recycler.getChildCount()
+                && visible.size() < GalleryGifPlayback.MAX_RUNNING; i++) {
+            RecyclerView.ViewHolder raw = recycler.getChildViewHolder(recycler.getChildAt(i));
+            if (!(raw instanceof Holder)) continue;
+            Holder holder = (Holder) raw;
+            if (holder.animatedGif != null && previewVisible(holder)
+                    && holder.image.getDrawable() == holder.animatedGif) {
+                visible.add(holder.animatedGif);
+            }
+        }
+        gifPlayback.update(visible, android.os.SystemClock.uptimeMillis());
     }
 
     private void repairArtwork(Holder holder, NativeContentItem item, String rejected) {
@@ -706,7 +822,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         return false;
                     }
                 });
-        formatThumbnail(preview, item).into(holder.image);
+        formatThumbnail(preview, item).into(galleryTarget(holder, item));
     }
 
     private void cancelPreview(Holder holder) {
@@ -724,6 +840,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     void setPreviewsActive(boolean active) {
         if (previewsActive == active) return;
         previewsActive = active;
+        delayGifPlayback();
         if (!active) stopFavoriteMoves();
         for (Holder holder : previewHolders) {
             if (!active) {
@@ -740,12 +857,17 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     @Override public void onAttachedToRecyclerView(@NonNull RecyclerView recycler) {
         super.onAttachedToRecyclerView(recycler);
         previewViewport = recycler;
+        recycler.addOnScrollListener(gifScroll);
+        delayGifPlayback();
         BunkrMediaPreview.addPlaybackPreviewListener(playbackPreviewListener);
         recycler.getViewTreeObserver().addOnPreDrawListener(previewVisibility);
     }
 
     @Override public void onDetachedFromRecyclerView(@NonNull RecyclerView recycler) {
         stopFavoriteMoves();
+        gifPlayback.stopAll();
+        recycler.removeCallbacks(resumeGifs);
+        recycler.removeOnScrollListener(gifScroll);
         BunkrMediaPreview.removePlaybackPreviewListener(playbackPreviewListener);
         recycler.getViewTreeObserver().removeOnPreDrawListener(previewVisibility);
         for (int i = 0; i < recycler.getChildCount(); i++) {
@@ -769,6 +891,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     @Override public void onViewDetachedFromWindow(@NonNull Holder holder) {
         resetTileTransform(holder.itemView);
         previewHolders.remove(holder);
+        stopHolderGifAnimation(holder);
         holder.attached = false;
         cancelPreview(holder);
         holder.previewAttempted = false;
@@ -810,6 +933,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     public void onViewRecycled(@NonNull Holder holder) {
         resetTileTransform(holder.itemView);
         previewHolders.remove(holder);
+        stopHolderGif(holder);
         holder.bindGeneration++;
         cancelPreview(holder);
         holder.boundItem = null;
@@ -991,6 +1115,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         boolean attached, needsRepair, repairPending, wantsMediaPreview, previewAttempted;
         NativeContentItem boundItem;
         BunkrMediaPreview.Task preview;
+        GifDrawable animatedGif;
         final AspectRatioFrameLayout tile;
         final ImageView image;
         final FrameLayout source;
