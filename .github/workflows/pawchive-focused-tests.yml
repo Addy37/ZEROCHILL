@@ -16,7 +16,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   signed-beta:
-    if: github.head_ref == 'feature/pawchive-onlyfap' || github.ref_name == 'feature/pawchive-onlyfap'
+    if: false # Read-only thumbnail trace revision
+    # if: github.head_ref == 'feature/pawchive-onlyfap' || github.ref_name == 'feature/pawchive-onlyfap'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
