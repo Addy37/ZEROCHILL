@@ -58,6 +58,28 @@ public class PawchiveRepositoryTest {
         assertTrue(page.hasMore);
     }
 
+    @Test public void mediaAllowsOnlyProviderRelativeImagesAndVideos() throws Exception {
+        org.json.JSONObject json = new org.json.JSONObject(
+                "{\"file\":{\"name\":\"photo.jpg\",\"path\":\"/ab/cd/photo.jpg\"},"
+                + "\"attachments\":[{\"name\":\"clip.mp4\",\"path\":\"/ab/cd/clip.mp4\"},"
+                + "{\"name\":\"duplicate.jpg\",\"path\":\"/ab/cd/photo.jpg\"},"
+                + "{\"name\":\"unsafe.jpg\",\"path\":\"https://example.com/unsafe.jpg\"},"
+                + "{\"name\":\"traversal.jpg\",\"path\":\"/../private.jpg\"},"
+                + "{\"name\":\"archive.zip\",\"path\":\"/ab/cd/archive.zip\"}]}");
+        List<PawchiveRepository.Media> media = PawchiveRepository.parseMedia(json);
+        assertEquals(2, media.size());
+        assertEquals("https://file.pawchive.pw/data/ab/cd/photo.jpg", media.get(0).url);
+        assertFalse(media.get(0).video);
+        assertTrue(media.get(1).video);
+    }
+
+    @Test(expected = IOException.class)
+    public void postDetailRejectsDifferentIdentity() throws Exception {
+        PawchiveRepository repo = new PawchiveRepository(route ->
+                "{\"service\":\"fanbox\",\"user\":\"other\",\"id\":\"2\"}");
+        repo.postMedia(new PawchiveRepository.Post("fanbox", "1", "2", "Test"));
+    }
+
     @Test(expected = IllegalArgumentException.class)
     public void rejectsUnalignedOffset() {
         PawchiveRepository.pageRoute("/posts", "artist", 16);
