@@ -137,6 +137,26 @@ public class BunkrMediaPreviewTest {
         } finally { file.delete(); }
     }
 
+    @Test public void coldSavedPawchiveVideoDoesNotStartRemoteExtraction() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        NativeContentItem item = new NativeContentItem(NativeContentItem.KIND_MEDIA, "saved clip",
+                "https://file.pawchive.pw/data/ab/cd/cold-saved.mp4", "", "", "", "")
+                .withSourceMedia("https://n3.pawchive.pw/data/ab/cd/cold-saved.mp4", "");
+        File cached = BunkrMediaPreview.cacheFile(context, item);
+        cached.delete();
+        assertTrue(PawchiveRepository.isNativeVideo(item));
+        assertNull(BunkrMediaPreview.generate(context, item, new BunkrMediaPreview.Task()));
+        AtomicInteger delivered = new AtomicInteger();
+        BunkrMediaPreview.request(context, item, ready -> {
+            assertNull(ready);
+            delivered.incrementAndGet();
+        });
+        await(delivered, 1);
+        assertFalse(cached.exists());
+        assertEquals(0, Repository.calls.get());
+        assertEquals(0, Retriever.calls.get());
+    }
+
     @Test public void canceledRequestNeverCallsRecycledTile() throws Exception {
         AtomicInteger delivered = new AtomicInteger();
         BunkrMediaPreview.Task task = BunkrMediaPreview.request(RuntimeEnvironment.getApplication(),

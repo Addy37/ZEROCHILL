@@ -428,6 +428,21 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         playIcon.setPadding(dp(parent, 11), dp(parent, 11), dp(parent, 9), dp(parent, 11));
         play.addView(playIcon, new FrameLayout.LayoutParams(-1, -1));
 
+        TextView gif = new TextView(parent.getContext());
+        gif.setText("GIF");
+        gif.setTextColor(Color.WHITE);
+        gif.setTextSize(11);
+        gif.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        gif.setIncludeFontPadding(false);
+        gif.setGravity(Gravity.CENTER);
+        gif.setPadding(dp(parent, 6), dp(parent, 4), dp(parent, 6), dp(parent, 4));
+        gif.setBackground(BrowseUi.rounded(parent.getContext(), Color.argb(215, 0, 0, 0), 7));
+        gif.setElevation(dp(parent, 5));
+        gif.setVisibility(View.GONE);
+        FrameLayout.LayoutParams gifParams = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END);
+        gifParams.setMargins(0, 0, dp(parent, 6), dp(parent, 6));
+        tile.addView(gif, gifParams);
+
         View morphPulse = new View(parent.getContext());
         GradientDrawable morphPulseBackground = new GradientDrawable();
         morphPulseBackground.setColor(Color.TRANSPARENT);
@@ -448,7 +463,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 fresh,
                 play,
                 morphPulse,
-                unavailable, favorite, maintenance
+                unavailable, favorite, maintenance, gif
         );
     }
 
@@ -485,6 +500,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 ? aspectRatios.getOrDefault(item.url, item.aspectRatioHint > 0f ? item.aspectRatioHint : 1f)
                 : 1f);
         holder.play.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
+        holder.gif.setVisibility(item.isGif() ? View.VISIBLE : View.GONE);
         applyOverlayDensity(holder);
         boolean fresh = isHighlighted(item);
         holder.fresh.setVisibility(fresh ? View.VISIBLE : View.GONE);
@@ -498,7 +514,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             holder.sourceVariant.setVisibility(View.GONE);
         }
         holder.itemView.setContentDescription(
-                (item.isVideo() ? "Video, " : "Photo, ") + item.title +
+                (item.isVideo() ? "Video, " : item.isGif() ? "GIF, " : "Photo, ") + item.title +
                         (source == null ? "" : ", source " + source.name) +
                         (fresh ? ", new from Updates" : "")
         );
@@ -523,8 +539,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             Glide.with(holder.image).clear(holder.image);
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
             if (PawchiveRepository.isDirectMedia(item.url)) {
-                if (pawchiveVideo) requestMediaPreview(holder, item);
-                else if (item.isImage()) holder.unavailable.setVisibility(View.VISIBLE);
+                if (item.isImage()) holder.unavailable.setVisibility(View.VISIBLE);
             } else repairArtwork(holder, item, item.imageUrl);
         } else {
             loadArtwork(holder, item, item.imageUrl, true);
@@ -625,18 +640,15 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private void requestMediaPreview(Holder holder, NativeContentItem item) {
-        boolean pawchive = pawchiveVideoPreview(item);
-        if (!pawchive && (!BunkrRepository.isBunkrUrl(item.url) || (!item.isImage() && !item.isVideo()))) return;
+        boolean pawchive = PawchiveRepository.isNativeVideo(item);
+        if (pawchive) {
+            File saved = BunkrMediaPreview.cached(context, item);
+            if (saved != null) loadMediaPreview(holder, item, saved);
+            return;
+        }
+        if (!BunkrRepository.isBunkrUrl(item.url) || (!item.isImage() && !item.isVideo())) return;
         holder.wantsMediaPreview = true;
         if (!previewVisible(holder) || holder.previewAttempted) return;
-        if (pawchive) {
-            File cached = BunkrMediaPreview.cached(context, item);
-            if (cached != null) {
-                holder.previewAttempted = true;
-                loadMediaPreview(holder, item, cached);
-                return;
-            }
-        }
         if (item.isVideo() && BunkrMaintenance.isKnown(item.url)) {
             holder.maintenance.refresh();
             return;
@@ -782,6 +794,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.maintenance.setPivotY(0f);
         holder.maintenance.setScaleX(scale);
         holder.maintenance.setScaleY(scale);
+
+        holder.gif.setPivotX(holder.gif.getWidth());
+        holder.gif.setPivotY(holder.gif.getHeight());
+        holder.gif.setScaleX(scale);
+        holder.gif.setScaleY(scale);
 
         holder.play.setPivotX(dp(holder.play, 42));
         holder.play.setPivotY(dp(holder.play, 42));
@@ -985,6 +1002,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final TextView unavailable;
         final ImageView favorite;
         final BunkrMaintenanceUi.Badge maintenance;
+        final TextView gif;
 
         Holder(
                 AspectRatioFrameLayout itemView,
@@ -995,7 +1013,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 ImageView fresh,
                 View play,
                 View morphPulse,
-                TextView unavailable, ImageView favorite, BunkrMaintenanceUi.Badge maintenance
+                TextView unavailable, ImageView favorite, BunkrMaintenanceUi.Badge maintenance,
+                TextView gif
         ) {
             super(itemView);
             this.tile = itemView;
@@ -1009,6 +1028,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             this.unavailable = unavailable;
             this.favorite = favorite;
             this.maintenance = maintenance;
+            this.gif = gif;
         }
     }
 

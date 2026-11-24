@@ -1518,6 +1518,8 @@ public final class BunkrGalleryActivity extends Activity {
         if (items == null) return filtered;
         for (NativeContentItem item : items) {
             if (item == null || WikiFeetRepository.isRetiredItem(item)) continue;
+            if (isCreatorGallery() && PawchiveRepository.isProfile(fapelloProfileUrl)
+                    && PawchiveRepository.isNativeVideo(item)) continue;
             if (FILTER_PICTURES.equals(mediaFilter) && !item.isImage()) continue;
             if (FILTER_VIDEOS.equals(mediaFilter) && !item.isVideo()) continue;
             filtered.add(item);

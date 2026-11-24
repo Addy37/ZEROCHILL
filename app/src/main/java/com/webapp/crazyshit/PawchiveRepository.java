@@ -222,6 +222,10 @@ final class PawchiveRepository {
         return validMediaPath(path) && (IMAGE.matcher(lower).matches() || VIDEO.matcher(lower).matches());
     }
 
+    static boolean isNativeVideo(NativeContentItem item) {
+        return item != null && item.isVideo() && isDirectMedia(item.url);
+    }
+
     static boolean isDeliveryFor(String identity, String url) {
         if (!isDirectMedia(identity) || url == null) return false;
         String tail = identity.substring(IDENTITY_BASE.length());
@@ -334,9 +338,12 @@ final class PawchiveRepository {
                 }
             }
             for (Media media : assets) {
+                // Creator galleries use Pawchive for pictures/GIFs and Bunkr for videos.
+                // Keep the raw parser and resolver intact for previously saved video identities.
+                if (media.video) continue;
                 String title = post.title.isEmpty() ? media.name : post.title;
                 NativeContentItem item = new NativeContentItem(
-                        media.video ? NativeContentItem.KIND_MEDIA : NativeContentItem.KIND_IMAGE,
+                        NativeContentItem.KIND_IMAGE,
                         title, media.url, media.thumbnailUrl, "", creator.profileUrl(),
                         "", "OnlyFap · Pawchive", creator.name).withSourceMedia(media.originalUrl, post.postUrl());
                 items.putIfAbsent(item.url, item);

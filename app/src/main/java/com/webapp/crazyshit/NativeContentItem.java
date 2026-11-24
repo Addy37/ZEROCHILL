@@ -181,6 +181,20 @@ public final class NativeContentItem {
         return KIND_IMAGE.equals(kind) || KIND_MEME.equals(kind);
     }
 
+    public boolean isGif() {
+        return isImage() && (gifPath(url) || gifPath(sourceMediaUrl));
+    }
+
+    private static boolean gifPath(String value) {
+        if (value == null || value.isEmpty()) return false;
+        int query = value.indexOf('?');
+        int fragment = value.indexOf('#');
+        int end = value.length();
+        if (query >= 0) end = Math.min(end, query);
+        if (fragment >= 0) end = Math.min(end, fragment);
+        return value.substring(0, end).toLowerCase(java.util.Locale.ROOT).endsWith(".gif");
+    }
+
     public boolean isVideo() {
         return KIND_MEDIA.equals(kind);
     }

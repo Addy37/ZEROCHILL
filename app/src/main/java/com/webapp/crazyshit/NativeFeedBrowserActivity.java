@@ -1786,6 +1786,7 @@ public class NativeFeedBrowserActivity extends Activity {
         if (items == null) return filtered;
         for (NativeContentItem item : items) {
             if (item == null) continue;
+            if (PawchiveRepository.isProfile(fapelloProfileUrl) && PawchiveRepository.isNativeVideo(item)) continue;
             if (tab == CREATOR_TAB_PICTURES && !item.isImage()) continue;
             if (tab == CREATOR_TAB_VIDEOS && !item.isVideo()) continue;
             filtered.add(item);

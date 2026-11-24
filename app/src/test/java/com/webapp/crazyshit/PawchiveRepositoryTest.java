@@ -73,13 +73,14 @@ public class PawchiveRepositoryTest {
         assertTrue(media.get(1).video);
     }
 
-    @Test public void nativeGalleryUsesExactProfileAndTypedMediaWithoutCrossSourceLookup() throws Exception {
+    @Test public void nativeGalleryRetainsImagesAndGifsButOmitsVideos() throws Exception {
         java.util.List<String> requests = new java.util.ArrayList<>();
         PawchiveRepository repository = new PawchiveRepository(route -> {
             requests.add(route);
             return "[{\"service\":\"fanbox\",\"user\":\"1\",\"id\":\"2\","
                     + "\"title\":\"Artwork\",\"file\":{\"path\":\"/ab/cd/photo.jpg\",\"server\":\"https://n4.pawchive.pw\"},"
-                    + "\"attachments\":[{\"path\":\"/ab/cd/clip.mp4\",\"server\":\"https://n3.pawchive.pw\"}]}]";
+                    + "\"attachments\":[{\"path\":\"/ab/cd/clip.mp4\",\"server\":\"https://n3.pawchive.pw\"},"
+                    + "{\"path\":\"/ab/cd/animation.GIF\",\"server\":\"https://n3.pawchive.pw\"}]}]";
         });
         PawchiveRepository.Creator creator = PawchiveRepository.profile(
                 "https://pawchive.pw/fanbox/user/1", "Artist");
@@ -90,12 +91,14 @@ public class PawchiveRepositoryTest {
         assertEquals(java.util.Collections.singletonList("/fanbox/user/1?o=50"), requests);
         assertEquals(2, page.items.size());
         assertTrue(page.items.get(0).isImage());
-        assertTrue(page.items.get(1).isVideo());
+        assertTrue(page.items.get(1).isImage());
+        assertTrue(page.items.get(1).isGif());
+        assertFalse(page.items.get(0).isGif());
+        assertFalse(page.items.get(1).isVideo());
         assertEquals("https://img.pawchive.pw/thumbnail/data/ab/cd/photo.jpg", page.items.get(0).imageUrl);
-        assertTrue(page.items.get(1).imageUrl.isEmpty());
+        assertEquals("https://n3.pawchive.pw/data/ab/cd/animation.GIF", PawchiveRepository.original(page.items.get(1)));
         assertEquals("https://n4.pawchive.pw/data/ab/cd/photo.jpg", PawchiveRepository.original(page.items.get(0)));
         assertEquals(creator.profileUrl(), page.items.get(0).uploader);
-        assertEquals(creator.profileUrl(), OnlyFapVideoMetadata.creator(page.items.get(1)).url);
         assertFalse(page.hasMore);
     }
 
