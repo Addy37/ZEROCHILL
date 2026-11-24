@@ -36,6 +36,7 @@ final class PawchiveRepository {
     private static final Pattern SHARD = Pattern.compile("https://n[1-9][0-9]{0,2}[.]pawchive[.]pw");
     private static final Pattern PROFILE = Pattern.compile(
             "^https://pawchive[.]pw/([a-z][a-z0-9_-]{0,31})/user/([A-Za-z0-9_-]{1,160})/?$");
+    private static final Pattern DATA_PATH = Pattern.compile("/[A-Za-z0-9_./-]{1,1024}");
     private static final Pattern SERVICE = Pattern.compile("[a-z][a-z0-9_-]{0,31}");
     private static final Pattern ID = Pattern.compile("[A-Za-z0-9_-]{1,160}");
     private static final Pattern IMAGE = Pattern.compile(".*[.](jpg|jpeg|png|gif|webp|avif)");
@@ -158,7 +159,7 @@ final class PawchiveRepository {
     }
 
     private static boolean validMediaPath(String path) {
-        return path.matches("/[A-Za-z0-9_./-]{1,1024}") && !path.contains("..") && !path.contains("//");
+        return DATA_PATH.matcher(path).matches() && !path.contains("..") && !path.contains("//");
     }
 
     static final class PostPage {
@@ -460,7 +461,7 @@ final class PawchiveRepository {
         List<Creator> matching = new ArrayList<>(limit);
         int skipped = 0;
         for (Creator creator : ranked) {
-            if (!creator.searchName.contains(needle) && !creator.id.equalsIgnoreCase(needle)) continue;
+            if (!creator.searchName.contains(needle) && !creator.id.equals(needle)) continue;
             if (skipped < offset) {
                 skipped++;
                 continue;

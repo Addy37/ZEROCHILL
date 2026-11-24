@@ -1222,7 +1222,8 @@ public final class BunkrGalleryActivity extends Activity {
         viewerChrome.updateMedia(item == null ? "" : item.url, item == null ? albumTitle : item.title,
                 item == null ? 0 : position + 1, adapter.getItemCount(), item != null && item.isVideo());
         String name = ""; Runnable open = null;
-        if (savedFavoriteImage(item)) {
+        if (savedFavoriteImage(item) || (item != null && PawchiveRepository.isDirectMedia(item.url)
+                && savedCreatorGallery() != null)) {
             Intent gallery = savedCreatorGallery();
             name = gallery == null ? item.title : value(gallery.getStringExtra(NativeFeedBrowserActivity.EXTRA_TITLE));
             if (name.isEmpty()) name = item.title;
@@ -1375,7 +1376,7 @@ public final class BunkrGalleryActivity extends Activity {
                 return true;
             }
             if (item.getItemId() == 2) {
-                openPage(albumUrl);
+                openPage(PawchiveRepository.isProfile(fapelloProfileUrl) ? fapelloProfileUrl : albumUrl);
                 return true;
             }
             return false;

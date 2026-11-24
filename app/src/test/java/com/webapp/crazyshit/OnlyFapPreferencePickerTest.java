@@ -78,6 +78,23 @@ public class OnlyFapPreferencePickerTest {
         assertEquals(2, changes[0]);
         assertEquals(ContentPreference.WOMEN, ShitTokContentPreference.get(host));
     }
+    @Test public void pawchiveUsesATintableIconInTheActiveAppearance() {
+        AppearanceTheme.setAccent(host, AppearanceTheme.Accent.PINK);
+        ContentPreference.setOnlyFap(host, ContentPreference.PAWCHIVE);
+        ContentPreferenceUi.bindSelector(anchor);
+        assertEquals(R.drawable.ic_content_pawchive, ContentPreference.PAWCHIVE.icon());
+        assertNotNull(anchor.getCompoundDrawablesRelative()[0]);
+        assertEquals("▾", anchor.getText().toString());
+
+        ContentPreferenceUi.chooseAnchored(anchor, null);
+        AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
+        android.widget.LinearLayout cell = dialog.getWindow().getDecorView().findViewWithTag("preference_pawchive");
+        android.widget.ImageView icon = (android.widget.ImageView) cell.getChildAt(0);
+        assertTrue(icon.getColorFilter() instanceof android.graphics.PorterDuffColorFilter);
+        assertEquals(AppearanceTheme.Accent.PINK.color,
+                org.robolectric.Shadows.shadowOf((android.graphics.PorterDuffColorFilter) icon.getColorFilter()).getColor());
+    }
+
     @Test public void rapidTapIsIgnoredAndDetachClosesTheOwnedWindow() {
         ContentPreferenceUi.chooseAnchored(anchor, null);
         AlertDialog first = ShadowAlertDialog.getLatestAlertDialog();

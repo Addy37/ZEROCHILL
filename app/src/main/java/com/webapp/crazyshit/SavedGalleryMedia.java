@@ -27,7 +27,7 @@ final class SavedGalleryMedia {
             return;
         }
         Intent intent = viewer(activity, saved.content);
-        if (saved.mediaFavorite) {
+        if (saved.mediaFavorite && (saved.content.isImage() || PawchiveRepository.isDirectMedia(saved.content.url))) {
             if (saved.content.isImage()) intent.putExtra(EXTRA_FAVORITE, true);
             Intent gallery = creatorGallery(activity, saved);
             if (gallery != null) intent.putExtra(EXTRA_CREATOR_GALLERY, gallery);

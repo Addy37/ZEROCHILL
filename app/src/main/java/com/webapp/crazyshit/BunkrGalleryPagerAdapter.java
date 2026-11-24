@@ -632,8 +632,9 @@ final class BunkrGalleryPagerAdapter
         boolean previewOnly = failedItem && item.isImage() && holder.hasUsableImage
                 && PawchiveRepository.isDirectMedia(item.url);
         boolean showFailure = failedItem && !(item.isImage() && holder.hasUsableImage);
-        holder.failure.setText(previewOnly ? "Showing preview · Tap to retry original"
-                : "Couldn't load this item.\nTap to retry or use the menu to open its page.");
+        if (previewOnly) holder.failure.setText("Showing preview · Tap to retry original");
+        else if (holder.failure.getLayoutParams().height != ViewGroup.LayoutParams.MATCH_PARENT)
+            holder.failure.setText("Couldn't load this item.\nTap to retry or use the menu to open its page.");
         FrameLayout.LayoutParams failurePlacement = (FrameLayout.LayoutParams) holder.failure.getLayoutParams();
         int failureHeight = previewOnly ? ViewGroup.LayoutParams.WRAP_CONTENT : ViewGroup.LayoutParams.MATCH_PARENT;
         if (failurePlacement.height != failureHeight) {
