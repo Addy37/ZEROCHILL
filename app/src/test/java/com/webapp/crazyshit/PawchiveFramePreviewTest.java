@@ -46,4 +46,32 @@ public class PawchiveFramePreviewTest {
             assertEquals(Arrays.asList(0L, index - index % block), requests);
         }
     }
+    @Test public void indexedReadsSkipLargeMdatAndReuseFetchedTail() throws Exception {
+        int total = 10_000_000;
+        int tail = total - 32;
+        byte[] head = new byte[PawchiveIndexedPreview.PREFIX];
+        java.nio.ByteBuffer.wrap(head).putInt(8).putInt(0x66747970)
+                .putInt(tail - 8).putInt(0x6d646174);
+        byte[] moov = new byte[32];
+        java.nio.ByteBuffer.wrap(moov).putInt(32).putInt(0x6d6f6f76);
+        List<Long> offsets = new ArrayList<>();
+        PawchiveIndexedPreview.Spans spans = new PawchiveIndexedPreview.Spans((pos, size) -> {
+            offsets.add(pos);
+            if (pos == 0) return new BunkrPreviewDataSource.Block(head, total);
+            if (pos == tail) return new BunkrPreviewDataSource.Block(moov, total);
+            throw new AssertionError("Unexpected read " + pos);
+        }, () -> {});
+        assertArrayEquals(moov, PawchiveIndexedPreview.locateIndex(spans));
+        assertEquals(Arrays.asList(0L, (long)tail), offsets);
+        assertEquals(PawchiveIndexedPreview.PREFIX + 32, spans.received);
+    }
+
+    @Test public void avcSampleRequiresIdrAndConvertsLengthPrefixes() throws Exception {
+        assertArrayEquals(new byte[] {0,0,0,1,0x65,0x12,0x34},
+                PawchiveIndexedPreview.annexB(new byte[] {0,0,0,3,0x65,0x12,0x34}, 4));
+        try {
+            PawchiveIndexedPreview.annexB(new byte[] {0,0,0,1,0x41}, 4);
+            fail("Non-IDR sample must be rejected");
+        } catch (java.io.IOException expected) { }
+    }
 }

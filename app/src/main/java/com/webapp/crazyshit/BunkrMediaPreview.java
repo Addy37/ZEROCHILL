@@ -124,13 +124,13 @@ final class BunkrMediaPreview {
         if (item.isImage()) {
             bitmap = decodeImage(task.image(stream.mediaUrl, headers));
         } else if (item.isVideo()) {
-            try (BunkrPreviewDataSource source = new BunkrPreviewDataSource(
-                    (position, size) -> task.range(stream.mediaUrl, headers, position, size),
-                    pawchive ? PAWCHIVE_BLOCK_BYTES : BunkrPreviewDataSource.BLOCK_BYTES)) {
-                if (pawchive) {
-                    bitmap = PawchiveFramePreview.extract(context, stream.mediaUrl, source,
-                            task.remainingMillis());
-                } else {
+            if (pawchive) {
+                bitmap = PawchiveIndexedPreview.extract(context, stream.mediaUrl,
+                        (position, size) -> task.range(stream.mediaUrl, headers, position, size),
+                        task::check, task::trace);
+            } else {
+                try (BunkrPreviewDataSource source = new BunkrPreviewDataSource(
+                        (position, size) -> task.range(stream.mediaUrl, headers, position, size))) {
                     // Give the platform retriever a known length so it can seek to end-of-file metadata.
                     if (source.readAt(0, new byte[1], 0, 1) < 0) return null;
                     MediaMetadataRetriever retriever = new MediaMetadataRetriever();
