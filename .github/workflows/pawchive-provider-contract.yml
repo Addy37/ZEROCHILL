@@ -1,0 +1,134 @@
+name: Pawchive public provider contract
+on:
+  pull_request:
+    branches: [main]
+    types: [synchronize]
+    paths: ['.github/workflows/pawchive-provider-contract.yml']
+permissions:
+  contents: read
+jobs:
+  public-contract:
+    if: github.head_ref == 'feature/pawchive-onlyfap'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect public payloads and bounded media ranges
+        run: |
+          python3 - <<'PY'
+          import collections
+          import json
+          import re
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          site = "https://pawchive.pw"
+          agent = "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/139.0 Mobile Safari/537.36"
+
+          class ProviderRedirects(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  url = urllib.parse.urlsplit(newurl)
+                  print("redirect", code, url.hostname, flush=True)
+                  if url.scheme != "https" or not (url.hostname == "pawchive.pw" or
+                                                     (url.hostname or "").endswith(".pawchive.pw")):
+                      raise urllib.error.URLError("Redirect outside Pawchive")
+                  return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+          opener = urllib.request.build_opener(ProviderRedirects)
+          def fetch(label, url, accept, referer="", size=None):
+              headers = {"Accept": accept, "User-Agent": agent, "Accept-Encoding": "identity"}
+              if referer:
+                  headers["Referer"] = referer
+              if size is not None:
+                  headers["Range"] = f"bytes=0-{size-1}"
+              try:
+                  with opener.open(urllib.request.Request(url, headers=headers), timeout=8) as response:
+                      print(label, response.status, urllib.parse.urlsplit(response.geturl()).hostname,
+                            response.headers.get("Content-Type"), response.headers.get("Content-Range"),
+                            response.headers.get("Content-Length"), flush=True)
+                      return response.read(size if size is not None else 16 * 1024 * 1024)
+              except urllib.error.HTTPError as error:
+                  print(label, error.code, error.headers.get("Content-Type"), flush=True)
+              except urllib.error.URLError as error:
+                  print(label, type(error.reason).__name__, flush=True)
+              return b""
+
+          def api(label, route):
+              data = fetch(label, site + "/api/v1" + route, "application/json")
+              if data:
+                  try:
+                      return json.loads(data)
+                  except ValueError:
+                      print(label, "invalid JSON", flush=True)
+              return None
+
+          def shape(row):
+              if not isinstance(row, dict):
+                  return type(row).__name__
+              result = {key: type(value).__name__ for key, value in row.items()}
+              for key in ("file", "attachments", "previews", "videos"):
+                  value = row.get(key)
+                  if isinstance(value, list) and value:
+                      value = value[0]
+                  if isinstance(value, dict):
+                      result[key] = {k: type(v).__name__ for k, v in value.items()}
+              return result
+
+          catalog = api("catalog", "/creators")
+          if not isinstance(catalog, list) or not catalog:
+              raise SystemExit("No live creator catalog")
+          print("creator fields", shape(catalog[0]), "count", len(catalog), flush=True)
+          images = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
+          videos = {".mp4", ".m4v", ".webm", ".mov", ".mkv"}
+          samples = {}
+          for creator in sorted(catalog, key=lambda row: row.get("favorited") or 0, reverse=True)[:4]:
+              service, key = str(creator.get("service")), str(creator.get("id"))
+              if not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", service) or not re.fullmatch(r"[\w-]+", key):
+                  continue
+              profile = f"/{service}/user/{key}"
+              rows = api("creator page", profile + "?o=0")
+              if not isinstance(rows, list) or not rows:
+                  continue
+              print("listing fields", shape(rows[0]), "count", len(rows), flush=True)
+              counts = collections.Counter()
+              for row in rows:
+                  files = [row.get("file"), *(row.get("attachments") or [])]
+                  for file in files:
+                      if not isinstance(file, dict):
+                          continue
+                      path = file.get("path")
+                      if not isinstance(path, str) or not re.fullmatch(r"/[A-Za-z0-9_./-]+", path):
+                          continue
+                      ext = path[path.rfind("."):].lower()
+                      counts[ext] += 1
+                      kind = "image" if ext in images else "video" if ext in videos else ""
+                      if kind:
+                          samples.setdefault(kind, (profile, str(row.get("id")), path, file))
+              print("listing extensions", sorted(counts.items()), flush=True)
+              if len(samples) == 2:
+                  break
+
+          for kind, (profile, postid, path, file) in samples.items():
+              if not re.fullmatch(r"[\w-]+", postid):
+                  continue
+              post = profile + "/post/" + postid
+              detail = api(kind + " post detail", post)
+              print(kind, "detail fields", shape(detail), flush=True)
+              if isinstance(detail, dict) and isinstance(detail.get("post"), dict):
+                  print(kind, "detail post fields", shape(detail["post"]), flush=True)
+              print(kind, "attachment field names", sorted(file),
+                    "already has data prefix", path.startswith("/data/"), flush=True)
+              original = "https://file.pawchive.pw/data" + path.removeprefix("/data")
+              if not path.startswith("/data/"):
+                  original = "https://file.pawchive.pw/data" + path
+              for mode, referer in (("none", ""), ("profile", site + profile), ("post", site + post)):
+                  fetch(kind + " original " + mode, original, "*/*", referer, 512)
+              if kind == "image":
+                  for host in (site, "https://img.pawchive.pw"):
+                      fetch("icon", host + "/icons/" + "/".join(profile.split("/")[1::2]),
+                            "image/*", site + profile, 256)
+                  fetch("thumbnail", "https://img.pawchive.pw/thumbnail/data/" +
+                        path.removeprefix("/data/").lstrip("/"), "image/*", site + post, 256)
+          if not samples:
+              raise SystemExit("No supported media fields were observed")
+          PY
