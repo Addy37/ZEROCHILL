@@ -49,7 +49,7 @@ final class SearchPanel {
     private static final long LIBRARY_DEBOUNCE_MS = 100L;
 
     enum Scope {
-        SHOWS, ONLYFAP, BUNKR_ALBUMS, XMEGADRIVE, BADDIEHUB, LIBRARY
+        SHOWS, ONLYFAP, BUNKR_ALBUMS, XMEGADRIVE, BADDIEHUB, LIBRARY, EROME_FIXTURE
     }
 
     /** Browser work is allowed only for a real XMegaDrive query. */
@@ -60,6 +60,7 @@ final class SearchPanel {
     private final Activity activity;
     private final Intent intent;
     private final Runnable dismiss;
+    private final boolean albumFixtureEnabled;
     final boolean overlay;
     View view;
     EditText field() { return input; }
@@ -87,6 +88,7 @@ final class SearchPanel {
 
     SearchPanel(Activity activity, Intent intent, boolean overlay, Runnable dismiss) {
         this.activity = activity; this.intent = intent; this.overlay = overlay; this.dismiss = dismiss;
+        this.albumFixtureEnabled = AlbumSearchFixture.available(activity);
     }
 
     public static final String EXTRA_QUERY = "query";
@@ -118,6 +120,7 @@ final class SearchPanel {
     private List<NativeContentItem> rankedShows = new ArrayList<>();
     private List<NativeContentItem> xmegaResults = new ArrayList<>();
     private List<NativeContentItem> bunkrResults = new ArrayList<>();
+    private List<NativeContentItem> albumFixtureResults = new ArrayList<>();
     private List<NativeContentItem> baddieResults = new ArrayList<>();
     private List<NativeContentItem> library = new ArrayList<>();
     private Scope scope = Scope.SHOWS;
@@ -148,6 +151,7 @@ final class SearchPanel {
 
     void create(Bundle state) {
         scope = initialScope(state);
+        if (scope == Scope.EROME_FIXTURE && !albumFixtureEnabled) scope = Scope.SHOWS;
         buildUi();
         restoring = true;
         if (state != null) {
@@ -163,6 +167,7 @@ final class SearchPanel {
             if (!activeQuery.isEmpty()) {
                 final String savedQuery = activeQuery;
                 if (scope == Scope.ONLYFAP) startOnlyFapSearch(savedQuery);
+                else if (scope == Scope.EROME_FIXTURE) startAlbumFixtureSearch(savedQuery);
                 else {
                     final int token = ++generation;
                     final Scope savedScope = scope;
@@ -214,6 +219,7 @@ final class SearchPanel {
             case "shows": return Scope.SHOWS;
             case "onlyfap":
             case "bunkr": return Scope.ONLYFAP;
+            case "erome": return Scope.EROME_FIXTURE;
             case "xmegadrive": return Scope.XMEGADRIVE;
             case "baddiehub": return Scope.BADDIEHUB;
             case "library": return Scope.LIBRARY;
@@ -450,6 +456,7 @@ final class SearchPanel {
         rankedShows = new ArrayList<>();
         xmegaResults = new ArrayList<>();
         bunkrResults = new ArrayList<>();
+        albumFixtureResults = new ArrayList<>();
         baddieResults = new ArrayList<>();
         library = new ArrayList<>();
         creatorResults = new ArrayList<>();
@@ -572,6 +579,7 @@ final class SearchPanel {
         addScope(row, "Shows", Scope.SHOWS);
         addScope(row, "OnlyFap", Scope.ONLYFAP);
         addScope(row, "Bunkr", Scope.BUNKR_ALBUMS);
+        if (albumFixtureEnabled) addScope(row, "Erome", Scope.EROME_FIXTURE);
         addScope(row, "XMegaDrive", Scope.XMEGADRIVE);
         addScope(row, "BaddieHub", Scope.BADDIEHUB);
         addScope(row, "Library", Scope.LIBRARY);
@@ -597,7 +605,7 @@ final class SearchPanel {
     }
 
     private void selectScope(Scope next, View chip) {
-        if (next == null || destroyed) return;
+        if (next == null || destroyed || (next == Scope.EROME_FIXTURE && !albumFixtureEnabled)) return;
         haptic(chip);
         if (next != scope) {
             scope = next;
@@ -648,6 +656,10 @@ final class SearchPanel {
                 hint = "Search Bunkr albums";
                 description = "Search Bunkr albums";
                 break;
+            case EROME_FIXTURE:
+                hint = "Search Erome (sample data)";
+                description = "Search Erome sample albums";
+                break;
             case XMEGADRIVE:
                 hint = "Search XMegaDrive";
                 description = "Search XMegaDrive";
@@ -688,7 +700,7 @@ final class SearchPanel {
         BrowseUi.hideKeyboard(activity, input);
         input.clearFocus();
         previewMode = false;
-        RecentSearchStore.remember(activity, query);
+        if (scope != Scope.EROME_FIXTURE) RecentSearchStore.remember(activity, query);
         recentLayer.setVisibility(View.GONE);
         resultLayer.setVisibility(View.VISIBLE);
         searchFooter.setVisibility(View.VISIBLE);
@@ -696,11 +708,12 @@ final class SearchPanel {
     }
 
     private void startScopedSearch(String query) {
-        AnalyticsTracker.event(activity,"search");
+        if (scope != Scope.EROME_FIXTURE) AnalyticsTracker.event(activity,"search");
         if (query == null || query.trim().length() < 2 || destroyed) return;
         switch (scope) {
             case ONLYFAP: startOnlyFapSearch(query); break;
             case BUNKR_ALBUMS: startBunkrSearch(query); break;
+            case EROME_FIXTURE: startAlbumFixtureSearch(query); break;
             case XMEGADRIVE: startXMegaDriveSearch(query); break;
             case BADDIEHUB: startBaddieHubSearch(query); break;
             case LIBRARY: startLibrarySearch(query); break;
@@ -885,6 +898,22 @@ final class SearchPanel {
                 bunkrRepository.searchAlbums(activity, requested, 1));
     }
 
+    private void startAlbumFixtureSearch(String query) {
+        if (!albumFixtureEnabled) return;
+        cancelSearchWork();
+        applyScopeAdapter();
+        clearResults();
+        activeQuery = query.trim();
+        beginSearchTrace();
+        final String requested = activeQuery;
+        final int token = generation;
+        errors.clear();
+        pendingSources = 1;
+        renderResults();
+        source(token, Scope.EROME_FIXTURE, requested, 0, "Local sample data", () ->
+                AlbumSearchFixture.search(activity.getApplicationContext(), requested));
+    }
+
     private void startBaddieHubSearch(String query) {
         cancelSearchWork();
         applyScopeAdapter();
@@ -979,11 +1008,13 @@ final class SearchPanel {
             else if (id == 2) kaoticVideos = result;
         } else if (requested == Scope.XMEGADRIVE) xmegaResults = result;
         else if (requested == Scope.BUNKR_ALBUMS) bunkrResults = result;
+        else if (requested == Scope.EROME_FIXTURE) albumFixtureResults = result;
         else if (requested == Scope.BADDIEHUB) baddieResults = result;
         else if (requested == Scope.LIBRARY) library = result;
     }
 
     private void saveSnapshot() {
+        if (scope == Scope.EROME_FIXTURE) return;
         try {
             JSONObject data = new JSONObject().put("query", activeQuery);
             data.put("scope", scope.name());
@@ -1099,6 +1130,8 @@ final class SearchPanel {
             appendKind(output, "Categories", xmegaResults, true);
         } else if (scope == Scope.BUNKR_ALBUMS) {
             appendSection(output, "Albums", bunkrResults, GlobalSearchAdapter.SOURCE_REMOTE, 48);
+        } else if (scope == Scope.EROME_FIXTURE) {
+            appendSection(output, "Sample albums", albumFixtureResults, GlobalSearchAdapter.SOURCE_SAMPLE_ALBUM, 48);
         } else if (scope == Scope.BADDIEHUB) {
             appendKind(output, "Videos", baddieResults, false);
             appendKind(output, "Categories", baddieResults, true);
@@ -1122,6 +1155,9 @@ final class SearchPanel {
                 ? "Searching " + scopeLabel(scope) + " · " + pendingSources + " remaining"
                 : unavailable.isEmpty() ? scopeLabel(scope) + " search complete"
                 : "Unavailable: " + unavailable + " · Tap to retry");
+        if (scope == Scope.EROME_FIXTURE) searchState.setText(pendingSources > 0
+                ? "Searching local samples…" : unavailable.isEmpty()
+                ? "Sample data only · No live provider" : "Sample data unavailable · Tap to retry");
         searchState.setContentDescription(searchState.getText());
         if (output.isEmpty()) {
             if (scope == Scope.BUNKR_ALBUMS && pendingSources == 0 && !unavailable.isEmpty()) {
@@ -1163,6 +1199,7 @@ final class SearchPanel {
         switch (value) {
             case ONLYFAP: return "OnlyFap";
             case BUNKR_ALBUMS: return "Bunkr";
+            case EROME_FIXTURE: return "Erome samples";
             case XMEGADRIVE: return "XMegaDrive";
             case BADDIEHUB: return "BaddieHub";
             case LIBRARY: return "Library";
@@ -1188,6 +1225,11 @@ final class SearchPanel {
 
     private void openResult(NativeContentItem item) {
         if (item == null || item.url == null || item.url.isEmpty()) return;
+        if (scope == Scope.EROME_FIXTURE || AlbumSearchFixture.isSample(item.url)) {
+            ZeroChillToast.makeText(activity, "Sample metadata only. Gallery access is not connected.",
+                    ZeroChillToast.LENGTH_SHORT).show();
+            return;
+        }
         RecentSearchStore.remember(activity, input.getText().toString());
         haptic(recycler);
         if (item.isCreator()) {

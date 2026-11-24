@@ -181,18 +181,52 @@ public class SearchScopeTest {
         QuietBaddie.lastQuery = "";
     }
 
-    @Test public void tabsAreExactlyTheSixContentAreas() {
+    @Test public void existingSixContentAreasStayInOrderWithOptionalDebugFixture() {
         SearchPanel panel = open();
         try {
             List<String> labels = labels(panel);
-            assertEquals(Arrays.asList("Shows", "OnlyFap", "Bunkr", "XMegaDrive", "BaddieHub", "Library"), labels);
-            assertEquals(SearchPanel.SCOPE_LABELS, labels);
+            List<String> expected = new ArrayList<>(SearchPanel.SCOPE_LABELS);
+            Activity host = ((Session) panel.view.getTag()).host.get();
+            if (AlbumSearchFixture.available(host)) expected.add(3, "Erome");
+            assertEquals(expected, labels);
+            List<String> stable = new ArrayList<>(labels);
+            stable.remove("Erome");
+            assertEquals(Arrays.asList("Shows", "OnlyFap", "Bunkr", "XMegaDrive", "BaddieHub", "Library"), stable);
             assertFalse(labels.contains("All"));
             assertFalse(labels.contains("ShitTok"));
             assertFalse(labels.contains("CrazyShit"));
             assertFalse(labels.contains("EFukt"));
             assertFalse(labels.contains("Kaotic"));
             assertEquals(SearchPanel.Scope.SHOWS, ReflectionHelpers.getField(panel, "scope"));
+        } finally { close(panel); }
+    }
+
+    @Test public void localAlbumFixtureUsesNativeResultsWithoutStartingOtherSources() throws Exception {
+        SearchPanel panel = open();
+        try {
+            Activity host = ((Session) panel.view.getTag()).host.get();
+            if (!AlbumSearchFixture.available(host)) {
+                assertFalse(labels(panel).contains("Erome"));
+                return;
+            }
+            chip(panel, "Erome").performClick();
+            panel.field().setText("landscape");
+            ReflectionHelpers.callInstanceMethod(panel, "runSearch");
+            await(() -> ((int) ReflectionHelpers.getField(panel, "pendingSources")) == 0);
+            List<NativeContentItem> items = ReflectionHelpers.getField(panel, "albumFixtureResults");
+            assertEquals(2, items.size());
+            assertTrue(boundText(panel, ReflectionHelpers.getField(panel, "adapter")).contains("Sample album"));
+            TextView state = ReflectionHelpers.getField(panel, "searchState");
+            assertTrue(state.getText().toString().contains("No live provider"));
+            assertEquals(0, QuietBunkr.calls.get());
+            assertEquals(0, QuietXMega.calls.get());
+            assertEquals(0, QuietBaddie.calls.get());
+            assertEquals(0, QuietCrazy.calls.get());
+            assertEquals(0, QuietEfukt.calls.get());
+            assertEquals(0, QuietKaotic.calls.get());
+            ReflectionHelpers.callInstanceMethod(panel, "openResult",
+                    ReflectionHelpers.ClassParameter.from(NativeContentItem.class, items.get(0)));
+            assertEquals(null, shadowOf(host).getNextStartedActivity());
         } finally { close(panel); }
     }
 
