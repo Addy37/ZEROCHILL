@@ -57,6 +57,9 @@ final class PlayableSourceRouter {
         if (BunkrRepository.isBunkrUrl(pageUrl)) {
             return new BunkrRepository().resolvePlayable(context, bunkrResolverInput(pageUrl));
         }
+        if (EromeRepository.isAlbumUrl(pageUrl) || EromeRepository.isDirectVideo(pageUrl)) {
+            return new EromeRepository().resolvePlayable(context, pageUrl);
+        }
         if (OnlyHavenRepository.isOnlyHavenUrl(pageUrl)) {
             return new OnlyHavenRepository().resolvePlayable(context, pageUrl);
         }

@@ -348,7 +348,8 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         } else if (item.isCreator()) {
             meta = new StringBuilder("Creator");
         } else if (item.isSeries()) {
-            meta = new StringBuilder(BunkrRepository.isAlbumUrl(item.url) ? "OnlyFap album" : "Series");
+            meta = new StringBuilder(BunkrRepository.isAlbumUrl(item.url) ? "OnlyFap album"
+                    : EromeRepository.isAlbumUrl(item.url) ? "Erome album" : "Series");
         } else if (item.isCategory()) {
             meta = new StringBuilder("Category");
         } else {
@@ -563,6 +564,8 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     private String imageReferer(NativeContentItem item) {
+        String eromeReferer = EromeRepository.imageReferer(item);
+        if (!eromeReferer.isEmpty()) return eromeReferer;
         String wikiFeetReferer = WikiFeetRepository.imageReferer(item);
         if (!wikiFeetReferer.isEmpty()) return wikiFeetReferer;
         return item == null ? null : item.url;

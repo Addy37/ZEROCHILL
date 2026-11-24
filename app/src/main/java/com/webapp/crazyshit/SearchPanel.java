@@ -42,14 +42,14 @@ import java.util.concurrent.Future;
 /** Native search scoped to one content area at a time. */
 final class SearchPanel {
     static final List<String> SCOPE_LABELS = Arrays.asList(
-            "Shows", "OnlyFap", "Bunkr", "XMegaDrive", "BaddieHub", "Library");
+            "Shows", "OnlyFap", "Bunkr", "Erome", "XMegaDrive", "BaddieHub", "Library");
     private static final long ONLYFAP_DEBOUNCE_MS = 240L;
     private static final long XMEGA_DEBOUNCE_MS = 420L;
     private static final long REMOTE_DEBOUNCE_MS = 350L;
     private static final long LIBRARY_DEBOUNCE_MS = 100L;
 
     enum Scope {
-        SHOWS, ONLYFAP, BUNKR_ALBUMS, XMEGADRIVE, BADDIEHUB, LIBRARY
+        SHOWS, ONLYFAP, BUNKR_ALBUMS, EROME, XMEGADRIVE, BADDIEHUB, LIBRARY
     }
 
     /** Browser work is allowed only for a real XMegaDrive query. */
@@ -97,10 +97,12 @@ final class SearchPanel {
     private final WebVideoSourceRepository webVideoRepository = new WebVideoSourceRepository();
     private final XMegaDriveRepository xMegaDriveRepository = new XMegaDriveRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
+    private final EromeRepository eromeRepository = new EromeRepository();
     private final BaddieHubRepository baddieHubRepository = new BaddieHubRepository();
     private final SearchResultCache resultCache = new SearchResultCache();
     private final ExecutorService io = Executors.newFixedThreadPool(4);
     private final ExecutorService bunkrIo = Executors.newFixedThreadPool(2);
+    private final ExecutorService eromeIo = Executors.newSingleThreadExecutor();
 
     private EditText input;
     private ZeroChillProgressBar progress;
@@ -118,6 +120,10 @@ final class SearchPanel {
     private List<NativeContentItem> rankedShows = new ArrayList<>();
     private List<NativeContentItem> xmegaResults = new ArrayList<>();
     private List<NativeContentItem> bunkrResults = new ArrayList<>();
+    private List<NativeContentItem> eromeResults = new ArrayList<>();
+    private int eromePage = 1;
+    private boolean eromeHasNext;
+    private boolean eromeNeedsVerification;
     private List<NativeContentItem> baddieResults = new ArrayList<>();
     private List<NativeContentItem> library = new ArrayList<>();
     private Scope scope = Scope.SHOWS;
@@ -214,6 +220,7 @@ final class SearchPanel {
             case "shows": return Scope.SHOWS;
             case "onlyfap":
             case "bunkr": return Scope.ONLYFAP;
+            case "erome": return Scope.EROME;
             case "xmegadrive": return Scope.XMEGADRIVE;
             case "baddiehub": return Scope.BADDIEHUB;
             case "library": return Scope.LIBRARY;
@@ -289,7 +296,11 @@ final class SearchPanel {
         searchState.setPadding(dp(14), dp(4), dp(14), dp(8));
         searchState.setVisibility(View.GONE);
         searchState.setOnClickListener(v -> {
-            if (activeQuery.isEmpty()) return;
+            if (activeQuery.isEmpty() || destroyed) return;
+            if (scope == Scope.EROME && eromeHasNext && pendingSources == 0 && errors.isEmpty()) {
+                fetchEromePage(generation, activeQuery, eromePage + 1, true);
+                return;
+            }
             startScopedSearch(activeQuery);
         });
         searchState.setOnLongClickListener(v -> {
@@ -438,6 +449,8 @@ final class SearchPanel {
             ((java.util.concurrent.ThreadPoolExecutor) io).purge();
         if (bunkrIo instanceof java.util.concurrent.ThreadPoolExecutor)
             ((java.util.concurrent.ThreadPoolExecutor) bunkrIo).purge();
+        if (eromeIo instanceof java.util.concurrent.ThreadPoolExecutor)
+            ((java.util.concurrent.ThreadPoolExecutor) eromeIo).purge();
     }
 
     private void clearResults() {
@@ -450,6 +463,10 @@ final class SearchPanel {
         rankedShows = new ArrayList<>();
         xmegaResults = new ArrayList<>();
         bunkrResults = new ArrayList<>();
+        eromeResults = new ArrayList<>();
+        eromePage = 1;
+        eromeHasNext = false;
+        eromeNeedsVerification = false;
         baddieResults = new ArrayList<>();
         library = new ArrayList<>();
         creatorResults = new ArrayList<>();
@@ -572,6 +589,7 @@ final class SearchPanel {
         addScope(row, "Shows", Scope.SHOWS);
         addScope(row, "OnlyFap", Scope.ONLYFAP);
         addScope(row, "Bunkr", Scope.BUNKR_ALBUMS);
+        addScope(row, "Erome", Scope.EROME);
         addScope(row, "XMegaDrive", Scope.XMEGADRIVE);
         addScope(row, "BaddieHub", Scope.BADDIEHUB);
         addScope(row, "Library", Scope.LIBRARY);
@@ -648,6 +666,10 @@ final class SearchPanel {
                 hint = "Search Bunkr albums";
                 description = "Search Bunkr albums";
                 break;
+            case EROME:
+                hint = "Search Erome albums";
+                description = "Search Erome albums";
+                break;
             case XMEGADRIVE:
                 hint = "Search XMegaDrive";
                 description = "Search XMegaDrive";
@@ -701,6 +723,7 @@ final class SearchPanel {
         switch (scope) {
             case ONLYFAP: startOnlyFapSearch(query); break;
             case BUNKR_ALBUMS: startBunkrSearch(query); break;
+            case EROME: startEromeSearch(query); break;
             case XMEGADRIVE: startXMegaDriveSearch(query); break;
             case BADDIEHUB: startBaddieHubSearch(query); break;
             case LIBRARY: startLibrarySearch(query); break;
@@ -885,6 +908,91 @@ final class SearchPanel {
                 bunkrRepository.searchAlbums(activity, requested, 1));
     }
 
+    private void startEromeSearch(String query) {
+        cancelSearchWork();
+        applyScopeAdapter();
+        clearResults();
+        activeQuery = query.trim();
+        beginSearchTrace();
+        final String requested = activeQuery;
+        final int token = generation;
+        errors.clear();
+        pendingSources = 1;
+        renderResults();
+        fetchEromePage(token, requested, 1, false);
+    }
+
+    private void fetchEromePage(int token, String requested, int page, boolean append) {
+        if (page < 1 || destroyed || !requested.equals(activeQuery) || scope != Scope.EROME) return;
+        if (!append) {
+            List<NativeContentItem> cached = resultCache.get("EROME:0:Erome", requested);
+            if (cached != null) {
+                eromeResults = cached;
+                eromePage = 1;
+                eromeHasNext = cached.size() >= EromeRepository.SEARCH_PAGE_SIZE;
+                eromeNeedsVerification = false;
+                pendingSources = 0;
+                searchSourceTimings.put("Erome", 0L);
+                searchCacheHits.add("Erome");
+                renderResults();
+                saveSnapshot();
+                return;
+            }
+        }
+        pendingSources = 1;
+        if (append) renderResults();
+        long started = android.os.SystemClock.elapsedRealtime();
+        requests.add(eromeIo.submit(() -> {
+            EromeRepository.SearchPage result = null;
+            Exception failure = null;
+            try {
+                if (!Thread.currentThread().isInterrupted()) {
+                    result = eromeRepository.search(activity, requested, page);
+                }
+            } catch (Exception error) {
+                failure = error;
+            }
+            EromeRepository.SearchPage pageResult = result;
+            Exception error = failure;
+            long elapsed = android.os.SystemClock.elapsedRealtime() - started;
+            activity.runOnUiThread(() -> {
+                if (!delivers(token, Scope.EROME, requested)) return;
+                searchSourceTimings.put("Erome", elapsed);
+                pendingSources = 0;
+                if (error != null || pageResult == null) {
+                    eromeNeedsVerification = EromePages.AccessException.find(error) != null;
+                    if (!append) eromeResults = new ArrayList<>();
+                    eromeHasNext = false;
+                    errors.put(0, "Erome");
+                } else {
+                    eromeNeedsVerification = false;
+                    errors.remove(0);
+                    LinkedHashMap<String, NativeContentItem> merged = new LinkedHashMap<>();
+                    if (append) {
+                        for (NativeContentItem existing : eromeResults) {
+                            if (existing != null && existing.url != null && !existing.url.isEmpty()) {
+                                merged.put(existing.url, existing);
+                            }
+                        }
+                    }
+                    int before = merged.size();
+                    for (NativeContentItem item : pageResult.items) {
+                        if (item != null && EromeRepository.isAlbumUrl(item.url)) merged.putIfAbsent(item.url, item);
+                    }
+                    eromeResults = new ArrayList<>(merged.values());
+                    eromePage = page;
+                    eromeHasNext = pageResult.hasNext && merged.size() > before
+                            && eromeResults.size() < 180 && page < 5;
+                    if (page == 1 && !eromeResults.isEmpty()) {
+                        resultCache.put("EROME:0:Erome", requested, eromeResults);
+                    }
+                }
+                renderResults();
+                if (pendingSources == 0) saveSnapshot();
+            });
+        }));
+    }
+
     private void startBaddieHubSearch(String query) {
         cancelSearchWork();
         applyScopeAdapter();
@@ -979,6 +1087,7 @@ final class SearchPanel {
             else if (id == 2) kaoticVideos = result;
         } else if (requested == Scope.XMEGADRIVE) xmegaResults = result;
         else if (requested == Scope.BUNKR_ALBUMS) bunkrResults = result;
+        else if (requested == Scope.EROME) eromeResults = result;
         else if (requested == Scope.BADDIEHUB) baddieResults = result;
         else if (requested == Scope.LIBRARY) library = result;
     }
@@ -994,6 +1103,8 @@ final class SearchPanel {
             data.put("kaoticVideos", ContentItemCodec.encodeList(kaoticVideos, 80));
             data.put("xmega", ContentItemCodec.encodeList(xmegaResults, 40));
             data.put("bunkrAlbums", ContentItemCodec.encodeList(bunkrResults, 48));
+            data.put("eromeAlbums", ContentItemCodec.encodeList(eromeResults, 180));
+            data.put("eromeHasNext", eromeHasNext);
             data.put("baddie", ContentItemCodec.encodeList(baddieResults, 48));
             data.put("library", ContentItemCodec.encodeList(library, 80));
             ScreenSnapshotStore.save(activity, snapshotId, data);
@@ -1011,6 +1122,9 @@ final class SearchPanel {
         kaoticVideos = ContentItemCodec.decodeList(data.optJSONArray("kaoticVideos"), 80);
         xmegaResults = ContentItemCodec.decodeList(data.optJSONArray("xmega"), 40);
         bunkrResults = ContentItemCodec.decodeList(data.optJSONArray("bunkrAlbums"), 48);
+        eromeResults = ContentItemCodec.decodeList(data.optJSONArray("eromeAlbums"), 180);
+        eromeHasNext = data.optBoolean("eromeHasNext", false);
+        eromePage = 1;
         baddieResults = ContentItemCodec.decodeList(data.optJSONArray("baddie"), 48);
         library = ContentItemCodec.decodeList(data.optJSONArray("library"), 80);
         pendingSources = data.optBoolean("complete", false) ? 0 : pendingSources;
@@ -1099,6 +1213,8 @@ final class SearchPanel {
             appendKind(output, "Categories", xmegaResults, true);
         } else if (scope == Scope.BUNKR_ALBUMS) {
             appendSection(output, "Albums", bunkrResults, GlobalSearchAdapter.SOURCE_REMOTE, 48);
+        } else if (scope == Scope.EROME) {
+            appendSection(output, "Albums", eromeResults, GlobalSearchAdapter.SOURCE_REMOTE, 180);
         } else if (scope == Scope.BADDIEHUB) {
             appendKind(output, "Videos", baddieResults, false);
             appendKind(output, "Categories", baddieResults, true);
@@ -1122,12 +1238,22 @@ final class SearchPanel {
                 ? "Searching " + scopeLabel(scope) + " · " + pendingSources + " remaining"
                 : unavailable.isEmpty() ? scopeLabel(scope) + " search complete"
                 : "Unavailable: " + unavailable + " · Tap to retry");
+        if (scope == Scope.EROME && pendingSources == 0 && unavailable.isEmpty() && eromeHasNext) {
+            searchState.setText("Erome · " + eromeResults.size()
+                    + (eromeResults.size() == 1 ? " album · Tap for more" : " albums · Tap for more"));
+        }
         searchState.setContentDescription(searchState.getText());
         if (output.isEmpty()) {
             if (scope == Scope.BUNKR_ALBUMS && pendingSources == 0 && !unavailable.isEmpty()) {
                 status.setText("Bunkr search is unavailable.\nTap here to open this search in your browser. Browser verification may be required; completing it does not guarantee native access.");
                 status.setOnClickListener(v -> BunkrPlaybackDiagnostics.openPage(
                         activity, BunkrRepository.searchUrl(activeQuery)));
+            } else if (scope == Scope.EROME && pendingSources == 0 && !unavailable.isEmpty()) {
+                status.setText(eromeNeedsVerification
+                        ? "Erome asked for verification.\nTap here to open this search in your browser. Native results stay empty until you finish that yourself."
+                        : "Erome search is unavailable.\nTap here to open this search in your browser.");
+                status.setOnClickListener(v -> EromeRepository.openForVerification(
+                        activity, EromeRepository.searchUrl(activeQuery, Math.max(1, eromePage))));
             } else {
                 status.setOnClickListener(null);
                 status.setText(pendingSources > 0 ? "" : !unavailable.isEmpty()
@@ -1163,6 +1289,7 @@ final class SearchPanel {
         switch (value) {
             case ONLYFAP: return "OnlyFap";
             case BUNKR_ALBUMS: return "Bunkr";
+            case EROME: return "Erome";
             case XMEGADRIVE: return "XMegaDrive";
             case BADDIEHUB: return "BaddieHub";
             case LIBRARY: return "Library";
@@ -1195,7 +1322,8 @@ final class SearchPanel {
             return;
         }
         if (item.isSeries() || item.isCategory()) {
-            activity.startActivity(scope == Scope.SHOWS || BunkrRepository.isAlbumUrl(item.url)
+            boolean nativeAlbum = BunkrRepository.isAlbumUrl(item.url) || EromeRepository.isAlbumUrl(item.url);
+            activity.startActivity(scope == Scope.SHOWS || nativeAlbum
                     ? NativeFeedBrowserActivity.createShowDetails(activity, item, feedSource(item))
                     : NativeFeedBrowserActivity.create(activity, item.title, item.url, false, feedSource(item)));
             return;
@@ -1278,6 +1406,7 @@ final class SearchPanel {
         if (BaddieHubRepository.isBaddieHubUrl(url)) return NativeFeedBrowserActivity.SOURCE_BADDIEHUB;
         if (WebVideoSourceRepository.isKaoticUrl(url)) return NativeFeedBrowserActivity.SOURCE_KAOTIC;
         if (BunkrRepository.isAlbumUrl(url)) return NativeFeedBrowserActivity.SOURCE_BUNKR;
+        if (EromeRepository.isAlbumUrl(url)) return NativeFeedBrowserActivity.SOURCE_EROME;
         if (EfuktRepository.isEfuktUrl(url)) return NativeFeedBrowserActivity.SOURCE_EFUKT;
         return NativeFeedBrowserActivity.SOURCE_CRAZYSHIT;
     }
@@ -1442,5 +1571,6 @@ final class SearchPanel {
         if (adapter != null) adapter.close();
         io.shutdownNow();
         bunkrIo.shutdownNow();
+        eromeIo.shutdownNow();
     }
 }
