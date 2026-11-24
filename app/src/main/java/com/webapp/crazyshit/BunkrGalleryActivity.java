@@ -563,7 +563,10 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void finishViewer() {
         if (isFinishing() || returningToGallery) return;
-        if (adapter != null) adapter.stopReveals();
+        if (adapter != null) {
+            adapter.rememberCurrentPawchiveFrame();
+            adapter.stopReveals();
+        }
         NativeContentItem current = adapter == null || pager == null
                 ? null
                 : adapter.itemAt(pager.getCurrentItem());

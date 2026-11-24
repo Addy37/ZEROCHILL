@@ -268,18 +268,21 @@ final class BunkrGalleryPagerAdapter
         notifyItemChanged(position, STATE_PAYLOAD);
         NativeContentItem item = itemAt(position);
         if (item != null && PawchiveRepository.isDirectMedia(item.url) && attachedList != null) {
-            attachedList.postDelayed(() -> rememberPawchiveFrame(position, player, item), 250L);
+            attachedList.postDelayed(this::rememberCurrentPawchiveFrame, 250L);
         }
     }
 
-    private void rememberPawchiveFrame(int position, Player player, NativeContentItem item) {
-        if (revealsStopped || attachedList == null || position != activeVideoPosition
-                || player != activePlayer || item != itemAt(position)) return;
-        RecyclerView.ViewHolder raw = attachedList.findViewHolderForAdapterPosition(position);
+    void rememberCurrentPawchiveFrame() {
+        if (revealsStopped || attachedList == null || activePlayer == null || !activeVideoFrameRendered) return;
+        NativeContentItem item = itemAt(activeVideoPosition);
+        if (item == null || !PawchiveRepository.isDirectMedia(item.url)) return;
+        RecyclerView.ViewHolder raw = attachedList.findViewHolderForAdapterPosition(activeVideoPosition);
         if (!(raw instanceof Holder) || BunkrMediaPreview.cached(attachedList.getContext(), item) != null) return;
-        View surface = ((Holder) raw).playerView.getVideoSurfaceView();
+        PlayerView view = ((Holder) raw).playerView;
+        if (view.getPlayer() != activePlayer) return;
+        View surface = view.getVideoSurfaceView();
         if (!(surface instanceof android.view.TextureView) || !((android.view.TextureView) surface).isAvailable()) return;
-        androidx.media3.common.VideoSize video = player.getVideoSize();
+        androidx.media3.common.VideoSize video = activePlayer.getVideoSize();
         if (video.width <= 0 || video.height <= 0) return;
         float width = video.width * video.pixelWidthHeightRatio;
         if (width <= 0f) return;

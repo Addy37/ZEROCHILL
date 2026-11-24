@@ -51,6 +51,8 @@ final class BunkrMediaPreview {
         PAWCHIVE_IO.allowCoreThreadTimeOut(true);
     }
 
+    private static final java.util.Set<Consumer<String>> PLAYBACK_PREVIEW_LISTENERS =
+            new java.util.LinkedHashSet<>();
     private static final LinkedHashMap<String, Long> FAILURES = new LinkedHashMap<>();
     private static final Pattern RANGE = Pattern.compile("bytes (\\d+)-(\\d+)/(\\d+)");
 
@@ -114,31 +116,63 @@ final class BunkrMediaPreview {
             try (BunkrPreviewDataSource source = new BunkrPreviewDataSource(
                     (position, size) -> task.range(stream.mediaUrl, headers, position, size),
                     pawchive ? PAWCHIVE_BLOCK_BYTES : BunkrPreviewDataSource.BLOCK_BYTES)) {
-                // Give the native extractor a known length so it can seek to end-of-file metadata.
-                if (source.readAt(0, new byte[1], 0, 1) < 0) return null;
-                MediaMetadataRetriever retriever = new MediaMetadataRetriever();
-                try {
-                    retriever.setDataSource(source);
-                    bitmap = frame(retriever, 1_000_000L);
-                    if (bitmap == null) bitmap = frame(retriever, 0L);
-                } finally { retriever.release(); }
+                if (pawchive) {
+                    bitmap = PawchiveFramePreview.extract(context, stream.mediaUrl, source,
+                            task.remainingMillis());
+                } else {
+                    // Give the platform retriever a known length so it can seek to end-of-file metadata.
+                    if (source.readAt(0, new byte[1], 0, 1) < 0) return null;
+                    MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+                    try {
+                        retriever.setDataSource(source);
+                        bitmap = frame(retriever, 1_000_000L);
+                        if (bitmap == null) bitmap = frame(retriever, 0L);
+                    } finally { retriever.release(); }
+                }
             }
         } else return null;
         if (bitmap == null) return null;
         return writePreview(context, item, scale(bitmap), task);
     }
 
+    static void addPlaybackPreviewListener(Consumer<String> listener) {
+        PLAYBACK_PREVIEW_LISTENERS.add(listener);
+    }
+
+    static void removePlaybackPreviewListener(Consumer<String> listener) {
+        PLAYBACK_PREVIEW_LISTENERS.remove(listener);
+    }
+
     /** A rendered frame already owned by the viewer needs no extra media requests. */
     static void rememberPlaybackFrame(Context context, NativeContentItem item, Bitmap bitmap) {
+        if (!hasVisiblePixels(bitmap)) {
+            bitmap.recycle();
+            return;
+        }
         Context app = context.getApplicationContext();
         try {
             IO.execute(() -> {
-                try { writePreview(app, item, bitmap, null); }
-                catch (Exception ignored) { }
+                try {
+                    writePreview(app, item, bitmap, null);
+                    MAIN.post(() -> {
+                        for (Consumer<String> listener : new java.util.ArrayList<>(PLAYBACK_PREVIEW_LISTENERS))
+                            listener.accept(item.url);
+                    });
+                } catch (Exception ignored) { }
             });
         } catch (RejectedExecutionException ignored) {
             bitmap.recycle();
         }
+    }
+
+    private static boolean hasVisiblePixels(Bitmap bitmap) {
+        for (int y = 1; y <= 3; y++) {
+            for (int x = 1; x <= 3; x++) {
+                int color = bitmap.getPixel(bitmap.getWidth() * x / 4, bitmap.getHeight() * y / 4);
+                if ((color >>> 24) != 0 && (color & 0x00ffffff) != 0) return true;
+            }
+        }
+        return false;
     }
 
     private static File writePreview(Context context, NativeContentItem item, Bitmap bitmap, Task task)
@@ -214,8 +248,9 @@ final class BunkrMediaPreview {
 
     static File cacheFile(Context context, NativeContentItem item) throws Exception {
         // File-page identity remains stable when a resolved signed CDN URL expires.
+        String version = PawchiveRepository.isDirectMedia(item.url) ? "v2" : "v1";
         byte[] hash = MessageDigest.getInstance("SHA-256")
-                .digest(("v1\n" + item.kind + "\n" + item.url).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                .digest((version + "\n" + item.kind + "\n" + item.url).getBytes(java.nio.charset.StandardCharsets.UTF_8));
         StringBuilder key = new StringBuilder();
         for (byte value : hash) key.append(String.format(Locale.US, "%02x", value));
         return new File(new File(context.getCacheDir(), "bunkr_media_previews"), key + ".jpg");
@@ -283,6 +318,11 @@ final class BunkrMediaPreview {
             HttpURLConnection active = connection;
             if (active != null) active.disconnect();
         }
+        long remainingMillis() throws IOException {
+            check();
+            return Math.max(1L, deadline - SystemClock.elapsedRealtime());
+        }
+
         void check() throws IOException {
             if (canceled || Thread.currentThread().isInterrupted()) throw new IOException("Preview canceled");
             if (SystemClock.elapsedRealtime() >= deadline) throw new IOException("Preview budget exhausted");

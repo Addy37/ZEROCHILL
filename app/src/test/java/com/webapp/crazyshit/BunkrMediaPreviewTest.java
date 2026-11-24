@@ -93,6 +93,32 @@ public class BunkrMediaPreviewTest {
         assertEquals(1, Repository.calls.get()); assertEquals(1, Retriever.calls.get());
         file.delete();
     }
+    @Test public void playedFrameIsPublishedByClipIdentityAfterTheFileIsReady() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        String url = "https://file.pawchive.pw/data/ab/cd/played-frame.mp4";
+        NativeContentItem item = new NativeContentItem(NativeContentItem.KIND_MEDIA, "video",
+                url, "", "", "", "");
+        File file = BunkrMediaPreview.cacheFile(context, item);
+        file.delete();
+        AtomicInteger delivered = new AtomicInteger();
+        java.util.function.Consumer<String> listener = identity -> {
+            assertEquals(url, identity);
+            assertEquals(file, BunkrMediaPreview.cached(context, item));
+            delivered.incrementAndGet();
+        };
+        BunkrMediaPreview.addPlaybackPreviewListener(listener);
+        try {
+            Bitmap frame = Bitmap.createBitmap(96, 54, Bitmap.Config.ARGB_8888);
+            frame.eraseColor(android.graphics.Color.GREEN);
+            BunkrMediaPreview.rememberPlaybackFrame(context, item, frame);
+            await(delivered, 1);
+            assertEquals(0, Repository.calls.get());
+        } finally {
+            BunkrMediaPreview.removePlaybackPreviewListener(listener);
+            file.delete();
+        }
+    }
+
     @Test public void canceledRequestNeverCallsRecycledTile() throws Exception {
         AtomicInteger delivered = new AtomicInteger();
         BunkrMediaPreview.Task task = BunkrMediaPreview.request(RuntimeEnvironment.getApplication(),

@@ -73,6 +73,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final LinkedHashSet<View> favoriteMovingTiles = new LinkedHashSet<>();
     private int favoriteMoveGeneration;
     private boolean previewsActive = true;
+    private final java.util.function.Consumer<String> playbackPreviewListener = this::showPlaybackPreview;
     private final LinkedHashSet<Holder> previewHolders = new LinkedHashSet<>();
     private final Rect previewBounds = new Rect();
     private final android.view.ViewTreeObserver.OnPreDrawListener previewVisibility = () -> {
@@ -654,6 +655,19 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         });
     }
 
+    private void showPlaybackPreview(String url) {
+        for (Holder holder : previewHolders) {
+            NativeContentItem item = holder.boundItem;
+            if (item == null || !item.url.equals(url) || !previewVisible(holder)) continue;
+            File cached = BunkrMediaPreview.cached(context, item);
+            if (cached != null) {
+                cancelPreview(holder);
+                holder.previewAttempted = true;
+                loadMediaPreview(holder, item, cached);
+            }
+        }
+    }
+
     private void loadMediaPreview(Holder holder, NativeContentItem item, File file) {
         int binding = holder.bindGeneration;
         RequestBuilder<Drawable> preview = Glide.with(holder.image).load(file).override(384, 384)
@@ -709,11 +723,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     @Override public void onAttachedToRecyclerView(@NonNull RecyclerView recycler) {
         super.onAttachedToRecyclerView(recycler);
         previewViewport = recycler;
+        BunkrMediaPreview.addPlaybackPreviewListener(playbackPreviewListener);
         recycler.getViewTreeObserver().addOnPreDrawListener(previewVisibility);
     }
 
     @Override public void onDetachedFromRecyclerView(@NonNull RecyclerView recycler) {
         stopFavoriteMoves();
+        BunkrMediaPreview.removePlaybackPreviewListener(playbackPreviewListener);
         recycler.getViewTreeObserver().removeOnPreDrawListener(previewVisibility);
         for (int i = 0; i < recycler.getChildCount(); i++) {
             RecyclerView.ViewHolder raw = recycler.getChildViewHolder(recycler.getChildAt(i));
