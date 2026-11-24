@@ -81,7 +81,9 @@ final class ChaosSourceMixer {
     private ContentPreference onlyHavenCatalogPreference = ContentPreference.ALL;
     private long categoryRetryAfter;
 
-    private ShitTokFilteredInventory filtered;
+    private volatile ShitTokFilteredInventory filtered;
+    final ShitTokPreferencePreparation preferencePreparation =
+            new ShitTokPreferencePreparation(android.os.SystemClock::elapsedRealtime);
 
     ShitTokSourcePool.Health preferenceHealth() { return filtered == null ? ShitTokSourcePool.Health.IDLE : filtered.health(); }
 
@@ -95,7 +97,7 @@ final class ChaosSourceMixer {
         requestPreference(context, available, true);
     }
     synchronized void requestPreference(Context context, Runnable available, boolean demand) {
-        ContentPreference mode = ContentPreference.get(context);
+        ContentPreference mode = ShitTokContentPreference.get(context);
         ShitTokSourceMode sources = ShitTokSourceMode.get(context);
         if (poolMode != mode || poolSources != sources) {
             sourcePool.pause(); shitShow.stop(); poolMode = mode; poolSources = sources;
@@ -104,7 +106,12 @@ final class ChaosSourceMixer {
         SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
         if (!sources.creatorInventory(mode)) {
             for (int source = 1; source <= 8; source++) {
-                boolean shittokEligible = source != BATCH_EFUKT && source != BATCH_XMEGADRIVE;
+                // Chaos is exclusively wild-content providers. Creator feeds live
+                // behind Ladies / Guys / Trans / Groups, not the broad pool.
+                boolean shittokEligible = source == BATCH_REGULAR
+                        || source == BATCH_EFUKT
+                        || source == BATCH_KAOTIC
+                        || source == BATCH_SHIT_SHOW;
                 sourcePool.setEligibility(source, shittokEligible,
                         shittokEligible && sourceAvailable(source, config));
             }
@@ -116,25 +123,80 @@ final class ChaosSourceMixer {
         sourcePool.filterExcept(-1);
         if (context instanceof android.app.Activity)
             ShitShowPlayableResolver.rememberHost((android.app.Activity) context);
+        filteredInventory(context).request(sources, mode, demand, available,
+                demand && preferencePreparation.reserveProvider(sources.key(mode)));
+    }
+
+    private synchronized ShitTokFilteredInventory filteredInventory(Context context) {
         if (filtered == null) filtered = new ShitTokFilteredInventory(SOURCE_IO,
                 android.os.SystemClock::elapsedRealtime, ShitTokFilteredInventory.backend(context, shitShow,
                         () -> sourcePool.takeCached(BATCH_SHIT_SHOW, SHIT_SHOW_PER_BATCH)));
-        filtered.request(sources, mode, demand, available);
+        return filtered;
+    }
+
+    interface StarterAdmission {
+        ShitTokPreferencePreparation.Outcome verify(ContentPreference mode, List<NativeContentItem> candidates,
+                                                     java.util.function.BooleanSupplier allowed) throws Exception;
+    }
+
+    boolean preparePreference(Context context, ShitTokSourceMode sources, ContentPreference mode,
+                              StarterAdmission admission, Runnable available) {
+        // Legacy OnlyFap + Chaos has no eligible Haven lane. The five-tab strip normalizes to All.
+        if (sources == ShitTokSourceMode.ONLY_FAP && mode == ContentPreference.ALL) return false;
+        return preferencePreparation.start(sources.key(mode), SOURCE_IO,
+                () -> ChaosPreloadPolicy.allowsLookAhead(context), job -> {
+                    List<NativeContentItem> candidates = sources.creatorInventory(mode)
+                            ? filteredInventory(context).starter(sources, mode, job::allowed)
+                            : regularStarter(context, job::allowed);
+                    if (!job.allowed()) return ShitTokPreferencePreparation.Outcome.DEFERRED;
+                    return admission.verify(mode, candidates, job::allowed);
+                }, available);
+    }
+
+    private List<NativeContentItem> regularStarter(Context context, java.util.function.BooleanSupplier allowed)
+            throws Exception {
+        List<NativeContentItem> cached = sourcePool.peekCached(BATCH_REGULAR);
+        if (!cached.isEmpty() || !allowed.getAsBoolean()) return cached;
+        List<NativeContentItem> items = source(BATCH_REGULAR, () -> loadRegularBatch(context, null, true));
+        sourcePool.putCached(BATCH_REGULAR, items);
+        if (!items.isEmpty()) starterPending = false;
+        return items;
+    }
+
+    private boolean preparingRegular() {
+        return preferencePreparation.owns(ShitTokSourceMode.ALL.key(ContentPreference.ALL));
+    }
+
+    boolean matchesStarter(NativeContentItem item, ShitTokSourceMode sources, ContentPreference mode) {
+        return !sources.creatorInventory(mode) || filtered != null && filtered.matches(item, sources, mode);
     }
 
     boolean hasPreference(ContentPreference mode) {
         return poolSources.creatorInventory(mode) && poolMode == mode && filtered != null && filtered.hasReady(mode);
     }
     List<NativeContentItem> takePreference(ContentPreference mode) {
-        return filtered != null && poolMode == mode ? filtered.take(mode) : Collections.emptyList();
+        return takePreference(mode, item -> true);
     }
     List<NativeContentItem> takePreference(ContentPreference mode, java.util.function.Predicate<NativeContentItem> room) {
-        return filtered != null && poolMode == mode ? filtered.take(mode, room) : Collections.emptyList();
+        return filtered != null && poolMode == mode
+                ? filtered.take(mode, room, preferencePreparation.owns(poolSources.key(mode)))
+                : Collections.emptyList();
     }
     void returnPreference(ContentPreference mode, NativeContentItem item) {
         if (filtered != null && poolMode == mode) filtered.putBack(mode, item);
     }
     void stopPreference() {
+        preferencePreparation.suspend();
+        stopPreferenceProviders();
+    }
+
+    void switchPreference(ShitTokSourceMode sources, ContentPreference mode) {
+        preferencePreparation.select(sources.key(mode));
+        preferencePreparation.playbackHealthy(false);
+        stopPreferenceProviders();
+    }
+
+    private void stopPreferenceProviders() {
         sourcePool.pause();
         if (filtered != null) filtered.pause();
         shitShow.stop();
@@ -151,7 +213,7 @@ final class ChaosSourceMixer {
         }
     }
 
-    private boolean starterPending = true;
+    private volatile boolean starterPending = true;
     private volatile boolean explorationAllowed;
     private final java.util.concurrent.atomic.AtomicInteger activeFetches = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.ConcurrentHashMap<Integer, String> providerTimings = new java.util.concurrent.ConcurrentHashMap<>();
@@ -187,7 +249,10 @@ final class ChaosSourceMixer {
             java.util.concurrent.Callable<List<NativeContentItem>> loader) {
         return () -> {
             // Interrupted socket IO may outlive a batch. Never queue another copy behind it.
-            if (!fetching.add(source)) return new SourceBatch(source, Collections.emptyList());
+            if (!fetching.add(source)) {
+                ShitTokPoolDiagnostics.modeEvent(ShitTokPoolDiagnostics.modeToken(), "duplicateProviderPrevented", 1);
+                return new SourceBatch(source, Collections.emptyList());
+            }
             activeFetches.incrementAndGet();
             long at = android.os.SystemClock.elapsedRealtime();
             providerTimings.put(source, "active");
@@ -235,12 +300,12 @@ final class ChaosSourceMixer {
 
     List<NativeContentItem> loadRandomBatch(Context context, boolean continuityOnly,
             java.util.function.Consumer<List<NativeContentItem>> onCandidates, long budgetMs) {
-        ContentPreference mode = ContentPreference.get(context);
+        ContentPreference mode = ShitTokContentPreference.get(context);
         if (ShitTokSourceMode.get(context).creatorInventory(mode)) {
             // Only the authoritative category loader can produce a filtered candidate.
             return takePreference(mode);
         }
-        if (starterPending) {
+        if (starterPending && !preparingRegular()) {
             starterPending = false;
             List<NativeContentItem> starter = loadStarterBatch(context, onCandidates);
             if (!starter.isEmpty()) return starter;
@@ -251,7 +316,7 @@ final class ChaosSourceMixer {
         // The consumer can stop admission at any time. Provider work retains its own bounded
         // session buffers and survives that decision, until explicit lifecycle/mode cancellation.
         while (!Thread.currentThread().isInterrupted() && System.nanoTime() < deadline) {
-            List<NativeContentItem> ready = sourcePool.take(8);
+            List<NativeContentItem> ready = sourcePool.take(8, item -> true, preparingRegular() ? BATCH_REGULAR : -1);
             if (!ready.isEmpty()) {
                 result.addAll(ready);
                 if (onCandidates != null) onCandidates.accept(ready);
@@ -263,21 +328,25 @@ final class ChaosSourceMixer {
         return result;
     }
 
-    List<NativeContentItem> takeReadyCandidates() { return sourcePool.take(16); }
+    List<NativeContentItem> takeReadyCandidates() {
+        return sourcePool.take(16, item -> true, preparingRegular() ? BATCH_REGULAR : -1);
+    }
 
     void recoverSources(Context context) {
-        if (ShitTokSourceMode.get(context).creatorInventory(ContentPreference.get(context))) return;
+        if (ShitTokSourceMode.get(context).creatorInventory(ShitTokContentPreference.get(context))) return;
         if (context instanceof android.app.Activity) {
             ShitShowPlayableResolver.rememberHost((android.app.Activity) context);
         }
         requestPreference(context, () -> {});
         SourceConfig config = RemoteSourceConfigManager.snapshotOrNull();
+        if (!preferencePreparation.reserveProvider(ShitTokSourceMode.ALL.key(ContentPreference.ALL)))
+            sourcePool.request(BATCH_REGULAR, true, true,
+                () -> source(BATCH_REGULAR, () -> loadRegularBatch(context, null, false)));
         sourcePool.request(BATCH_KAOTIC, true, sourceAvailable(BATCH_KAOTIC, config), () -> source(BATCH_KAOTIC, () -> loadKaoticBatch(context)));
-        sourcePool.request(BATCH_FAPELLO, true, sourceAvailable(BATCH_FAPELLO, config), () -> source(BATCH_FAPELLO, () -> loadFapelloBatch(context)));
-        sourcePool.request(BATCH_REGULAR, true, true, () -> source(BATCH_REGULAR, () -> loadRegularBatch(context, null)));
-        sourcePool.request(BATCH_BADDIEHUB, true, sourceAvailable(BATCH_BADDIEHUB, config), () -> source(BATCH_BADDIEHUB, () -> loadBaddieHubBatch(context)));
+        // Existing eFukt regional failure handling remains intact. A failed
+        // provider cannot delay the other three Chaos sources.
+        sourcePool.request(BATCH_EFUKT, true, sourceAvailable(BATCH_EFUKT, config), () -> source(BATCH_EFUKT, () -> loadEfuktBatch(context)));
         if (explorationAllowed) {
-            sourcePool.request(BATCH_ONLY_HAVEN, true, sourceAvailable(BATCH_ONLY_HAVEN, config), () -> source(BATCH_ONLY_HAVEN, () -> loadOnlyHavenBatch(context)));
             sourcePool.request(BATCH_SHIT_SHOW, true, true, () -> source(BATCH_SHIT_SHOW,
                     () -> shitShow.takeBatchOrWarm(context, SHIT_SHOW_PER_BATCH)));
         }
@@ -287,12 +356,13 @@ final class ChaosSourceMixer {
         return provider(id, loader).call().items;
     }
 
-    private List<NativeContentItem> loadRegularBatch(Context context, java.util.function.Consumer<List<NativeContentItem>> onCandidates) {
-        ensureCatalog(context);
+    private List<NativeContentItem> loadRegularBatch(Context context,
+            java.util.function.Consumer<List<NativeContentItem>> onCandidates, boolean starter) {
+        ensureCatalog(context, !starter);
         LinkedHashMap<String, NativeContentItem> regular = new LinkedHashMap<>();
         int sourceCount;
         synchronized (catalogLock) {
-            sourceCount = Math.min(SOURCES_PER_BATCH, Math.max(2, catalog.size()));
+            sourceCount = starter ? 1 : Math.min(SOURCES_PER_BATCH, Math.max(2, catalog.size()));
         }
         boolean anyResponse = false;
         for (int i = 0; i < sourceCount; i++) {
@@ -575,7 +645,7 @@ final class ChaosSourceMixer {
         onlyHavenCreatorDeck.addAll(shuffled);
     }
 
-    private void ensureCatalog(Context context) {
+    private void ensureCatalog(Context context, boolean allowExpansion) {
         synchronized (catalogLock) {
             if (catalog.isEmpty()) {
                 catalog.add(CrazyShitRepository.HOME);
@@ -584,7 +654,7 @@ final class ChaosSourceMixer {
                 catalog.add(USER_UPLOADS);
                 refillDeck();
             }
-            if (!explorationAllowed || catalogLoaded || catalogLoading) return;
+            if (!allowExpansion || !explorationAllowed || catalogLoaded || catalogLoading) return;
             catalogLoading = true;
         }
 

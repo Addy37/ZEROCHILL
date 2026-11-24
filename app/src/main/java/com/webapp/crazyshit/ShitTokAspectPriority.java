@@ -30,6 +30,11 @@ final class ShitTokAspectPriority {
     }
 
     synchronized List<NativeContentItem> order(List<NativeContentItem> candidates, Random random) {
+        return order(candidates, random, false);
+    }
+
+    synchronized List<NativeContentItem> order(List<NativeContentItem> candidates, Random random,
+            boolean allowLandscape) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         if (candidates == null) return result;
         Random rng = random == null ? new Random() : random;
@@ -39,7 +44,8 @@ final class ShitTokAspectPriority {
         for (NativeContentItem item : candidates) {
             if (item == null || !item.isVideo()) continue;
             float aspect = observed.containsKey(item.url) ? observed.get(item.url) : item.aspectRatioHint;
-            if (!ShitTokOrientation.eligible(aspect)) continue;
+            if (!(allowLandscape ? ShitTokOrientation.immersiveEligible(aspect)
+                    : ShitTokOrientation.eligible(aspect))) continue;
             ShitTokSmartRanker.register(item);
             grouped.computeIfAbsent(sourceKey(item), ignored -> new ArrayList<>()).add(item);
         }

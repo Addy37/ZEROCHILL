@@ -310,6 +310,19 @@ final class OledImmersiveUiController {
         if (top == null) return;
         top.animate().cancel();
         ViewGroup.LayoutParams raw = top.getLayoutParams();
+        // The shared style controller runs again after fullscreen rotation.
+        // Do not resurrect the obsolete header over ShitTok's video overlay.
+        if (activity instanceof NativeMainActivity && top instanceof GlassHeaderView
+                && state.pager != null && state.pager.getVisibility() == View.VISIBLE
+                && MainPagerAdapter.pageForPagerPosition(state.pager.getCurrentItem())
+                        == MainPagerAdapter.PAGE_CHAOS) {
+            if (raw != null && raw.height != 0) {
+                raw.height = 0;
+                top.setLayoutParams(raw);
+            }
+            top.setVisibility(View.GONE);
+            return;
+        }
         if (raw != null) {
             raw.height = dp(activity, 56);
             top.setLayoutParams(raw);

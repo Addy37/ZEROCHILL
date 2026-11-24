@@ -70,7 +70,8 @@ public class ShitTokFilteredInventoryTest {
         ShitTokFilteredInventory inv = new ShitTokFilteredInventory(new Direct(), () -> 0L, backend);
         inv.request(ContentPreference.WOMEN, true, () -> {});
         List<NativeContentItem> ready = inv.take(ContentPreference.WOMEN);
-        assertEquals(6, ready.size());
+        assertEquals(4, ready.size());
+        assertEquals(Integer.valueOf(1), backend.mediaCalls.get(ShitTokFilteredInventory.HAVEN));
         assertTrue(ready.stream().anyMatch(i -> i.url.contains("fapello")));
         assertTrue(ready.stream().anyMatch(i -> i.url.contains("bunkr")));
         for (NativeContentItem item : ready) {
@@ -112,7 +113,7 @@ public class ShitTokFilteredInventoryTest {
     @Test public void laterCreatorPagesResumeOnDemandAndFullRunwayDoesNotDiscover() {
         Fake backend = new Fake();
         ShitTokFilteredInventory inv = new ShitTokFilteredInventory(new Direct(), () -> 0L, backend);
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 6; i++) {
             inv.request(ContentPreference.GROUPS, true, () -> {});
             assertFalse("No dry tail with unconsumed creators", inv.take(ContentPreference.GROUPS).isEmpty());
         }
@@ -136,7 +137,7 @@ public class ShitTokFilteredInventoryTest {
         inv.request(ContentPreference.MEN, true, () -> {});
         assertTrue(inv.take(ContentPreference.MEN).isEmpty());
         inv.request(ContentPreference.MEN, true, () -> {});
-        assertEquals(3, inv.take(ContentPreference.MEN).size());
+        assertEquals(1, inv.take(ContentPreference.MEN).size());
     }
     @Test public void failedFapelloCreatorDoesNotParkOtherVerifiedCreatorsButBunkrStaysSupplemental() {
         AtomicLong clock = new AtomicLong();

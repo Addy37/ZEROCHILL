@@ -102,13 +102,16 @@ final class ShitTokPoolDiagnostics {
         return value.replaceAll("https?://\\S+", "[content]");
     }
     static void setEnabled(boolean value) { enabled = value; }
-    static synchronized void record(String event, String detail) {
+    static void record(String event, String detail) {
+        if (enabled) recordAt(SystemClock.elapsedRealtime(), event, detail);
+    }
+
+    static synchronized void recordAt(long now, String event, String detail) {
         if (!enabled) return;
         if (events.size() >= 160) events.removeFirst();
-        events.addLast(SystemClock.elapsedRealtime() + " " + event + " " + detail);
+        events.addLast(now + " " + event + " " + detail);
         // Short stress runs can collect counters without automating a private report screen.
         // This tag contains aggregate counters/provider IDs only, never content URLs.
-        long now = SystemClock.elapsedRealtime();
         if (event.equals("runway") && now - lastInventoryLog >= 1000L) {
             lastInventoryLog = now;
             android.util.Log.i("ShitTokInventory", detail);

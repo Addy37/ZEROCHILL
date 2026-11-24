@@ -35,24 +35,24 @@ public class ShitTokFilteredCacheHandoffTest {
                 });
         ReflectionHelpers.setField(mixer, "filtered", inventory);
         try {
-            ContentPreference.set(activity, ContentPreference.WOMEN);
+            ShitTokContentPreference.set(activity, ContentPreference.WOMEN);
             mixer.requestPreference(activity, () -> {});
             assertTrue(mixer.hasPreference(ContentPreference.WOMEN));
             assertFalse(broad.hasReady(3));
             assertTrue(broad.take(12).isEmpty());
             assertTrue(inventory.matches(show, ContentPreference.WOMEN));
-            ContentPreference.set(activity, ContentPreference.MEN);
+            ShitTokContentPreference.set(activity, ContentPreference.MEN);
             mixer.requestPreference(activity, () -> {});
             assertFalse(mixer.hasPreference(ContentPreference.MEN));
             assertTrue(mixer.takePreference(ContentPreference.MEN).isEmpty());
-            ContentPreference.set(activity, ContentPreference.ALL);
+            ShitTokContentPreference.set(activity, ContentPreference.ALL);
             mixer.requestPreference(activity, () -> {});
             assertEquals(Collections.singletonList(show), broad.takeCached(4, 12));
             assertEquals(Collections.singletonList(other), broad.takeCached(3, 12));
             assertEquals(12, broad.cacheRoom(4));
             assertTrue(inventory.take(ContentPreference.WOMEN).isEmpty());
         } finally {
-            mixer.stopPreference(); ContentPreference.set(activity, ContentPreference.ALL); activity.finish();
+            mixer.stopPreference(); ShitTokContentPreference.set(activity, ContentPreference.ALL); activity.finish();
         }
     }
 }

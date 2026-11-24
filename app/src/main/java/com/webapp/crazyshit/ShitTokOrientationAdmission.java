@@ -21,6 +21,7 @@ final class ShitTokOrientationAdmission {
     static final int MAX_PROBES_PER_BATCH = 8;
     static final long UNKNOWN_COOLDOWN_MS = 5 * 60_000L;
     static final long BATCH_MILLIS = 6000L;
+    private static final long STARTER_STREAM_TTL_MS = 60_000L;
 
     interface Resolver { CrazyShitRepository.StreamInfo resolve(NativeContentItem item) throws Exception; }
     interface Probe {
@@ -52,6 +53,14 @@ final class ShitTokOrientationAdmission {
     private final ShitTokAdmissionHealth health;
     private volatile boolean creatorScheduling;
     void setCreatorFocused(boolean value) { creatorScheduling = value; }
+    private volatile boolean allowLandscape;
+    void setLandscapeAllowed(boolean enabled) { allowLandscape = enabled; }
+    private boolean isEligible(float aspect) { return isEligible(aspect, allowLandscape); }
+    private static boolean isEligible(float aspect, boolean landscape) {
+        return landscape
+                ? ShitTokOrientation.immersiveEligible(aspect)
+                : ShitTokOrientation.eligible(aspect);
+    }
     private final LinkedHashMap<String, Entry> cache = new LinkedHashMap<String, Entry>(64, .75f, true) {
         @Override protected boolean removeEldestEntry(Map.Entry<String, ShitTokOrientationAdmission.Entry> eldest) {
             return size() > CACHE_LIMIT;
@@ -86,10 +95,18 @@ final class ShitTokOrientationAdmission {
     Result admit(List<NativeContentItem> candidates, Resolver resolver, BooleanSupplier allowedWork,
                  Random random, int maxItems, boolean requireStreams, Consumer<Result> onVerified) {
         return admit(candidates, resolver, allowedWork, random, maxItems, requireStreams, onVerified,
-                ShitTokPoolDiagnostics.modeToken());
+                ShitTokPoolDiagnostics.modeToken(), allowLandscape, false);
     }
+
+    Result preparePreferenceStarter(List<NativeContentItem> candidates, Resolver resolver,
+                                    BooleanSupplier allowedWork, boolean landscape) {
+        return admit(candidates, resolver, allowedWork, new Random(0), 1, true, null,
+                -1L, landscape, true);
+    }
+
     private Result admit(List<NativeContentItem> candidates, Resolver resolver, BooleanSupplier allowedWork,
-                 Random random, int maxItems, boolean requireStreams, Consumer<Result> onVerified, long diagnosticToken) {
+                 Random random, int maxItems, boolean requireStreams, Consumer<Result> onVerified,
+                 long diagnosticToken, boolean landscape, boolean starter) {
         final long workGeneration = admissionGeneration;
         List<NativeContentItem> ordered = candidateOrder(candidates, random);
         ArrayList<NativeContentItem> admitted = new ArrayList<>();
@@ -100,14 +117,20 @@ final class ShitTokOrientationAdmission {
         boolean deferred = false;
         for (NativeContentItem item : ordered) {
             if (admitted.size() >= maxItems) { remaining.add(item); continue; }
+            if (starter && !allowedWork.getAsBoolean()) {
+                deferred = true;
+                remaining.add(item);
+                continue;
+            }
             Entry known;
-            synchronized (cache) { known = cache.get(item.url); }
+            synchronized (cache) { known = cached(item.url); }
             if (trustedHint(item)) {
                 CrazyShitRepository.StreamInfo reusable = known != null
                         && Float.compare(known.aspect, item.aspectRatioHint) == 0 ? known.stream : null;
-                Entry hint = new Entry(item.aspectRatioHint, reusable, 0L, "metadata");
+                Entry hint = new Entry(item.aspectRatioHint, reusable, 0L, "metadata",
+                        known == null ? 0L : known.starterExpiresAt);
                 synchronized (cache) { cache.put(item.url, hint); }
-                if (!ShitTokOrientation.eligible(hint.aspect)) {
+                if (!isEligible(hint.aspect, landscape)) {
                     orientationRejected.incrementAndGet();
                     ShitTokPoolDiagnostics.admissionOutcome(item, "orientation", diagnosticToken);
                     continue;
@@ -119,9 +142,12 @@ final class ShitTokOrientationAdmission {
                 known = hint;
             }
             if (known != null && (known.aspect > 0f || known.retryAt > clock.getAsLong())
-                    && (!requireStreams || known.stream != null || !ShitTokOrientation.eligible(known.aspect))) {
-                if (ShitTokOrientation.eligible(known.aspect)) accept(item, known, admitted, streams, onVerified, diagnosticToken);
-                else if (known.stream == null || known.stream.mediaUrl == null || known.stream.mediaUrl.isEmpty()) {
+                    && (!requireStreams || known.stream != null || !isEligible(known.aspect, landscape))) {
+                if (isEligible(known.aspect, landscape)) {
+                    if (!starter && known.starterExpiresAt > 0)
+                        ShitTokPoolDiagnostics.modeEvent(diagnosticToken, "starterStreamReused", 1);
+                    accept(item, known, admitted, streams, onVerified, diagnosticToken);
+                } else if (known.stream == null || known.stream.mediaUrl == null || known.stream.mediaUrl.isEmpty()) {
                     unplayableRejected.incrementAndGet();
                     ShitTokPoolDiagnostics.admissionOutcome(item, "unplayable", diagnosticToken);
                 } else if (known.aspect > 0f) {
@@ -144,7 +170,7 @@ final class ShitTokOrientationAdmission {
             probes++;
             long candidateStarted = clock.getAsLong();
             CrazyShitRepository.StreamInfo stream = known != null && known.provenance.equals("pending") ? known.stream : null;
-            float aspect = known != null && ShitTokOrientation.eligible(known.aspect) ? known.aspect : 0f;
+            float aspect = known != null && isEligible(known.aspect, landscape) ? known.aspect : 0f;
             boolean terminalError = false;
             try {
                 event("resolve_start", item, "source=" + ShitTokAspectPriority.sourceKey(item));
@@ -174,7 +200,8 @@ final class ShitTokOrientationAdmission {
                 if (!allowedWork.getAsBoolean() || Thread.currentThread().isInterrupted() || deferred(failure)) {
                     deferred = true;
                     if (stream != null) synchronized (cache) {
-                        cache.put(item.url, new Entry(0f, stream, 0L, "pending"));
+                        cache.put(item.url, new Entry(0f, stream, 0L, "pending",
+                                starter ? clock.getAsLong() + STARTER_STREAM_TTL_MS : 0L));
                     }
                     remaining.add(item);
                     continue;
@@ -186,7 +213,7 @@ final class ShitTokOrientationAdmission {
             }
             // Keep an already completed probe when demand/permission closes. Only an actual
             // lifecycle/selection cancellation invalidates its result and source health.
-            if (workGeneration != admissionGeneration || Thread.currentThread().isInterrupted()) {
+            if ((!starter && workGeneration != admissionGeneration) || Thread.currentThread().isInterrupted()) {
                 deferred = true; remaining.add(item); continue;
             }
             if (!(aspect > 0f) || !Float.isFinite(aspect)) aspect = 0f;
@@ -194,9 +221,13 @@ final class ShitTokOrientationAdmission {
                     && (stream.mediaUrl.contains(".m3u8") || stream.mediaUrl.contains(".mpd"))
                     ? "manifest" : "extractor";
             Entry result = new Entry(aspect, stream,
-                    aspect > 0f ? 0L : clock.getAsLong() + UNKNOWN_COOLDOWN_MS, provenance);
-            synchronized (cache) { cache.put(item.url, result); }
-            if (!ShitTokOrientation.eligible(aspect)) {
+                    aspect > 0f ? 0L : clock.getAsLong() + UNKNOWN_COOLDOWN_MS, provenance,
+                    starter && isEligible(aspect, landscape) ? clock.getAsLong() + STARTER_STREAM_TTL_MS : 0L);
+            // A speculative timeout must not blacklist a clip for later foreground admission.
+            if (!starter || isEligible(aspect, landscape)) synchronized (cache) {
+                cache.put(item.url, result);
+            }
+            if (!isEligible(aspect, landscape)) {
                 boolean missingStream = stream == null || stream.mediaUrl == null || stream.mediaUrl.isEmpty();
                 if (missingStream) unplayableRejected.incrementAndGet();
                 else orientationRejected.incrementAndGet();
@@ -206,10 +237,10 @@ final class ShitTokOrientationAdmission {
                     ShitTokPoolDiagnostics.admissionOutcome(item, missingStream ? "unplayable" : "orientation", diagnosticToken);
                 }
             }
-            if (creatorScheduling) health.result(ShitTokAspectPriority.sourceKey(item), ShitTokOrientation.eligible(aspect),
+            if (!starter && creatorScheduling) health.result(ShitTokAspectPriority.sourceKey(item), isEligible(aspect, landscape),
                     terminalError, clock.getAsLong() - candidateStarted);
-            event(ShitTokOrientation.eligible(aspect) ? "verified" : "rejected", item, "aspect=" + aspect);
-            if (ShitTokOrientation.eligible(aspect)) accept(item, result, admitted, streams, onVerified, diagnosticToken);
+            event(isEligible(aspect, landscape) ? "verified" : "rejected", item, "aspect=" + aspect);
+            if (isEligible(aspect, landscape)) accept(item, result, admitted, streams, onVerified, diagnosticToken);
         }
         return new Result(admitted, streams, remaining, deferred);
     }
@@ -290,7 +321,7 @@ final class ShitTokOrientationAdmission {
                                 try {
                                     return admit(Collections.singletonList(item), resolver,
                                             () -> token == admissionGeneration && allowedWork.getAsBoolean(),
-                                            new Random(0), 1, true, null, diagnosticToken);
+                                            new Random(0), 1, true, null, diagnosticToken, allowLandscape, false);
                                 } finally { verificationActive.decrementAndGet(); }
                             });
                             pending.put(item.url, new Pending(item, future));
@@ -336,10 +367,10 @@ final class ShitTokOrientationAdmission {
     }
 
     boolean rejectsKnown(NativeContentItem item) {
-        if (trustedHint(item) && ShitTokOrientation.eligible(item.aspectRatioHint)) return false;
+        if (trustedHint(item) && isEligible(item.aspectRatioHint)) return false;
         synchronized (cache) {
-            Entry known = cache.get(item.url);
-            return known != null && !ShitTokOrientation.eligible(known.aspect)
+            Entry known = cached(item.url);
+            return known != null && !isEligible(known.aspect)
                     && (known.aspect > 0f || known.retryAt > clock.getAsLong());
         }
     }
@@ -393,13 +424,26 @@ final class ShitTokOrientationAdmission {
 
             NativeContentItem selected = null;
             if (!eligible.isEmpty()) {
+                int prepared = -1;
+                synchronized (cache) {
+                    for (int i = 0; i < eligible.size(); i++) {
+                        Entry entry = cached(eligible.get(i).url);
+                        if (entry != null && entry.starterExpiresAt > 0 && entry.stream != null
+                                && isEligible(entry.aspect)) {
+                            prepared = i;
+                            break;
+                        }
+                    }
+                }
                 boolean fastPortrait = creatorScheduling && eligible.stream().anyMatch(i -> trustedHint(i)
-                        && ShitTokOrientation.eligible(i.aspectRatioHint));
-                if (fastPortrait) {
+                        && isEligible(i.aspectRatioHint));
+                if (prepared >= 0) {
+                    selected = eligible.remove(prepared);
+                } else if (fastPortrait) {
                     int index = -1;
                     for (int i = 0; i < eligible.size(); i++) {
                         NativeContentItem item = eligible.get(i);
-                        if (trustedHint(item) && ShitTokOrientation.eligible(item.aspectRatioHint)
+                        if (trustedHint(item) && isEligible(item.aspectRatioHint)
                                 && (index < 0 || opportunity(item) > opportunity(eligible.get(index)))) index = i;
                     }
                     selected = eligible.remove(index);
@@ -514,13 +558,26 @@ final class ShitTokOrientationAdmission {
         return result;
     }
 
+    // Caller holds the cache lock. Warm links expire even when the process stays open.
+    private Entry cached(String url) {
+        Entry entry = cache.get(url);
+        if (entry != null && entry.starterExpiresAt > 0 && clock.getAsLong() >= entry.starterExpiresAt) {
+            cache.remove(url);
+            return null;
+        }
+        return entry;
+    }
+
     private static final class Entry {
         final float aspect;
         final CrazyShitRepository.StreamInfo stream;
         final long retryAt;
         final String provenance;
-        Entry(float aspect, CrazyShitRepository.StreamInfo stream, long retryAt, String provenance) {
+        final long starterExpiresAt;
+        Entry(float aspect, CrazyShitRepository.StreamInfo stream, long retryAt, String provenance,
+              long starterExpiresAt) {
             this.aspect = aspect; this.stream = stream; this.retryAt = retryAt; this.provenance = provenance;
+            this.starterExpiresAt = starterExpiresAt;
         }
     }
 }

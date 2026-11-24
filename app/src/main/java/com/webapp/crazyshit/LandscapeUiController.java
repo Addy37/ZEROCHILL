@@ -298,14 +298,16 @@ final class LandscapeUiController {
             topBar.setElevation(0f);
         }
 
-        // Shows and OnlyFap own their title/actions in the hero. Restoring orientation
-        // must keep the shared bar hidden on those retained pages.
+        // ShitTok retired its shared header in favor of an overlay on the video.
+        // A portrait restoration pass must not put the old title/search bar back.
+        boolean shittok = selected == NAV_CHAOS;
         setVisibility(topBar,
-                chaosFullscreen || selected == NAV_CATEGORIES || activity.showsOwnsHeader()
+                chaosFullscreen || shittok || selected == NAV_CATEGORIES || activity.showsOwnsHeader()
                         ? View.GONE : View.VISIBLE);
         ViewGroup.LayoutParams raw = topBar.getLayoutParams();
         if (raw != null) {
-            int wanted = dp(activity, landscape ? LANDSCAPE_TOP_BAR_DP : PORTRAIT_TOP_BAR_DP);
+            int wanted = shittok ? 0
+                    : dp(activity, landscape ? LANDSCAPE_TOP_BAR_DP : PORTRAIT_TOP_BAR_DP);
             if (raw.height != wanted) {
                 raw.height = wanted;
                 topBar.setLayoutParams(raw);

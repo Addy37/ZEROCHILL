@@ -99,11 +99,16 @@ final class ShitTokSourcePool {
         return take(maximum, item -> true);
     }
     synchronized List<NativeContentItem> take(int maximum, java.util.function.Predicate<NativeContentItem> room) {
+        return take(maximum, room, -1);
+    }
+    synchronized List<NativeContentItem> take(int maximum, java.util.function.Predicate<NativeContentItem> room,
+                                              int reservedSource) {
         ArrayList<NativeContentItem> result = new ArrayList<>();
         while (result.size() < maximum) {
             Slot best = null; double score = -Double.MAX_VALUE;
-            for (Slot slot : slots.values()) {
-                if (!slot.eligible || slot.ready.isEmpty() || !room.test(slot.ready.get(0))) continue;
+            for (Map.Entry<Integer, Slot> entry : slots.entrySet()) {
+                Slot slot = entry.getValue();
+                if (entry.getKey() == reservedSource || !slot.eligible || slot.ready.isEmpty() || !room.test(slot.ready.get(0))) continue;
                 double value = Math.min(8, turn - slot.delivered)
                         + Math.max(-2, Math.min(2, ShitTokSmartRanker.score(slot.ready.get(0))));
                 if (best == null || value > score) { best = slot; score = value; }
@@ -129,6 +134,11 @@ final class ShitTokSourcePool {
         if (slot.eligible) slot.health = slot.ready.isEmpty() ? Health.IDLE : Health.READY;
         return result;
     }
+    synchronized List<NativeContentItem> peekCached(int source) {
+        Slot slot = slots.get(source);
+        return slot == null ? Collections.emptyList() : new ArrayList<>(slot.ready);
+    }
+
     synchronized int cacheRoom(int source) {
         Slot slot = slots.get(source);
         return MAX_READY_PER_SOURCE - (slot == null ? 0 : slot.ready.size());
