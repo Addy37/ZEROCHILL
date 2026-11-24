@@ -30,7 +30,7 @@ final class PawchiveMediaRequests {
                 }
                 PawchiveMediaRequests.class.wait(remaining);
             }
-        } catch (InterruptedException canceled) {
+        } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new InterruptedIOException("Pawchive request canceled");
         }
