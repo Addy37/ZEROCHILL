@@ -121,8 +121,14 @@ jobs:
           set -euo pipefail
           # Five-feed and buffering experiments share one focused ShitTok suite.
           # Full legacy suite runs remain separate and are not silently waived.
-          if [[ "$GITHUB_REF_NAME" == "test-apk/shittok-five-feeds" || "$GITHUB_REF_NAME" == "test-apk/shittok-buffering-pass-1" || "$GITHUB_REF_NAME" == "test-apk/shittok-retained-player-phase1" ]]; then
+          if [[ "$GITHUB_REF_NAME" == "test-apk/shittok-five-feeds" || "$GITHUB_REF_NAME" == "test-apk/shittok-buffering-pass-1" || "$GITHUB_REF_NAME" == "test-apk/shittok-retained-player-phase1" || "$GITHUB_REF_NAME" == "test-apk/shittok-smart-preloading-phase2" ]]; then
+            phase2_tests=()
+            if [[ "$GITHUB_REF_NAME" == "test-apk/shittok-smart-preloading-phase2" ]]; then
+              git merge-base --is-ancestor b3ab77ec7c194a7652865519e4b673a2adf30b27 HEAD
+              phase2_tests=(--tests com.webapp.crazyshit.ShitTokPreferencePreparationTest)
+            fi
             gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest \
+              "${phase2_tests[@]}" \
               --tests com.webapp.crazyshit.ShitTokCategoryStripTest \
               --tests com.webapp.crazyshit.ShitTokHeaderStyleTest \
               --tests com.webapp.crazyshit.ShitTokAmbientSamplingTest \
