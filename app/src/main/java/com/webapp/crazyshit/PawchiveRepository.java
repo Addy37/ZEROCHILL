@@ -73,6 +73,55 @@ final class PawchiveRepository {
         }
     }
 
+    static final class Media {
+        final String name, url;
+        final boolean video;
+        Media(String name, String url, boolean video) {
+            this.name = name; this.url = url; this.video = video;
+        }
+    }
+
+    List<Media> postMedia(Post post) throws IOException {
+        if (post == null || !validId(post.id)) throw new IllegalArgumentException("Invalid post");
+        String route = creatorRoute(post.service, post.creatorId) + "/post/" + post.id;
+        try {
+            JSONObject body = new JSONObject(transport.get(route));
+            // Some public clients return the post directly; accept the explicit envelope too.
+            JSONObject row = body.optJSONObject("post");
+            if (row == null) row = body;
+            if (!post.service.equals(value(row, "service")) ||
+                    !post.creatorId.equals(value(row, "user")) ||
+                    !post.id.equals(value(row, "id"))) throw new IOException("Post identity mismatch");
+            return parseMedia(row);
+        } catch (JSONException | NullPointerException error) {
+            throw new IOException("Invalid Pawchive post detail", error);
+        }
+    }
+
+    static List<Media> parseMedia(JSONObject row) {
+        Map<String, Media> result = new LinkedHashMap<>();
+        addMedia(row.optJSONObject("file"), result);
+        JSONArray attachments = row.optJSONArray("attachments");
+        if (attachments != null) {
+            for (int i = 0; i < attachments.length(); i++) addMedia(attachments.optJSONObject(i), result);
+        }
+        return Collections.unmodifiableList(new ArrayList<>(result.values()));
+    }
+
+    private static void addMedia(JSONObject file, Map<String, Media> result) {
+        if (file == null || result.size() >= 100) return;
+        String path = value(file, "path");
+        // Accept only provider-relative data paths; never follow arbitrary links or executable attachments.
+        if (!path.matches("/[A-Za-z0-9_./-]{1,1024}") || path.contains("..") || path.contains("//")) return;
+        String name = value(file, "name");
+        String lower = path.toLowerCase(Locale.ROOT);
+        boolean video = lower.matches(".*[.](mp4|webm|m4v|mov|mkv)");
+        boolean image = lower.matches(".*[.](jpg|jpeg|png|gif|webp|avif)");
+        if (!video && !image) return;
+        String url = "https://file.pawchive.pw/data" + path;
+        if (!result.containsKey(url)) result.put(url, new Media(name.isEmpty() ? path.substring(path.lastIndexOf('/') + 1) : name, url, video));
+    }
+
     static final class PostPage {
         final List<Post> posts;
         final boolean hasMore;
