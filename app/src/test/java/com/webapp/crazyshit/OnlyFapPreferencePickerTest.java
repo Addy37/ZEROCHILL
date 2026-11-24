@@ -47,7 +47,8 @@ public class OnlyFapPreferencePickerTest {
         GridLayout grid = root.findViewWithTag("onlyfap_preference_grid");
         assertNotNull(grid);
         assertEquals(2, grid.getColumnCount());
-        assertEquals(6, grid.getChildCount());
+        assertEquals(7, grid.getChildCount());
+        assertNotNull(root.findViewWithTag("preference_pawchive"));
         assertTrue(root.findViewWithTag("preference_all").isSelected());
         root.findViewWithTag("preference_trans_men").performClick();
         assertEquals(ContentPreference.TRANS_MEN, ContentPreference.get(host));
@@ -57,6 +58,18 @@ public class OnlyFapPreferencePickerTest {
         assertTrue(dialog.getWindow().getDecorView().findViewWithTag("preference_trans_men").isSelected());
         dialog.getWindow().getDecorView().findViewWithTag("preference_trans_men").performClick();
         assertEquals(1, changes[0]);
+    }
+    @Test public void pawchiveLaunchDoesNotChangeTheExistingPreference() {
+        ContentPreference.set(host, ContentPreference.MEN);
+        int[] changes = {0};
+        ContentPreferenceUi.chooseAnchored(anchor, () -> changes[0]++);
+        AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
+        dialog.getWindow().getDecorView().findViewWithTag("preference_pawchive").performClick();
+        android.content.Intent intent = org.robolectric.Shadows.shadowOf(host).getNextStartedActivity();
+        assertNotNull(intent);
+        assertEquals(PawchiveBrowseActivity.class.getName(), intent.getComponent().getClassName());
+        assertEquals(ContentPreference.MEN, ContentPreference.get(host));
+        assertEquals(0, changes[0]);
     }
     @Test public void rapidTapIsIgnoredAndDetachClosesTheOwnedWindow() {
         ContentPreferenceUi.chooseAnchored(anchor, null);
@@ -105,7 +118,8 @@ public class OnlyFapPreferencePickerTest {
         assertEquals(android.view.Gravity.CENTER, dialog.getWindow().getAttributes().gravity);
         View root = dialog.getWindow().getDecorView();
         GridLayout grid = root.findViewWithTag("onlyfap_preference_grid");
-        assertEquals(6, grid.getChildCount());
+        assertEquals(7, grid.getChildCount());
+        assertNotNull(root.findViewWithTag("preference_pawchive"));
         assertTrue(root.findViewWithTag("preference_women").isSelected());
         assertTrue(grid.getParent() instanceof android.widget.ScrollView);
         root.findViewWithTag("preference_cancel").performClick();
