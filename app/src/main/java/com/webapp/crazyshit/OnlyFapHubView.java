@@ -1497,7 +1497,8 @@ final class OnlyFapHubView extends FrameLayout {
                     if (profile != null && active && !closed && generation == heroGeneration) {
                         List<NativeContentItem> media = new PawchiveRepository().galleryPage(profile, 0, false).items;
                         ArrayList<OnlyFapHeroPolicy.Artwork> candidates = new ArrayList<>();
-                        OnlyFapHeroPolicy.addPreviews(candidates, media, PawchiveRepository.ORIGIN);
+                        OnlyFapHeroPolicy.addPreviews(candidates,
+                                OnlyFapHeroPolicy.originalResolutionCandidates(media, 3), PawchiveRepository.ORIGIN);
                         for (OnlyFapHeroPolicy.Artwork choice : candidates) {
                             if (!active || closed || generation != heroGeneration || !portraitArtwork.isEmpty()) break;
                             qualifyPortraitArtwork(generation, creator, portraitArtwork, choice, trace);
@@ -1673,7 +1674,10 @@ final class OnlyFapHubView extends FrameLayout {
         com.bumptech.glide.RequestBuilder<Drawable> request = manager.load(remoteImage(image, referer))
                 .centerCrop().override(Math.max(1, width), Math.max(1, height))
                 .diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate();
-        return qualify ? request.downsample(OnlyFapHeroCrop.NO_UPSCALE).transform(new OnlyFapHeroCrop()) : request;
+        // Pawchive supplies a bounded preview. The original-size requirement applies to
+        // sources that supply original artwork, and the existing target still checks decode success.
+        return qualify && !PawchiveRepository.isThumbnail(image)
+                ? request.downsample(OnlyFapHeroCrop.NO_UPSCALE).transform(new OnlyFapHeroCrop()) : request;
     }
 
     private void releaseQualification(FutureTarget<Drawable> target) {

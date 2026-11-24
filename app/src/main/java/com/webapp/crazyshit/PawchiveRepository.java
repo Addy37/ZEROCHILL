@@ -229,8 +229,12 @@ final class PawchiveRepository {
         return url.endsWith(route) && SHARD.matcher(url.substring(0, url.length() - route.length())).matches();
     }
 
+    static boolean isThumbnail(String url) {
+        return url != null && url.startsWith(THUMBNAIL_BASE + "/");
+    }
+
     static boolean isArtwork(String url) {
-        return url != null && (url.startsWith(THUMBNAIL_BASE + "/") || url.startsWith(ORIGIN + "icons/"));
+        return isThumbnail(url) || (url != null && url.startsWith(ORIGIN + "icons/"));
     }
 
     static String savedArtwork(String kind, String url, String artwork) {

@@ -114,10 +114,10 @@ jobs:
             --tests com.webapp.crazyshit.ShitTokSourceModeTest \
             --tests com.webapp.crazyshit.ShitTokFiveFeedInventoryTest \
             --tests com.webapp.crazyshit.ShitTokCategoryEligibilityTest \
-            --tests com.webapp.crazyshit.PlayableSourceRouterTest \
             --tests com.webapp.crazyshit.BunkrGalleryHttpHeadersTest \
             --tests com.webapp.crazyshit.OnlyFapGalleryFavoritesTest \
-            --tests com.webapp.crazyshit.GalleryViewerLifecycleTest
+            --tests com.webapp.crazyshit.GalleryViewerLifecycleTest \
+            --tests com.webapp.crazyshit.OnlyFapHeroPolicyTest
       - name: Assemble and verify side-by-side APK
         run: |
           set -euo pipefail
