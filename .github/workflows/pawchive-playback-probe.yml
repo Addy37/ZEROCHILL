@@ -85,21 +85,25 @@ jobs:
                           print("player", tag, sorted(attrs),
                                 {k: (p.urlsplit(v).hostname, p.urlsplit(v).path.split("/")[1:2])
                                  for k,v in attrs.items() if v and k in {"src","data-src","poster"}}, flush=True)
-                  urls=[]
+                  bare = clip["server"] + "/data" + clip["path"]
+                  req(bare, "Beta 3 bare URL", {"Referer":root+"/","Range":"bytes=0-1023"}, 1024)
                   for tag, attrs in page.entries:
-                      for key, raw in attrs.items():
-                          if raw and clip["path"] in raw and key in {"href", "src", "data-src"}:
-                              parsed=p.urlsplit(p.urljoin(url,html.unescape(raw)))
-                              print("matching file",tag,key,parsed.hostname,sorted(p.parse_qs(parsed.query)),flush=True)
-                              if parsed.scheme=="https" and (parsed.hostname or "").endswith(".pawchive.pw"):
-                                  urls.append(parsed.geturl())
-                  for candidate in list(dict.fromkeys(urls))[:2]:
-                      for label, extra in [
-                          ("native origin-range", {"Referer":root+"/","Range":"bytes=0-1023"}),
-                          ("browser video request", {"Referer":root+"/","Range":"bytes=0-1023","Accept":"*/*",
-                           "Sec-Fetch-Dest":"video","Sec-Fetch-Mode":"no-cors","Sec-Fetch-Site":"same-site"}),
-                          ("public link request", {"Referer":url,"Accept":"*/*"})]:
-                          req(candidate,label,extra,1024)
+                      raw = attrs.get("src") if tag == "source" else attrs.get("href") if tag == "a" else None
+                      if not raw: continue
+                      actual = p.urlsplit(p.urljoin(url, html.unescape(raw)))
+                      if actual.scheme != "https" or not (actual.hostname or "").endswith(".pawchive.pw"): continue
+                      if tag == "a" and clip["path"] not in actual.path: continue
+                      print("target", tag, actual.hostname, "query keys", sorted(p.parse_qs(actual.query)),
+                        "path matches", actual.path == p.urlsplit(bare).path,
+                        "segments", [piece if len(piece) < 6 else re.sub(r"[a-f0-9]{10,}", "<hash>", piece)[:55]
+                                     for piece in actual.path.strip("/").split("/")[:-1]],
+                        "suffix", actual.path.split(".")[-1], "filename matches",
+                        p.parse_qs(actual.query).get("f") == [clip["name"]], flush=True)
+                      req(actual.geturl(), tag + " origin-range", {"Referer":root+"/","Range":"bytes=0-1023"}, 1024)
+                      if tag == "source":
+                          req(actual.geturl(), "source seek", {"Referer":root+"/","Range":"bytes=1024-2047"}, 1024)
+                          print("source suffix/query encodes listing", p.unquote(actual.path).endswith(clip["path"]),
+                                any(clip["path"] in value for value in p.parse_qs(actual.query).values() for value in value))
                   if len(samples) == 2: break
               break
           PY
