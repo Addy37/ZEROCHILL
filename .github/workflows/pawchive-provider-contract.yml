@@ -39,17 +39,23 @@ jobs:
               headers = {"Accept": accept, "User-Agent": agent, "Accept-Encoding": "identity"}
               if referer:
                   headers["Referer"] = referer
-              if size is not None:
+              if size is not None and size > 0:
                   headers["Range"] = f"bytes=0-{size-1}"
               try:
                   with opener.open(urllib.request.Request(url, headers=headers), timeout=8) as response:
                       print(label, response.status, urllib.parse.urlsplit(response.geturl()).hostname,
                             response.headers.get("Content-Type"), response.headers.get("Content-Range"),
                             response.headers.get("Content-Length"), flush=True)
-                      return response.read(size if size is not None else 16 * 1024 * 1024)
+                      return response.read(abs(size) if size is not None else 16 * 1024 * 1024)
               except urllib.error.HTTPError as error:
                   print(label, error.code, error.headers.get("Content-Type"),
                         error.headers.get("Server"), error.headers.get("X-Mitmproxy-Blocked-Reason"), flush=True)
+                  if error.code == 403 and error.headers.get("Content-Type") == "text/plain":
+                      body = error.read(180).decode(errors="replace").lower()
+                      print(label, "denial markers", [word for word in
+                            ("cloudflare", "forbidden", "hotlink", "blocked", "vpn", "proxy", "origin", "referer",
+                             "authentication", "access", "denied", "region", "not allowed", "range")
+                            if word in body], flush=True)
               except urllib.error.URLError as error:
                   print(label, type(error.reason).__name__, flush=True)
               return b""
@@ -136,6 +142,19 @@ jobs:
                         "listing path present", any(
                             isinstance(asset, dict) and asset.get("path") == path
                             for asset in [detail.get("file"), *(detail.get("attachments") or [])]), flush=True)
+              html = fetch(kind + " public post", site + post, "text/html")
+              links = re.findall(rb'https?://[a-z0-9-]+[.]pawchive[.]pw(?:/[a-z0-9_-]+){0,3}', html)
+              print(kind, "post delivery URL prefixes", sorted({link.decode().split("/data/")[0].split("/thumbnail/data/")[0]
+                   for link in links if b"/data" in link or b"/thumbnail" in link})[:15],
+                    "matched attachment", path.encode() in html, flush=True)
+              if path.encode() in html:
+                  for match in re.finditer(re.escape(path.encode()), html):
+                      before = html[max(0, match.start()-125):match.start()]
+                      after = html[match.end():match.end()+80]
+                      prefix = re.search(rb'(https?://[a-z0-9.-]+)?(/(?:data|thumbnail|preview|image|video|file))*$', before)
+                      suffix = re.match(rb'[?&][a-zA-Z0-9_-]+(?==)', after)
+                      print(kind, "post attachment route", prefix[0].decode() if prefix else "",
+                            suffix[0].decode() if suffix else "", flush=True)
               print(kind, "attachment field names", sorted(file),
                     "already has data prefix", path.startswith("/data/"), flush=True)
               original = "https://file.pawchive.pw/data" + path.removeprefix("/data")
@@ -143,13 +162,19 @@ jobs:
                   original = "https://file.pawchive.pw/data" + path
               if re.fullmatch(r"https://[a-z0-9-]+[.]pawchive[.]pw/?", server):
                   native = server.rstrip("/") + "/data/" + path.removeprefix("/data/").lstrip("/")
-                  for suffix, referer in (("none", ""), ("post", site + post)):
+                  for suffix, referer in (("origin", site + "/"), ("post", site + post)):
                       fetch(kind + " declared server " + suffix, native, "*/*", referer, 512)
+                  fetch(kind + " declared server no range", native, "*/*", site + "/", -512)
+                  fetch(kind + " declared server filename", native + "?f=" +
+                        urllib.parse.quote(str(file.get("name", "")), safe=""), "*/*", site + "/", 512)
                   if kind == "video":
                       fetch("video server poster", "https://img.pawchive.pw/thumbnail/data/" +
                             path.removeprefix("/data/").lstrip("/"), "image/*", site + post, 256)
-              for mode, referer in (("none", ""), ("profile", site + profile), ("post", site + post)):
+              for mode, referer in (("origin", site + "/"),):
                   fetch(kind + " original " + mode, original, "*/*", referer, 512)
+              fetch(kind + " site data", site + "/data/" + path.lstrip("/"), "*/*", site + "/", 512)
+              fetch(kind + " image host data", "https://img.pawchive.pw/data/" + path.lstrip("/"),
+                    "*/*", site + "/", 512)
               if kind == "image":
                   for host in (site, "https://img.pawchive.pw"):
                       fetch("icon", host + "/icons/" + "/".join(profile.split("/")[1::2]),
