@@ -190,32 +190,59 @@ public final class EromeRepository {
 
     /** Grid request: a thumb when one can be named, otherwise the still itself. */
     public static String gridArtwork(NativeContentItem item) {
-        if (item == null || !isAlbumUrl(item.url)) return "";
-        String still = isStillImage(item.imageUrl) ? mediaUrl(item.imageUrl) : "";
-        if (still.isEmpty() && item.isVideo()) still = stillFromVideo(item.sourceMediaUrl);
-        if (still.isEmpty() && isStillImage(item.sourceMediaUrl)) still = mediaUrl(item.sourceMediaUrl);
-        if (still.isEmpty()) return "";
+        for (String candidate : artworkCandidates(item)) return candidate;
+        return "";
+    }
+
+    /**
+     * Every still worth requesting, smallest first. The provider poster is included
+     * after the thumb so a missing {@code /thumbs/} file cannot leave the tile blank.
+     */
+    public static java.util.List<String> artworkCandidates(NativeContentItem item) {
+        java.util.LinkedHashSet<String> urls = new java.util.LinkedHashSet<>();
+        String still = resolvedStill(item);
         String thumb = thumbnailFor(still);
-        return thumb.isEmpty() ? still : thumb;
+        if (!thumb.isEmpty()) urls.add(thumb);
+        if (!still.isEmpty()) urls.add(still);
+        return new java.util.ArrayList<>(urls);
+    }
+
+    /** Next still that has not already failed. Never removes the media item. */
+    public static String nextArtwork(NativeContentItem item, java.util.Collection<String> rejected) {
+        for (String candidate : artworkCandidates(item)) {
+            if (rejected != null && rejected.contains(candidate)) continue;
+            return candidate;
+        }
+        return "";
+    }
+
+    /** Cached album videos parsed before lazy posters were read. */
+    public static boolean missingPoster(java.util.List<NativeContentItem> items) {
+        if (items == null) return false;
+        for (NativeContentItem item : items) {
+            if (item != null && item.isVideo() && isAlbumUrl(item.url) && !isStillImage(item.imageUrl)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String resolvedStill(NativeContentItem item) {
+        if (item == null || !isAlbumUrl(item.url)) return "";
+        if (isStillImage(item.imageUrl)) return mediaUrl(item.imageUrl);
+        if (item.isVideo()) {
+            String derived = stillFromVideo(item.sourceMediaUrl);
+            if (!derived.isEmpty()) return derived;
+        }
+        if (isStillImage(item.sourceMediaUrl)) return mediaUrl(item.sourceMediaUrl);
+        return "";
     }
 
     /** Next still to try after a failed Erome image request. Never removes the media item. */
     public static String alternateArtwork(NativeContentItem item, String rejected) {
-        if (item == null || !isAlbumUrl(item.url)) return "";
-        String still = stillFromVideo(item.sourceMediaUrl);
-        String[] candidates = new String[] {
-                isStillImage(item.imageUrl) ? mediaUrl(item.imageUrl) : "",
-                isStillImage(item.sourceMediaUrl) ? mediaUrl(item.sourceMediaUrl) : "",
-                still,
-                thumbnailFor(item.imageUrl),
-                thumbnailFor(still)
-        };
-        for (String candidate : candidates) {
-            if (candidate == null || candidate.isEmpty()) continue;
-            if (rejected != null && candidate.equals(rejected)) continue;
-            return candidate;
-        }
-        return "";
+        java.util.ArrayList<String> skipped = new java.util.ArrayList<>();
+        if (rejected != null && !rejected.isEmpty()) skipped.add(rejected);
+        return nextArtwork(item, skipped);
     }
 
     /** Full photo for the existing gallery viewer. Videos stay on the playback resolver. */

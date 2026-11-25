@@ -3309,6 +3309,12 @@ public class NativeFeedBrowserActivity extends Activity {
                     currentPage = gallery.currentPage; endReached = gallery.endReached;
                     updateEpisodeRangeUi();
                     updateShowDetailsHeader();
+                    if (isEromeAlbum() && EromeRepository.missingPoster(bunkrAlbumItems)) {
+                        // Older snapshots stored lazy videos with no poster. Re-read the album.
+                        endReached = false;
+                        load(false);
+                        return;
+                    }
                     if (gallery.items.isEmpty() && !endReached) { load(false); return; }
                 } else if (feed != null) {
                     List<NativeContentItem> restoredItems =

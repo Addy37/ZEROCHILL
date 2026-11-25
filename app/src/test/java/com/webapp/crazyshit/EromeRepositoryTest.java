@@ -93,6 +93,7 @@ public final class EromeRepositoryTest {
         assertEquals("https://www.erome.com/a/Abcd1234#img-still", photo.url);
         assertEquals("https://s1.erome.com/1/Abcd1234/still.jpg", photo.imageUrl);
         assertEquals(0.8f, photo.aspectRatioHint, 0.001f);
+        assertEquals(9f / 16f, video.aspectRatioHint, 0.001f);
         assertEquals("https://s1.erome.com/1/Abcd1234/thumbs/clip.jpg",
                 EromeRepository.gridArtwork(video));
         assertEquals("https://s1.erome.com/1/Abcd1234/clip.jpg", video.imageUrl);
@@ -107,6 +108,41 @@ public final class EromeRepositoryTest {
         assertEquals("https://s1.erome.com/1/Abcd1234/thumbs/clip.jpg", EromeRepository.gridArtwork(video));
         assertEquals("https://s1.erome.com/1/Abcd1234/clip.jpg",
                 EromeRepository.alternateArtwork(video, EromeRepository.gridArtwork(video)));
+    }
+
+    @Test public void lazyPosterAndLazySourceStillFillTheGrid() throws Exception {
+        String album = "<html><body><h1 class=\"album-title-page\">Coastal landscape</h1>"
+                + "<div class=\"media-group\"><video class=\"player video-js vjs-16-9\" "
+                + "data-poster=\"https://s87.erome.com/2257/Abcd1234/Dog8eN5s.jpg\">"
+                + "<source data-src=\"https://v87.erome.com/2257/Abcd1234/Dog8eN5s_720p.mp4\" "
+                + "type=\"video/mp4\" res=\"720\"></video></div>"
+                + "<div class=\"media-group\"><img class=\"img-front\" width=\"1179\" height=\"657\" "
+                + "data-src=\"https://s87.erome.com/2257/Abcd1234/Y90g5hUf.jpeg?v=1792147094\">"
+                + "</div></body></html>";
+        EromePages.AlbumPage page = EromePages.parseAlbum(album, "https://www.erome.com/a/Abcd1234");
+        assertEquals(2, page.items.size());
+        NativeContentItem video = page.items.get(0);
+        NativeContentItem photo = page.items.get(1);
+        assertEquals("https://s87.erome.com/2257/Abcd1234/Dog8eN5s.jpg", video.imageUrl);
+        assertEquals("https://v87.erome.com/2257/Abcd1234/Dog8eN5s_720p.mp4", video.sourceMediaUrl);
+        assertEquals(16f / 9f, video.aspectRatioHint, 0.001f);
+        assertEquals("https://s87.erome.com/2257/Abcd1234/thumbs/Dog8eN5s.jpg",
+                EromeRepository.gridArtwork(video));
+        assertEquals("https://s87.erome.com/2257/Abcd1234/Dog8eN5s.jpg",
+                EromeRepository.nextArtwork(video, java.util.Collections.singleton(
+                        EromeRepository.gridArtwork(video))));
+        assertEquals("https://s87.erome.com/2257/Abcd1234/Y90g5hUf.jpeg?v=1792147094", photo.imageUrl);
+        assertEquals("https://s87.erome.com/2257/Abcd1234/thumbs/Y90g5hUf.jpeg?v=1792147094",
+                EromeRepository.gridArtwork(photo));
+        NativeContentItem cached = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA, "Video", "https://www.erome.com/a/Abcd1234#Dog8eN5s",
+                "", "", "", "", "", "", 0L, 16f / 9f)
+                .withSourceMedia("https://v87.erome.com/2257/Abcd1234/Dog8eN5s_720p.mp4",
+                        "https://www.erome.com/a/Abcd1234");
+        assertTrue(EromeRepository.missingPoster(java.util.Collections.singletonList(cached)));
+        assertEquals("https://s87.erome.com/2257/Abcd1234/thumbs/Dog8eN5s.jpg",
+                EromeRepository.gridArtwork(cached));
+        assertFalse(EromeRepository.missingPoster(page.items));
     }
 
     @Test public void profileUrlsAreExplicitAndDoNotMatchAlbumTitles() throws Exception {
@@ -143,5 +179,45 @@ public final class EromeRepositoryTest {
                         "https://www.erome.com/a/Abcd1234?page=2"));
         assertEquals("", EromeRepository.sameAlbumPage("https://www.erome.com/a/Abcd1234",
                 "https://www.erome.com/a/Other9999?page=2"));
+    }
+
+    @Test public void durationBadgeUsesExistingMetadataAndLeavesOtherGalleriesAlone() throws Exception {
+        assertEquals("1:02", GalleryDuration.format("01:02"));
+        assertEquals("0:09", GalleryDuration.format("00:09"));
+        assertEquals("12:05", GalleryDuration.format("12:05"));
+        assertEquals("1:02:03", GalleryDuration.format("1:02:03"));
+        assertEquals("1:02:03", GalleryDuration.format("01:02:03"));
+        assertEquals("", GalleryDuration.format("OnlyFap"));
+        assertEquals("", GalleryDuration.format("Fapello"));
+        assertEquals("", GalleryDuration.format("3 pictures · 1 video"));
+        assertEquals("", GalleryDuration.format("1:02 extra"));
+        assertEquals("", GalleryDuration.format("99"));
+        NativeContentItem video = EromePages.parseAlbum(ALBUM, "https://www.erome.com/a/Abcd1234").items.get(0);
+        assertEquals("1:02", GalleryDuration.label(video));
+        NativeContentItem onlyFap = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA, "Clip", "https://fapello.com/video/1",
+                "", "", "", "", "OnlyFap");
+        assertEquals("", GalleryDuration.label(onlyFap));
+        NativeContentItem photo = new NativeContentItem(
+                NativeContentItem.KIND_IMAGE, "Still", "https://www.erome.com/a/Abcd1234#img-still",
+                "", "", "", "", "01:02");
+        assertEquals("", GalleryDuration.label(photo));
+    }
+
+    @Test public void eromeTilesFollowDisplayedArtworkWithoutFlatteningOtherGalleries() {
+        String album = "https://www.erome.com/a/Abcd1234#clip";
+        assertEquals(1f, BunkrGalleryAdapter.initialTileAspect(
+                album, 16f / 9f, 0f, "https://s1.erome.com/1/Abcd1234/thumbs/clip.jpg"), 0.001f);
+        assertEquals(16f / 9f, BunkrGalleryAdapter.initialTileAspect(
+                album, 16f / 9f, 0f, "https://s1.erome.com/1/Abcd1234/clip.jpg"), 0.001f);
+        assertEquals(0.8f, BunkrGalleryAdapter.initialTileAspect(album, 0.8f, 0.8f, ""), 0.001f);
+        assertEquals(1f, BunkrGalleryAdapter.displayedTileAspect(album, 16f / 9f, 250, 250), 0.001f);
+        assertEquals(0.8f, BunkrGalleryAdapter.displayedTileAspect(album, 16f / 9f, 800, 1000), 0.001f);
+        assertEquals(16f / 9f, BunkrGalleryAdapter.displayedTileAspect(album, 9f / 16f, 1920, 1080), 0.001f);
+        assertEquals(2.8f, BunkrGalleryAdapter.displayedTileAspect(
+                "https://fapello.com/model/photo", 2.8f, 250, 250), 0.001f);
+        assertEquals(9f / 16f, BunkrGalleryAdapter.initialTileAspect(
+                "https://fapello.com/model/photo", 9f / 16f, 0f,
+                "https://fapello.com/thumbs/photo.jpg"), 0.001f);
     }
 }

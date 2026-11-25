@@ -204,7 +204,9 @@ final class EromePages {
             if (poster.isEmpty()) poster = EromeRepository.mediaUrl(video.attr("data-poster"));
         }
         if (poster.isEmpty()) poster = EromeRepository.stillFromVideo(source);
-        float aspect = video.className().contains("vjs-portrait") ? 9f / 16f : 0f;
+        String classes = video.className();
+        float aspect = classes.contains("vjs-portrait") ? 9f / 16f
+                : classes.contains("vjs-16-9") ? 16f / 9f : 0f;
         String duration = text(group.selectFirst("span.duration"));
         NativeContentItem item = new NativeContentItem(
                 NativeContentItem.KIND_MEDIA,
@@ -225,6 +227,11 @@ final class EromePages {
     private static NativeContentItem imageItem(Element image, String albumUrl, String title, String uploader) {
         String source = EromeRepository.mediaUrl(image.absUrl("src"));
         if (source.isEmpty()) source = EromeRepository.mediaUrl(image.attr("src"));
+        if ((source.isEmpty() || source.contains("/thumbs/")) && image.hasAttr("data-src")) {
+            String lazy = EromeRepository.mediaUrl(image.absUrl("data-src"));
+            if (lazy.isEmpty()) lazy = EromeRepository.mediaUrl(image.attr("data-src"));
+            if (!lazy.isEmpty() && !lazy.contains("/thumbs/")) source = lazy;
+        }
         if (source.isEmpty() || source.contains("/thumbs/")) return null;
         String token = token(source);
         if (token.isEmpty()) return null;
@@ -251,9 +258,13 @@ final class EromePages {
     private static String bestVideo(Element group) {
         String best = "";
         int bestRes = -1;
-        for (Element source : group.select("source[src]")) {
-            String url = source.absUrl("src");
+        for (Element source : group.select("source[src], source[data-src]")) {
+            String url = source.hasAttr("src") ? source.absUrl("src") : "";
             if (!EromeRepository.isDirectVideo(url)) url = EromeRepository.mediaUrl(source.attr("src"));
+            if (!EromeRepository.isDirectVideo(url) && source.hasAttr("data-src")) {
+                url = source.absUrl("data-src");
+                if (!EromeRepository.isDirectVideo(url)) url = EromeRepository.mediaUrl(source.attr("data-src"));
+            }
             if (!EromeRepository.isDirectVideo(url)) continue;
             int res = positive(source.attr("res"));
             Matcher named = RESOLUTION.matcher(path(url));
