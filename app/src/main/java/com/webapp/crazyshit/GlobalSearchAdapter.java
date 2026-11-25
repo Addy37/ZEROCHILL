@@ -41,6 +41,8 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     static final int SOURCE_REMOTE = 0;
     static final int SOURCE_LIBRARY = 1;
+    static final int SOURCE_ALBUM = 2;
+    static final int ALBUM_ROW_HEIGHT_DP = 136;
 
     private static final int TYPE_SECTION = 0;
     private static final int TYPE_RESULT = 1;
@@ -317,10 +319,16 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         result.boundUrl = item.url == null ? "" : item.url;
         result.entranceKey = itemKey(entry);
         fades.bind(result.card, result.entranceKey);
+        boolean album = entry.source == SOURCE_ALBUM && item.isSeries();
         LinearLayout.LayoutParams imageSize = (LinearLayout.LayoutParams) result.image.getLayoutParams();
-        imageSize.width = dp(result.image, item.isCreator() ? 72 : 100);
-        imageSize.height = dp(result.image, item.isCreator() ? 72 : 75);
+        imageSize.width = dp(result.image, album ? 96 : item.isCreator() ? 72 : 100);
+        imageSize.height = dp(result.image, album ? 120 : item.isCreator() ? 72 : 75);
         result.image.setLayoutParams(imageSize);
+        result.image.setScaleType(album ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
+        int rowHeight = dp(result.card, album ? ALBUM_ROW_HEIGHT_DP : 104);
+        result.card.setMinimumHeight(rowHeight);
+        ((View) result.image.getParent()).setMinimumHeight(rowHeight);
+        result.meta.setMaxLines(album ? 3 : 1);
         result.image.setBackground(BrowseUi.rounded(result.image.getContext(), Color.rgb(31, 31, 36), item.isCreator() ? 36 : 8));
         result.image.setClipToOutline(true);
         result.title.setText(item.title);
@@ -348,7 +356,8 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         } else if (item.isCreator()) {
             meta = new StringBuilder("Creator");
         } else if (item.isSeries()) {
-            meta = new StringBuilder(BunkrRepository.isAlbumUrl(item.url) ? "OnlyFap album" : "Series");
+            meta = new StringBuilder(BunkrRepository.isAlbumUrl(item.url) ? "OnlyFap album"
+                    : EromeRepository.isAlbumUrl(item.url) ? "Erome album" : "Series");
         } else if (item.isCategory()) {
             meta = new StringBuilder("Category");
         } else {
@@ -361,7 +370,12 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             meta.append("  •  ").append(item.uploader.trim());
         }
         if (item.description != null && !item.description.trim().isEmpty()) {
-            meta.append('\n').append(item.description.trim());
+            if (source == SOURCE_ALBUM && item.isSeries()) {
+                // Counts come first so a long uploader name cannot hide them.
+                meta.insert(0, item.description.trim() + "\n");
+            } else {
+                meta.append('\n').append(item.description.trim());
+            }
         }
         return meta.toString();
     }
@@ -442,16 +456,15 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             embedded = EmbeddedBrowseArtwork.get(image.getContext(), item.url);
         }
         if (embedded != null && embedded.length > 512) {
-            Glide.with(image)
+            com.bumptech.glide.RequestBuilder<Drawable> embeddedRequest = Glide.with(image)
                     .load(embedded)
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .skipMemoryCache(false)
                     .dontAnimate()
                     .transition(ThumbnailFades.thumbnail())
-                    .centerCrop()
                     .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
-                    .error(new ColorDrawable(Color.rgb(31, 31, 36)))
-                    .into(image);
+                    .error(new ColorDrawable(Color.rgb(31, 31, 36)));
+            applyCoverFit(embeddedRequest, image).into(image);
             return;
         }
 
@@ -470,7 +483,6 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
                 .transition(ThumbnailFades.thumbnail())
-                .centerCrop()
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
                 .error(new ColorDrawable(Color.rgb(31, 31, 36)));
         final String attemptedUrl = imageUrl;
@@ -503,7 +515,13 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 return false;
             }
         });
-        request.into(image);
+        applyCoverFit(request, image).into(image);
+    }
+
+    private static com.bumptech.glide.RequestBuilder<Drawable> applyCoverFit(
+            com.bumptech.glide.RequestBuilder<Drawable> request, ImageView image) {
+        return image.getScaleType() == ImageView.ScaleType.FIT_CENTER
+                ? request.fitCenter() : request.centerCrop();
     }
 
     private void notifyThumbnailChanged(String pageUrl) {
@@ -563,6 +581,8 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     private String imageReferer(NativeContentItem item) {
+        String eromeReferer = EromeRepository.imageReferer(item);
+        if (!eromeReferer.isEmpty()) return eromeReferer;
         String wikiFeetReferer = WikiFeetRepository.imageReferer(item);
         if (!wikiFeetReferer.isEmpty()) return wikiFeetReferer;
         return item == null ? null : item.url;

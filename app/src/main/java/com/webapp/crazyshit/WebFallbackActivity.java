@@ -257,7 +257,8 @@ public final class WebFallbackActivity extends Activity {
         if (host == null) return false;
         String lower = host.toLowerCase(java.util.Locale.US);
         return lower.equals("crazyshit.com") || lower.endsWith(".crazyshit.com") ||
-                lower.equals("efukt.com") || lower.endsWith(".efukt.com");
+                lower.equals("efukt.com") || lower.endsWith(".efukt.com") ||
+                lower.equals("erome.com") || lower.endsWith(".erome.com");
     }
 
     private String currentUrl() {

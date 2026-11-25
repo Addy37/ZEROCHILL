@@ -88,6 +88,7 @@ public class NativeFeedBrowserActivity extends Activity {
     public static final String SOURCE_BADDIEHUB = "baddiehub";
     public static final String SOURCE_XMEGADRIVE = "xmegadrive";
     public static final String SOURCE_BUNKR = "bunkr";
+    public static final String SOURCE_EROME = "erome";
 
     private static final int REQUEST_CREATOR_AVATAR_CROP = 4107;
 
@@ -98,6 +99,8 @@ public class NativeFeedBrowserActivity extends Activity {
     private final BaddieHubRepository baddieHubRepository = new BaddieHubRepository();
     private final XMegaDriveRepository xMegaDriveRepository = new XMegaDriveRepository();
     private final BunkrRepository bunkrRepository = new BunkrRepository();
+    private final EromeRepository eromeRepository = new EromeRepository();
+    private boolean eromeNeedsVerification;
     private final BunkrCreatorGalleryRepository creatorGalleryRepository =
             new BunkrCreatorGalleryRepository();
     private final MemeRepository memeRepository = new MemeRepository();
@@ -148,6 +151,14 @@ public class NativeFeedBrowserActivity extends Activity {
     private final ArrayList<NativeContentItem> showEpisodes = new ArrayList<>();
     private final ArrayList<NativeContentItem> bunkrAlbumItems = new ArrayList<>();
     private TextView albumImagesAction;
+    private TextView albumMediaHeading;
+    private ImageView albumCover;
+    private TextView albumCounts;
+    private String albumUploader = "";
+    private LinearLayout albumMediaFilters;
+    private final TextView[] albumMediaButtons = new TextView[3];
+    private BunkrGalleryAdapter albumGridAdapter;
+    private int albumMediaFilter = AlbumMediaPresentation.ALL;
     private TextView episodeRangeAction;
     private TextView episodePageSummary;
     private TextView episodePrevious;
@@ -213,6 +224,7 @@ public class NativeFeedBrowserActivity extends Activity {
         intent.putExtra(EXTRA_SHOW_DETAILS, true);
         intent.putExtra(EXTRA_SHOW_IMAGE_URL, item.imageUrl);
         intent.putExtra(EXTRA_SHOW_DESCRIPTION, item.description);
+        intent.putExtra("album_uploader", item.uploader);
         intent.putExtra(EXTRA_SHOW_KIND, item.kind);
         return intent;
     }
@@ -398,6 +410,7 @@ public class NativeFeedBrowserActivity extends Activity {
         showDetailsMode = getIntent().getBooleanExtra(EXTRA_SHOW_DETAILS, false);
         showImageUrl = value(getIntent().getStringExtra(EXTRA_SHOW_IMAGE_URL), "");
         showDescription = value(getIntent().getStringExtra(EXTRA_SHOW_DESCRIPTION), "");
+        albumUploader = value(getIntent().getStringExtra("album_uploader"), "");
         showKind = value(getIntent().getStringExtra(EXTRA_SHOW_KIND), NativeContentItem.KIND_SERIES);
         ArrayList<String> freshUrls =
                 getIntent().getStringArrayListExtra(EXTRA_NOTIFICATION_FRESH_URLS);
@@ -424,13 +437,19 @@ public class NativeFeedBrowserActivity extends Activity {
             baseUrl = PawchiveRepository.isProfile(fapelloProfileUrl)
                     ? fapelloProfileUrl : BunkrRepository.searchUrl(creatorQuery);
         } else if (BunkrRepository.isAlbumUrl(baseUrl)) source = SOURCE_BUNKR;
+        else if (EromeRepository.isAlbumUrl(baseUrl)) source = SOURCE_EROME;
         else if (WebVideoSourceRepository.isKaoticUrl(baseUrl)) source = SOURCE_KAOTIC;
         else if (BaddieHubRepository.isBaddieHubUrl(baseUrl)) source = SOURCE_BADDIEHUB;
         else if (XMegaDriveRepository.isCategoryUrl(baseUrl)) source = SOURCE_XMEGADRIVE;
         else if (EfuktRepository.isEfuktUrl(baseUrl)) source = SOURCE_EFUKT;
         // Albums share Shows chrome; creator galleries retain their existing mixed grid.
-        if (isBunkrAlbum()) showDetailsMode = true;
+        if (isMixedMediaAlbum()) showDetailsMode = true;
         restoredBrowserState = state;
+        if (state != null) {
+            albumMediaFilter = AlbumMediaPresentation.normalize(
+                    state.getInt("album_media_filter", AlbumMediaPresentation.ALL));
+            if (isEromeAlbum()) creatorGalleryColumns = state.getInt("album_columns", 0);
+        }
         episodeRangeStart = state == null
                 ? 0
                 : Math.max(0, state.getInt("episode_range_start", 0));
@@ -519,7 +538,7 @@ public class NativeFeedBrowserActivity extends Activity {
         back.setOnClickListener(v -> finishToShitTok());
         top.addView(back, new LinearLayout.LayoutParams(dp(48), actionHeight));
 
-        TextView heading = text(isCreatorGallery() ? "OnlyFap" : showDetailsMode ? "Shows" : title, 20, Color.WHITE);
+        TextView heading = text(isCreatorGallery() ? "OnlyFap" : isEromeAlbum() ? "Album" : showDetailsMode ? "Shows" : title, 20, Color.WHITE);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
         heading.setSingleLine(true);
         heading.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -538,7 +557,7 @@ public class NativeFeedBrowserActivity extends Activity {
         options.setContentDescription("Feed options");
         options.setOnClickListener(this::showOptions);
         if (!showDetailsMode && !isCreatorGallery()) top.addView(options, new LinearLayout.LayoutParams(dp(48), actionHeight));
-        if (!showDetailsMode && !isCreatorGallery()) shell.addView(top, new LinearLayout.LayoutParams(-1, dp(isCreatorGallery() ? 56 : 64)));
+        if ((!showDetailsMode || isEromeAlbum()) && !isCreatorGallery()) shell.addView(top, new LinearLayout.LayoutParams(-1, dp(isCreatorGallery() ? 56 : 64)));
 
         FrameLayout body = new FrameLayout(this);
         if (isCreatorGallery()) {
@@ -628,6 +647,9 @@ public class NativeFeedBrowserActivity extends Activity {
                     new CoordinatorLayout.LayoutParams(-1, -1);
             bodyParams.setBehavior(new AppBarLayout.ScrollingViewBehavior());
             coordinator.addView(body, bodyParams);
+        } else if (isEromeAlbum()) {
+            shell.addView(buildCompactAlbumHeader(), new LinearLayout.LayoutParams(-1, -2));
+            shell.addView(body, new LinearLayout.LayoutParams(-1, 0, 1f));
         } else if (showDetailsMode) {
             CoordinatorLayout coordinator = new CoordinatorLayout(this);
             coordinator.setBackgroundColor(Color.BLACK);
@@ -681,7 +703,7 @@ public class NativeFeedBrowserActivity extends Activity {
         refresh = new ZeroChillRefreshLayout(this);
         refresh.setColorSchemeColors(AppearanceTheme.accent(this));
         refresh.setOnRefreshListener(this::reload);
-        if (showDetailsMode) {
+        if (showDetailsMode && !isEromeAlbum()) {
             LinearLayout episodeBar = new LinearLayout(this);
             episodeBar.setOrientation(LinearLayout.HORIZONTAL);
             episodeBar.setGravity(Gravity.CENTER_VERTICAL);
@@ -695,7 +717,7 @@ public class NativeFeedBrowserActivity extends Activity {
             section.setGravity(Gravity.CENTER_VERTICAL);
             episodeBar.addView(section, new LinearLayout.LayoutParams(0, -1, 1f));
 
-            if (isBunkrAlbum()) {
+            if (isMixedMediaAlbum() && !isEromeAlbum()) {
                 albumImagesAction = text("Pictures", 12, AppearanceTheme.accent(this));
                 albumImagesAction.setGravity(Gravity.CENTER);
                 styleEpisodeControl(albumImagesAction, false);
@@ -715,7 +737,6 @@ public class NativeFeedBrowserActivity extends Activity {
             ZeroChillMotion.installPressFeedback(episodeRangeAction);
             episodeBar.addView(episodeRangeAction, new LinearLayout.LayoutParams(-2, dp(48)));
             showsEpisodeBar = episodeBar;
-
             body.addView(refresh, new FrameLayout.LayoutParams(-1, -1));
             LinearLayout episodePager = new LinearLayout(this);
             episodePager.setOrientation(LinearLayout.VERTICAL);
@@ -761,7 +782,7 @@ public class NativeFeedBrowserActivity extends Activity {
             body.addView(refresh, new FrameLayout.LayoutParams(-1, -1));
         }
 
-        if (isBunkr()) {
+        if (usesAlbumSession()) {
             if (bunkrGallerySessionId == null || bunkrGallerySessionId.isEmpty()) {
                 String warmId = isCreatorGallery()
                         ? BunkrGallerySessionStore.recentCreator(creatorGallerySessionKey) : null;
@@ -784,7 +805,15 @@ public class NativeFeedBrowserActivity extends Activity {
                 );
             }
             if (isCreatorGallery()) buildCreatorTabs();
-            else if (!showDetailsMode) {
+            else if (isEromeAlbum()) {
+                recycler = createRecycler();
+                albumGridAdapter = createBunkrGalleryAdapter(true);
+                recycler.setAdapter(albumGridAdapter);
+                applyCreatorGalleryLayout(recycler);
+                attachCreatorGalleryPinch(recycler);
+                attachGalleryScrollListener(recycler, albumGridAdapter);
+                refresh.addView(recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
+            } else if (!showDetailsMode) {
                 recycler = createRecycler();
                 bunkrGalleryAdapter = createBunkrGalleryAdapter(false);
                 recycler.setAdapter(bunkrGalleryAdapter);
@@ -792,7 +821,7 @@ public class NativeFeedBrowserActivity extends Activity {
                 attachGalleryScrollListener(recycler, bunkrGalleryAdapter);
             }
         }
-        if (!isBunkr() || showDetailsMode) {
+        if (!isEromeAlbum() && (!isBunkr() || showDetailsMode)) {
             recycler = createRecycler();
             adapter = new NativeFeedAdapter(this, new NativeFeedAdapter.Listener() {
                 @Override
@@ -830,8 +859,9 @@ public class NativeFeedBrowserActivity extends Activity {
             adapter.setEpisodePresentation(showDetailsMode);
             if (showDetailsMode) {
                 recycler.setPadding(0, 0, 0, dp(18));
-                recycler.setAdapter(new ConcatAdapter(new ConcatAdapter.Config.Builder()
-                        .setStableIdMode(ConcatAdapter.Config.StableIdMode.ISOLATED_STABLE_IDS).build(),
+                ConcatAdapter.Config config = new ConcatAdapter.Config.Builder()
+                        .setStableIdMode(ConcatAdapter.Config.StableIdMode.ISOLATED_STABLE_IDS).build();
+                recycler.setAdapter(new ConcatAdapter(config,
                         new SingleViewAdapter(showsEpisodeBar), adapter,
                         new SingleViewAdapter(showsEpisodePager)));
             } else recycler.setAdapter(adapter);
@@ -858,6 +888,10 @@ public class NativeFeedBrowserActivity extends Activity {
         empty.setPadding(dp(28), dp(28), dp(28), dp(28));
         empty.setVisibility(View.GONE);
         empty.setOnClickListener(v -> {
+            if (eromeNeedsVerification && isEromeAlbum()) {
+                EromeRepository.openForVerification(this, baseUrl);
+                return;
+            }
             if (isCreatorGallery()) {
                 if (!endReached && currentPage > 0) load(true);
                 else if (itemCount() == 0) reload();
@@ -868,7 +902,7 @@ public class NativeFeedBrowserActivity extends Activity {
         body.addView(empty, new FrameLayout.LayoutParams(-1, -1));
 
         View root = isCreatorGallery() ? wrapCreatorGalleryChrome(shell, top)
-                : showDetailsMode ? wrapShowDetailsOled(shell, top) : shell;
+                : showDetailsMode && !isEromeAlbum() ? wrapShowDetailsOled(shell, top) : shell;
         if (isCreatorGallery() && CreatorGalleryTransition.ownsRevealWindow(this)) {
             creatorGalleryReveal = new CreatorGalleryReveal(this, root,
                     CreatorGalleryTransition.shouldAnimate(this, restoredBrowserState != null));
@@ -896,7 +930,7 @@ public class NativeFeedBrowserActivity extends Activity {
         return root;
     }
 
-    boolean ownsShowsDetailChrome() { return showDetailsMode; }
+    boolean ownsShowsDetailChrome() { return showDetailsMode && !isEromeAlbum(); }
 
     private View wrapShowDetailsOled(LinearLayout shell, View toolbar) {
         View content = shell.getChildAt(0);
@@ -1428,7 +1462,7 @@ public class NativeFeedBrowserActivity extends Activity {
         endReached = false;
         episodePrefetchFailedPage = -1;
         empty.setVisibility(View.GONE);
-        if (isBunkr()) {
+        if (usesAlbumSession()) {
             replaceBunkrItems(new ArrayList<>());
             bunkrGallerySessionId = isCreatorGallery()
                     ? BunkrGallerySessionStore.createCreator(
@@ -1512,6 +1546,8 @@ public class NativeFeedBrowserActivity extends Activity {
                             }
                     );
                     result = creatorBatch.items;
+                } else if (isEromeAlbum()) {
+                    result = eromeRepository.fetchAlbum(this, baseUrl);
                 } else if (isBunkr()) {
                     result = bunkrRepository.fetchAlbum(this, baseUrl, requestPage);
                 } else if (isEfukt()) {
@@ -1534,11 +1570,12 @@ public class NativeFeedBrowserActivity extends Activity {
                 runOnUiThread(() -> {
                     if (requestGeneration != generation || isFinishing() || isDestroyed()) return;
                     loading = false;
+                    eromeNeedsVerification = false;
                     if (showDetailsMode) episodePrefetchFailedPage = -1;
                     progress.setVisibility(View.GONE);
                     if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.GONE);
                     refresh.setRefreshing(false);
-                    int before = isBunkrAlbum() ? bunkrAlbumItems.size() : itemCount();
+                    int before = isMixedMediaAlbum() ? bunkrAlbumItems.size() : itemCount();
                     BunkrGallerySessionStore.Snapshot currentCreator = isCreatorGallery()
                             ? BunkrGallerySessionStore.snapshot(requestSession) : null;
                     if (currentCreator != null) {
@@ -1546,7 +1583,7 @@ public class NativeFeedBrowserActivity extends Activity {
                             replaceBunkrItems(currentCreator.items);
                         }
                         currentPage = currentCreator.currentPage;
-                    } else if (isBunkr()) {
+                    } else if (usesAlbumSession()) {
                         if (append) appendBunkrItems(result);
                         else replaceBunkrItems(result);
                     } else if (showDetailsMode) {
@@ -1558,17 +1595,19 @@ public class NativeFeedBrowserActivity extends Activity {
                     } else {
                         adapter.replace(result);
                     }
-                    int added = (isBunkrAlbum() ? bunkrAlbumItems.size() : itemCount()) - before;
+                    int added = (isMixedMediaAlbum() ? bunkrAlbumItems.size() : itemCount()) - before;
                     if (currentCreator == null && !result.isEmpty() && (!append || added > 0)) currentPage = requestPage;
                     if (isCreatorGallery()) {
                         endReached = currentCreator != null ? currentCreator.endReached
                                 : completedCreatorBatch == null || completedCreatorBatch.endReached;
+                    } else if (isEromeAlbum()) {
+                        endReached = true;
                     } else if (result.isEmpty() || (append && added == 0) || isEfukt()) {
                         endReached = true;
                     }
                     updateEpisodeRangeUi();
                     updateShowDetailsHeader();
-                    if (isBunkr() && !isCreatorGallery()) {
+                    if (usesAlbumSession() && !isCreatorGallery()) {
                         if (append) {
                             BunkrGallerySessionStore.append(
                                     bunkrGallerySessionId,
@@ -1593,9 +1632,11 @@ public class NativeFeedBrowserActivity extends Activity {
                         showFapelloFailure(completedCreatorBatch == null
                                 ? null
                                 : completedCreatorBatch.fapelloFailure);
-                    } else if (itemCount() == 0 && (!isBunkrAlbum() || bunkrAlbumItems.isEmpty())) {
+                    } else if (itemCount() == 0 && (!isMixedMediaAlbum() || bunkrAlbumItems.isEmpty())) {
                         empty.setText(isCreatorGallery()
                                 ? "No matching pictures or videos loaded.\nTap to load more."
+                                : isEromeAlbum()
+                                ? "No supported pictures or videos were found.\nTap to try again."
                                 : isBunkr()
                                 ? "No supported pictures or videos were found.\nTap to open the album."
                                 : showDetailsMode ? "Couldn't load episodes.\nTap to try again."
@@ -1629,10 +1670,16 @@ public class NativeFeedBrowserActivity extends Activity {
                             ).show();
                         }
                     } else if (itemCount() == 0) {
-                        empty.setText(isCreatorGallery()
+                        if (isEromeAlbum() && EromePages.AccessException.find(e) != null) {
+                            eromeNeedsVerification = true;
+                            empty.setText("Erome asked for verification.\nTap to open the album in the browser, then try again.");
+                        } else {
+                            eromeNeedsVerification = false;
+                            empty.setText(isCreatorGallery()
                                 ? "Couldn't build this creator gallery.\nTap to try again."
                                 : showDetailsMode ? "Couldn't load episodes.\nTap to try again."
                                 : "Couldn't load this feed.\nTap to open the website.");
+                        }
                         empty.setVisibility(View.VISIBLE);
                     } else {
                         ZeroChillToast.makeText(this, "Couldn't load more right now.", ZeroChillToast.LENGTH_SHORT).show();
@@ -1665,7 +1712,7 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private void replaceBunkrItems(List<NativeContentItem> items) {
-        if (isBunkrAlbum()) {
+        if (isMixedMediaAlbum()) {
             bunkrAlbumItems.clear();
             episodeRangeStart = 0;
             appendBunkrItems(items);
@@ -1695,7 +1742,7 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private void appendBunkrItems(List<NativeContentItem> items) {
-        if (isBunkrAlbum()) {
+        if (isMixedMediaAlbum()) {
             LinkedHashSet<String> seen = new LinkedHashSet<>();
             for (NativeContentItem item : bunkrAlbumItems) seen.add(item.url);
             if (items != null) for (NativeContentItem item : items) {
@@ -1703,6 +1750,7 @@ public class NativeFeedBrowserActivity extends Activity {
                         && !item.url.isEmpty() && seen.add(item.url)) bunkrAlbumItems.add(item);
             }
             replaceShowEpisodes(bunkrAlbumItems);
+            updateAlbumMediaPresentation();
             applyEpisodeRange(false, -1);
             updateShowDetailsHeader();
             return;
@@ -1891,7 +1939,7 @@ public class NativeFeedBrowserActivity extends Activity {
             }
             ShowsWatchSession.attach(intent, watchItems,
                     NativeContentItem.KIND_SERIES.equals(showKind), title);
-            if (isBunkrAlbum()) ShowsWatchSession.attachAlbum(intent, bunkrGallerySessionId);
+            if (isMixedMediaAlbum()) ShowsWatchSession.attachAlbum(intent, bunkrGallerySessionId);
             ShowsPlaybackOrientationPolicy.requireManualLandscapeFullscreen(intent);
             if (item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
                 intent.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, item.imageUrl);
@@ -2064,10 +2112,10 @@ public class NativeFeedBrowserActivity extends Activity {
             NativeContentItem item,
             View transitionAnchor
     ) {
-        if (item == null || (!isBunkrAlbum() && bunkrGalleryAdapter == null)) return;
+        if (item == null || (!isMixedMediaAlbum() && bunkrGalleryAdapter == null)) return;
         if (!isCreatorGallery()) BunkrGallerySessionStore.replace(
                 bunkrGallerySessionId,
-                isBunkrAlbum() ? bunkrAlbumItems : bunkrGalleryAdapter.snapshot(),
+                isMixedMediaAlbum() ? bunkrAlbumItems : bunkrGalleryAdapter.snapshot(),
                 currentPage,
                 endReached
         );
@@ -2086,7 +2134,8 @@ public class NativeFeedBrowserActivity extends Activity {
         intent.putStringArrayListExtra(EXTRA_CREATOR_ALIASES, creatorAliases);
         intent.putExtra(
                 BunkrGalleryActivity.EXTRA_MEDIA_FILTER,
-                isBunkrAlbum() ? BunkrGalleryActivity.FILTER_PICTURES
+                isEromeAlbum() ? AlbumMediaPresentation.viewerFilter(albumMediaFilter)
+                        : isMixedMediaAlbum() ? BunkrGalleryActivity.FILTER_PICTURES
                         : !isCreatorGallery() || activeCreatorTab() == CREATOR_TAB_ALL
                         ? BunkrGalleryActivity.FILTER_ALL
                         : activeCreatorTab() == CREATOR_TAB_PICTURES
@@ -2371,9 +2420,15 @@ public class NativeFeedBrowserActivity extends Activity {
             if (active != null) recycler = active;
             return;
         }
+        if (isEromeAlbum() && albumGridAdapter != null) {
+            applyCreatorGalleryLayout(recycler);
+            return;
+        }
         if (recycler == null || (adapter == null && bunkrGalleryAdapter == null)) return;
         if (showDetailsMode) {
-            if (recycler.getLayoutManager() == null) recycler.setLayoutManager(new LinearLayoutManager(this));
+            if (recycler.getLayoutManager() == null) {
+                recycler.setLayoutManager(new LinearLayoutManager(this));
+            }
             return;
         }
         RecyclerView.LayoutManager old = recycler.getLayoutManager();
@@ -2467,7 +2522,8 @@ public class NativeFeedBrowserActivity extends Activity {
                     creatorGalleryMaximumColumns()
             );
         }
-        creatorGalleryColumns = savedCreatorGalleryColumnCount();
+        creatorGalleryColumns = isEromeAlbum()
+                ? defaultCreatorGalleryColumnCount() : savedCreatorGalleryColumnCount();
         return creatorGalleryColumns;
     }
 
@@ -2513,6 +2569,16 @@ public class NativeFeedBrowserActivity extends Activity {
         );
         if (next == creatorGalleryColumns) return;
         creatorGalleryColumns = next;
+        if (isEromeAlbum()) {
+            if (recycler != null) {
+                updateCreatorGalleryOverlayDensity(recycler, next);
+                RecyclerView.LayoutManager manager = recycler.getLayoutManager();
+                if (manager instanceof StaggeredGridLayoutManager) {
+                    ((StaggeredGridLayoutManager) manager).setSpanCount(next);
+                }
+            }
+            return;
+        }
         getSharedPreferences("app_prefs", MODE_PRIVATE)
                 .edit()
                 .putInt(creatorGalleryPreferenceKey(), next)
@@ -2846,6 +2912,18 @@ public class NativeFeedBrowserActivity extends Activity {
         return !isCreatorGallery() && BunkrRepository.isAlbumUrl(baseUrl);
     }
 
+    private boolean isEromeAlbum() {
+        return !isCreatorGallery() && EromeRepository.isAlbumUrl(baseUrl);
+    }
+
+    private boolean isMixedMediaAlbum() {
+        return isBunkrAlbum() || isEromeAlbum();
+    }
+
+    private boolean usesAlbumSession() {
+        return isBunkr() || isEromeAlbum();
+    }
+
     private boolean isKaotic() {
         return SOURCE_KAOTIC.equals(source) || WebVideoSourceRepository.isKaoticUrl(baseUrl);
     }
@@ -2867,6 +2945,7 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private String showSourceLabel() {
+        if (isEromeAlbum()) return "EROME ALBUM";
         if (isBunkrAlbum()) return "BUNKR ALBUM";
         if (isBaddieHub()) return "BADDIEHUB CATEGORY";
         if (isXMegaDrive()) return "XMEGADRIVE CATEGORY";
@@ -2916,7 +2995,7 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private void maybePrefetchShowEpisodes() {
-        if (!showDetailsMode || !showsBrowserResumed || restoringBrowser || loading || endReached
+        if (isEromeAlbum() || !showDetailsMode || !showsBrowserResumed || restoringBrowser || loading || endReached
                 || isFinishing() || isDestroyed() || currentPage <= 0
                 || episodePrefetchFailedPage == currentPage + 1
                 || !ShowsEpisodeRanges.nearLoadedEnd(episodeRangeStart, showEpisodes.size())) return;
@@ -2938,8 +3017,117 @@ public class NativeFeedBrowserActivity extends Activity {
         }
         for (NativeContentItem item : items) {
             if (item == null || item.isSection() || item.url == null || item.url.isEmpty()
-                    || (isBunkrAlbum() && !ShowsEpisodePlayback.playable(item))) continue;
+                    || (isMixedMediaAlbum() && !ShowsEpisodePlayback.playable(item))) continue;
             if (seen.add(item.url)) showEpisodes.add(item);
+        }
+    }
+
+    private View buildCompactAlbumHeader() {
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setPadding(dp(12), 0, dp(12), dp(8));
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(8), dp(8), dp(8), dp(8));
+        row.setBackground(BrowseUi.rounded(this, AppearanceTheme.surface(this), 18));
+        albumCover = new ImageView(this);
+        albumCover.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        albumCover.setBackground(BrowseUi.rounded(this, Color.rgb(25, 27, 31), 10));
+        albumCover.setClipToOutline(true);
+        row.addView(albumCover, new LinearLayout.LayoutParams(dp(88), dp(100)));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(12), 0, 0, 0);
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
+        albumMediaHeading = text("ALBUM", 11, AppearanceTheme.accent(this));
+        albumMediaHeading.setTypeface(null, android.graphics.Typeface.BOLD);
+        copy.addView(albumMediaHeading);
+        TextView name = text(title, 17, Color.WHITE);
+        name.setTypeface(null, android.graphics.Typeface.BOLD);
+        name.setMaxLines(3);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        copy.addView(name);
+        if (!albumUploader.isEmpty()) {
+            TextView uploader = text(albumUploader, 12, Color.rgb(180, 180, 190));
+            uploader.setSingleLine(true);
+            uploader.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            copy.addView(uploader);
+        }
+        albumCounts = text(showDescription, 12, Color.rgb(180, 180, 190));
+        albumCounts.setMaxLines(2);
+        copy.addView(albumCounts);
+        header.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        loadCompactAlbumCover(showImageUrl);
+        albumMediaFilters = new LinearLayout(this);
+        albumMediaFilters.setOrientation(LinearLayout.HORIZONTAL);
+        albumMediaFilters.setPadding(0, dp(8), 0, 0);
+        String[] labels = {"All", "Pictures", "Videos"};
+        for (int i = 0; i < labels.length; i++) {
+            final int filter = i;
+            TextView button = text(labels[i], 12, AppearanceTheme.accent(this));
+            button.setGravity(Gravity.CENTER);
+            button.setTypeface(null, android.graphics.Typeface.BOLD);
+            styleEpisodeControl(button, i == albumMediaFilter);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1f);
+            if (i > 0) params.leftMargin = dp(6);
+            albumMediaFilters.addView(button, params);
+            albumMediaButtons[i] = button;
+            button.setOnClickListener(v -> selectAlbumMediaFilter(filter));
+        }
+        albumMediaFilters.setVisibility(View.GONE);
+        header.addView(albumMediaFilters, new LinearLayout.LayoutParams(-1, -2));
+        return header;
+    }
+
+    private void loadCompactAlbumCover(String url) {
+        if (albumCover == null || url == null || url.isEmpty() || url.equals(albumCover.getTag())) return;
+        albumCover.setTag(url);
+        // Use the same album artwork loading policy as the existing details header.
+        com.bumptech.glide.load.model.LazyHeaders headers = new com.bumptech.glide.load.model.LazyHeaders.Builder()
+                .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Mobile Safari/537.36")
+                .addHeader("Referer", baseUrl).build();
+        com.bumptech.glide.Glide.with(albumCover)
+                .load(new com.bumptech.glide.load.model.GlideUrl(url, headers))
+                .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.ALL)
+                .fitCenter().dontAnimate().transition(ThumbnailFades.thumbnail()).into(albumCover);
+    }
+
+    private void selectAlbumMediaFilter(int filter) {
+        if (albumGridAdapter == null || albumMediaFilter == filter) return;
+        albumMediaFilter = AlbumMediaPresentation.normalize(filter);
+        updateAlbumMediaPresentation();
+        applyEpisodeRange(false, -1);
+        if (recycler != null) recycler.scrollToPosition(0);
+    }
+
+    private void updateAlbumMediaPresentation() {
+        if (albumGridAdapter == null) return;
+        List<NativeContentItem> pictures = AlbumMediaPresentation.pictures(bunkrAlbumItems);
+        int videos = showEpisodes.size();
+        if (!bunkrAlbumItems.isEmpty()) {
+            albumMediaFilter = AlbumMediaPresentation.availableFilter(
+                    albumMediaFilter, pictures.size(), videos);
+        }
+        List<NativeContentItem> visible = AlbumMediaPresentation.visible(bunkrAlbumItems, albumMediaFilter);
+        if (!albumGridAdapter.snapshot().equals(visible)) albumGridAdapter.replace(visible);
+        if (albumCounts != null) albumCounts.setText(
+                AlbumMediaPresentation.countLabel(pictures.size(), videos));
+        if (albumMediaHeading != null) albumMediaHeading.setText(
+                pictures.isEmpty() ? "VIDEOS" : videos == 0 ? "PICTURES" : "ALBUM");
+        if (albumCover != null && showImageUrl.isEmpty() && !bunkrAlbumItems.isEmpty())
+            loadCompactAlbumCover(bunkrAlbumItems.get(0).imageUrl);
+        if (albumMediaFilters != null) {
+            albumMediaFilters.setVisibility(!pictures.isEmpty() && videos > 0 ? View.VISIBLE : View.GONE);
+            String[] labels = {"All " + (pictures.size() + videos),
+                    "Pictures " + pictures.size(), "Videos " + videos};
+            for (int i = 0; i < albumMediaButtons.length; i++) {
+                TextView button = albumMediaButtons[i];
+                button.setText(labels[i]);
+                button.setSelected(i == albumMediaFilter);
+                button.setTextColor(i == albumMediaFilter
+                        ? AppearanceTheme.accent(this) : Color.WHITE);
+                button.setContentDescription(labels[i] + (i == albumMediaFilter ? ", selected" : ""));
+            }
         }
     }
 
@@ -3002,14 +3190,14 @@ public class NativeFeedBrowserActivity extends Activity {
             );
         }
         if (episodePageSummary != null) {
-            episodePageSummary.setText(total == 0 ? (isBunkrAlbum() ? "No videos loaded yet" : "") :
+            episodePageSummary.setText(total == 0 ? (isMixedMediaAlbum() ? "No videos loaded yet" : "") :
                     ShowsEpisodeRanges.label(episodeRangeStart, total) + " of " + total);
             boolean previous = ShowsEpisodeRanges.hasPrevious(episodeRangeStart, total);
             episodePrevious.setEnabled(previous);
             episodePrevious.setVisibility(previous ? View.VISIBLE : View.INVISIBLE);
             episodeNext.setVisibility(ShowsEpisodeRanges.hasNext(episodeRangeStart, total)
                     ? View.VISIBLE : View.INVISIBLE);
-            episodeLoadMore.setVisibility((total > 0 || (isBunkrAlbum() && !bunkrAlbumItems.isEmpty())) && !endReached &&
+            episodeLoadMore.setVisibility((total > 0 || (isMixedMediaAlbum() && !bunkrAlbumItems.isEmpty())) && !endReached &&
                     !ShowsEpisodeRanges.hasNext(episodeRangeStart, total)
                     ? View.VISIBLE : View.GONE);
             episodeLoadMore.setText(loading ? "Loading more…"
@@ -3019,7 +3207,7 @@ public class NativeFeedBrowserActivity extends Activity {
             if (episodeEnd != null) episodeEnd.setVisibility(total > 0 && endReached
                     && !ShowsEpisodeRanges.hasNext(episodeRangeStart, total) ? View.VISIBLE : View.GONE);
             if (showsEpisodePager != null) showsEpisodePager.setVisibility(
-                    total > 0 || (isBunkrAlbum() && !bunkrAlbumItems.isEmpty()) ? View.VISIBLE : View.GONE);
+                    total > 0 || (isMixedMediaAlbum() && !bunkrAlbumItems.isEmpty()) ? View.VISIBLE : View.GONE);
         }
 
     }
@@ -3048,7 +3236,7 @@ public class NativeFeedBrowserActivity extends Activity {
         if (showDetailsHeader == null || adapter == null) return;
         List<NativeContentItem> items = showEpisodeSnapshot();
         showDetailsHeader.setItemCount((int) items.stream().filter(ShowsEpisodePlayback::playable).count());
-        if (isBunkrAlbum()) {
+        if (isMixedMediaAlbum()) {
             int images = (int) bunkrAlbumItems.stream().filter(NativeContentItem::isImage).count();
             showDetailsHeader.setAlbumItemCount(bunkrAlbumItems.size(), items.size(), images);
             if (albumImagesAction != null) {
@@ -3077,6 +3265,7 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private int itemCount() {
+        if (isEromeAlbum()) return bunkrAlbumItems.size();
         if (showDetailsMode) return showEpisodes.size();
         return isBunkr()
                 ? (bunkrGalleryAdapter == null ? 0 : bunkrGalleryAdapter.getItemCount())
@@ -3085,7 +3274,7 @@ public class NativeFeedBrowserActivity extends Activity {
 
     private void persistBrowser() {
         if (restoringBrowser) return;
-        if (isBunkr()) { BunkrGallerySessionStore.persist(this, bunkrGallerySessionId); return; }
+        if (usesAlbumSession()) { BunkrGallerySessionStore.persist(this, bunkrGallerySessionId); return; }
         try {
             List<NativeContentItem> persistedItems = showDetailsMode
                     ? new ArrayList<>(showEpisodes)
@@ -3099,9 +3288,9 @@ public class NativeFeedBrowserActivity extends Activity {
     private void restoreBrowser() {
         restoringBrowser = true;
         io.execute(() -> {
-            BunkrGallerySessionStore.Snapshot gallery = isBunkr()
+            BunkrGallerySessionStore.Snapshot gallery = usesAlbumSession()
                     ? BunkrGallerySessionStore.restore(this, bunkrGallerySessionId) : null;
-            org.json.JSONObject feed = isBunkr() ? null : ScreenSnapshotStore.read(this, browserSnapshot);
+            org.json.JSONObject feed = usesAlbumSession() ? null : ScreenSnapshotStore.read(this, browserSnapshot);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 restoringBrowser = false;
@@ -3113,13 +3302,19 @@ public class NativeFeedBrowserActivity extends Activity {
                 if (gallery != null) {
                     int restoredRange = episodeRangeStart;
                     replaceBunkrItems(gallery.items);
-                    if (isBunkrAlbum()) {
+                    if (isMixedMediaAlbum()) {
                         episodeRangeStart = restoredRange;
                         applyEpisodeRange(false, -1);
                     }
                     currentPage = gallery.currentPage; endReached = gallery.endReached;
                     updateEpisodeRangeUi();
                     updateShowDetailsHeader();
+                    if (isEromeAlbum() && EromeRepository.missingPoster(bunkrAlbumItems)) {
+                        // Older snapshots stored lazy videos with no poster. Re-read the album.
+                        endReached = false;
+                        load(false);
+                        return;
+                    }
                     if (gallery.items.isEmpty() && !endReached) { load(false); return; }
                 } else if (feed != null) {
                     List<NativeContentItem> restoredItems =
@@ -3134,7 +3329,7 @@ public class NativeFeedBrowserActivity extends Activity {
                     updateEpisodeRangeUi();
                     updateShowDetailsHeader();
                 } else {
-                    if (isBunkr()) {
+                    if (usesAlbumSession()) {
                         bunkrGallerySessionId = isCreatorGallery()
                                 ? BunkrGallerySessionStore.createCreator(
                                         title,
@@ -3191,6 +3386,10 @@ public class NativeFeedBrowserActivity extends Activity {
         state.putString("browser_snapshot", browserSnapshot);
         state.putString("gallery_session", bunkrGallerySessionId);
         state.putInt("episode_range_start", episodeRangeStart);
+        if (isEromeAlbum()) {
+            state.putInt("album_media_filter", albumMediaFilter);
+            state.putInt("album_columns", creatorGalleryColumnCount());
+        }
         if (showDetailsAppBar != null) {
             AppBarLayout.Behavior behavior = (AppBarLayout.Behavior)
                     ((CoordinatorLayout.LayoutParams) showDetailsAppBar.getLayoutParams()).getBehavior();
@@ -3231,14 +3430,14 @@ public class NativeFeedBrowserActivity extends Activity {
         if (showDetailsHeader != null) showDetailsHeader.setActive(true);
         updateShowDetailsHeader();
         if (creatorProfile != null) { creatorProfile.refresh(); creatorProfile.setActive(true); }
-        if (isBunkrAlbum()) {
+        if (isMixedMediaAlbum()) {
             BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(bunkrGallerySessionId);
             if (snapshot != null) {
                 appendBunkrItems(snapshot.items);
                 currentPage = snapshot.currentPage;
                 endReached = snapshot.endReached;
             }
-            adapter.refreshPlaybackState();
+            if (adapter != null) adapter.refreshPlaybackState();
             updateEpisodeRangeUi();
             updateShowDetailsHeader();
         } else if (isBunkr() && bunkrGalleryAdapter != null) {
@@ -3286,6 +3485,7 @@ public class NativeFeedBrowserActivity extends Activity {
             ShitTokTransitionSnapshotStore.remove(shitTokReturnTransition);
         }
         if (adapter != null) adapter.close();
+        if (albumCover != null) com.bumptech.glide.Glide.with(albumCover).clear(albumCover);
         if (creatorTabsMediator != null) creatorTabsMediator.detach();
         io.shutdownNow();
         super.onDestroy();
@@ -3293,6 +3493,7 @@ public class NativeFeedBrowserActivity extends Activity {
 
     private void setGalleryPreviewsActive(boolean active) {
         if (bunkrGalleryAdapter != null) bunkrGalleryAdapter.setPreviewsActive(active);
+        if (albumGridAdapter != null) albumGridAdapter.setPreviewsActive(active);
         for (BunkrGalleryAdapter gallery : creatorTabAdapters) {
             if (gallery != null && gallery != bunkrGalleryAdapter) gallery.setPreviewsActive(active);
         }

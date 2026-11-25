@@ -791,6 +791,8 @@ final class BunkrGalleryPagerAdapter
     }
 
     private String imageReferer(NativeContentItem item) {
+        String eromeReferer = EromeRepository.imageReferer(item);
+        if (!eromeReferer.isEmpty()) return eromeReferer;
         String wikiFeetReferer = WikiFeetRepository.imageReferer(item);
         if (!wikiFeetReferer.isEmpty()) return wikiFeetReferer;
         if (item != null && !FapelloRepository.isPostUrl(item.url) &&

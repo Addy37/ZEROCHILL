@@ -15,6 +15,7 @@ import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -408,7 +409,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         BunkrMaintenanceUi.Badge maintenance = BunkrMaintenanceUi.addBadge(
                 tile, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
 
-        FrameLayout play = new FrameLayout(parent.getContext());
+        LinearLayout play = new LinearLayout(parent.getContext());
+        play.setOrientation(LinearLayout.HORIZONTAL);
+        play.setGravity(Gravity.CENTER);
         GradientDrawable playBackground = new GradientDrawable();
         playBackground.setCornerRadius(dp(parent, 8));
         playBackground.setColor(Color.argb(185, 0, 0, 0));
@@ -421,12 +424,26 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         playParams.gravity = Gravity.BOTTOM | Gravity.END;
         playParams.setMargins(0, 0, dp(parent, 6), dp(parent, 6));
         tile.addView(play, playParams);
+        play.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            v.setPivotX(Math.max(1, v.getWidth()));
+            v.setPivotY(Math.max(1, v.getHeight()));
+        });
 
         ImageView playIcon = new ImageView(parent.getContext());
         playIcon.setImageResource(R.drawable.ic_player_play);
         playIcon.setColorFilter(Color.WHITE);
         playIcon.setPadding(dp(parent, 11), dp(parent, 11), dp(parent, 9), dp(parent, 11));
-        play.addView(playIcon, new FrameLayout.LayoutParams(-1, -1));
+        play.addView(playIcon, new LinearLayout.LayoutParams(dp(parent, 42), dp(parent, 42)));
+
+        TextView playDuration = new TextView(parent.getContext());
+        playDuration.setTextColor(Color.WHITE);
+        playDuration.setTextSize(11);
+        playDuration.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        playDuration.setIncludeFontPadding(false);
+        playDuration.setSingleLine(true);
+        playDuration.setGravity(Gravity.CENTER_VERTICAL);
+        playDuration.setVisibility(View.GONE);
+        play.addView(playDuration, new LinearLayout.LayoutParams(-2, -2));
 
         TextView gif = new TextView(parent.getContext());
         gif.setText("GIF");
@@ -462,6 +479,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 sourceVariant,
                 fresh,
                 play,
+                playIcon,
+                playDuration,
                 morphPulse,
                 unavailable, favorite, maintenance, gif
         );
@@ -496,10 +515,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         ViewCompat.setTransitionName(holder.image, GalleryMediaTransition.transitionName(item));
         holder.image.setScaleType(adaptiveAspectRatios && !BunkrRepository.isBunkrUrl(item.url)
                 ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
+        float cachedAspect = aspectRatios.containsKey(item.url) ? aspectRatios.get(item.url) : 0f;
         holder.tile.setAspectRatio(adaptiveAspectRatios
-                ? aspectRatios.getOrDefault(item.url, item.aspectRatioHint > 0f ? item.aspectRatioHint : 1f)
+                ? initialTileAspect(item.url, item.aspectRatioHint, cachedAspect,
+                        EromeRepository.gridArtwork(item))
                 : 1f);
-        holder.play.setVisibility(item.isVideo() ? View.VISIBLE : View.GONE);
+        bindPlayBadge(holder, item);
         holder.gif.setVisibility(item.isGif() ? View.VISIBLE : View.GONE);
         applyOverlayDensity(holder);
         boolean fresh = isHighlighted(item);
@@ -513,8 +534,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             holder.sourceIcon.setImageDrawable(null);
             holder.sourceVariant.setVisibility(View.GONE);
         }
+        String duration = GalleryDuration.label(item);
         holder.itemView.setContentDescription(
                 (item.isVideo() ? "Video, " : item.isGif() ? "GIF, " : "Photo, ") + item.title +
+                        (duration.isEmpty() ? "" : ", " + duration) +
                         (source == null ? "" : ", source " + source.name) +
                         (fresh ? ", new from Updates" : "")
         );
@@ -527,10 +550,14 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.repairPending = false;
         holder.wantsMediaPreview = false;
         holder.previewAttempted = false;
+        holder.failedArtwork.clear();
         boolean pawchiveVideo = pawchiveVideoPreview(item);
         File cachedPreview = BunkrRepository.isBunkrUrl(item.url) || pawchiveVideo
                 ? BunkrMediaPreview.cached(context, item) : null;
-        if (cachedPreview != null) {
+        String eromeArtwork = EromeRepository.gridArtwork(item);
+        if (!eromeArtwork.isEmpty()) {
+            loadArtwork(holder, item, eromeArtwork, true);
+        } else if (cachedPreview != null) {
             holder.wantsMediaPreview = true;
             holder.previewAttempted = true;
             loadMediaPreview(holder, item, cachedPreview);
@@ -576,6 +603,14 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                                 holder.unavailable.setVisibility(View.VISIBLE);
                                 return;
                             }
+                            if (EromeRepository.isAlbumUrl(item.url)) {
+                                if (!holder.failedArtwork.contains(url)) holder.failedArtwork.add(url);
+                                String next = EromeRepository.nextArtwork(item, holder.failedArtwork);
+                                if (!next.isEmpty()) {
+                                    loadArtwork(holder, item, next, false);
+                                    return;
+                                }
+                            }
                             if (repair) repairArtwork(holder, item, url);
                             else requestMediaPreview(holder, item);
                         });
@@ -613,6 +648,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private void repairArtwork(Holder holder, NativeContentItem item, String rejected) {
+        if (EromeRepository.isAlbumUrl(item == null ? "" : item.url)) {
+            String next = EromeRepository.alternateArtwork(item, rejected);
+            if (!next.isEmpty()) loadArtwork(holder, item, next, false);
+            return;
+        }
         if (!BunkrRepository.isBunkrUrl(item.url)) return;
         holder.needsRepair = true;
         if (!previewVisible(holder) || holder.repairPending) return;
@@ -800,8 +840,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.gif.setScaleX(scale);
         holder.gif.setScaleY(scale);
 
-        holder.play.setPivotX(dp(holder.play, 42));
-        holder.play.setPivotY(dp(holder.play, 42));
+        holder.play.setPivotX(Math.max(1, holder.play.getWidth()));
+        holder.play.setPivotY(Math.max(1, holder.play.getHeight()));
         holder.play.setScaleX(scale);
         holder.play.setScaleY(scale);
     }
@@ -841,10 +881,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private void preloadRange(int start, int end) {
         for (int i = start; i < end; i++) {
             NativeContentItem item = items.get(i);
-            if (item.imageUrl == null || item.imageUrl.isEmpty()) continue;
-            if (BunkrRepository.isBunkrUrl(item.url) && !BunkrRepository.isUsableArtwork(item.imageUrl)) continue;
-            String imageUrl = item.imageUrl.trim();
+            String imageUrl = EromeRepository.gridArtwork(item);
+            if (imageUrl.isEmpty()) imageUrl = item.imageUrl == null ? "" : item.imageUrl.trim();
             if (imageUrl.isEmpty()) continue;
+            if (BunkrRepository.isBunkrUrl(item.url) && !BunkrRepository.isUsableArtwork(item.imageUrl)) continue;
             String referer = imageReferer(item);
             String preloadKey = imageUrl + "\n" + (referer == null ? "" : referer.trim());
             if (!imagePreloads.markIfNew(preloadKey)) continue;
@@ -866,6 +906,72 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         return adaptiveAspectRatios ? request.dontTransform() : request.centerCrop();
     }
 
+    private void bindPlayBadge(Holder holder, NativeContentItem item) {
+        String duration = GalleryDuration.label(item);
+        boolean video = item.isVideo();
+        holder.play.setVisibility(video ? View.VISIBLE : View.GONE);
+        if (!video) {
+            holder.playDuration.setVisibility(View.GONE);
+            holder.playDuration.setText("");
+            return;
+        }
+        FrameLayout.LayoutParams badge = (FrameLayout.LayoutParams) holder.play.getLayoutParams();
+        LinearLayout.LayoutParams icon = (LinearLayout.LayoutParams) holder.playIcon.getLayoutParams();
+        if (duration.isEmpty()) {
+            holder.playDuration.setVisibility(View.GONE);
+            holder.playDuration.setText("");
+            holder.play.setPadding(0, 0, 0, 0);
+            int size = dp(holder.play, 42);
+            badge.width = size;
+            badge.height = size;
+            icon.width = size;
+            icon.height = size;
+            holder.playIcon.setPadding(dp(holder.play, 11), dp(holder.play, 11),
+                    dp(holder.play, 9), dp(holder.play, 11));
+        } else {
+            holder.playDuration.setText(duration);
+            holder.playDuration.setVisibility(View.VISIBLE);
+            int padV = dp(holder.play, 4);
+            holder.play.setPadding(dp(holder.play, 5), padV, dp(holder.play, 7), padV);
+            badge.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            badge.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            int iconSize = dp(holder.play, 16);
+            icon.width = iconSize;
+            icon.height = iconSize;
+            holder.playIcon.setPadding(dp(holder.play, 2), dp(holder.play, 2),
+                    dp(holder.play, 1), dp(holder.play, 2));
+            holder.playDuration.setPadding(dp(holder.play, 3), 0, 0, 0);
+        }
+        holder.play.setLayoutParams(badge);
+        holder.playIcon.setLayoutParams(icon);
+    }
+
+    /** First layout pass. A square thumb fallback starts square. The real poster uses the site's shape. */
+    static float initialTileAspect(String url, float hint, float cached, String artworkUrl) {
+        if (cached > 0f && Float.isFinite(cached)) return cached;
+        if (EromeRepository.isAlbumUrl(url) && artworkUrl != null && artworkUrl.contains("/thumbs/")) {
+            return 1f;
+        }
+        if (hint > 0f && Float.isFinite(hint)) return hint;
+        return 1f;
+    }
+
+    /**
+     * Erome tiles follow the artwork that is actually on screen.
+     * Other galleries keep their source hint so a square preview cannot flatten a portrait photo.
+     */
+    static float displayedTileAspect(String url, float hint, int decodedWidth, int decodedHeight) {
+        float decoded = 0f;
+        if (decodedWidth > 0 && decodedHeight > 0) {
+            decoded = (float) decodedWidth / (float) decodedHeight;
+            if (!Float.isFinite(decoded) || decoded <= 0.2f || decoded > 5f) decoded = 0f;
+        }
+        if (EromeRepository.isAlbumUrl(url) && decoded > 0f) return decoded;
+        if (hint > 0f && Float.isFinite(hint) && !BunkrRepository.isBunkrUrl(url)) return hint;
+        if (decoded > 0f) return decoded;
+        return hint > 0f && Float.isFinite(hint) ? hint : 1f;
+    }
+
     private void applyAspectRatio(
             Holder holder,
             NativeContentItem item,
@@ -873,10 +979,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     ) {
         if (resource == null || resource.getIntrinsicWidth() <= 0 ||
                 resource.getIntrinsicHeight() <= 0) return;
-        float ratio = (float) resource.getIntrinsicWidth() / resource.getIntrinsicHeight();
-        if (item.aspectRatioHint > 0f && !BunkrRepository.isBunkrUrl(item.url)) {
-            ratio = item.aspectRatioHint;
-        }
+        float ratio = displayedTileAspect(
+                item.url,
+                item.aspectRatioHint,
+                resource.getIntrinsicWidth(),
+                resource.getIntrinsicHeight()
+        );
         if (!Float.isFinite(ratio) || ratio <= 0f) return;
         aspectRatios.put(item.url, ratio);
         // The request's binding generation is valid even before RecyclerView assigns a position.
@@ -921,6 +1029,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private String imageReferer(NativeContentItem item) {
+        String eromeReferer = EromeRepository.imageReferer(item);
+        if (!eromeReferer.isEmpty()) return eromeReferer;
         String wikiFeetReferer = WikiFeetRepository.imageReferer(item);
         if (!wikiFeetReferer.isEmpty()) return wikiFeetReferer;
         if (item != null && !FapelloRepository.isPostUrl(item.url) &&
@@ -990,6 +1100,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         int bindGeneration;
         boolean attached, needsRepair, repairPending, wantsMediaPreview, previewAttempted;
         NativeContentItem boundItem;
+        final ArrayList<String> failedArtwork = new ArrayList<>();
         BunkrMediaPreview.Task preview;
         final AspectRatioFrameLayout tile;
         final ImageView image;
@@ -997,7 +1108,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final ImageView sourceIcon;
         final TextView sourceVariant;
         final ImageView fresh;
-        final View play;
+        final LinearLayout play;
+        final ImageView playIcon;
+        final TextView playDuration;
         final View morphPulse;
         final TextView unavailable;
         final ImageView favorite;
@@ -1011,7 +1124,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 ImageView sourceIcon,
                 TextView sourceVariant,
                 ImageView fresh,
-                View play,
+                LinearLayout play,
+                ImageView playIcon,
+                TextView playDuration,
                 View morphPulse,
                 TextView unavailable, ImageView favorite, BunkrMaintenanceUi.Badge maintenance,
                 TextView gif
@@ -1024,6 +1139,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             this.sourceVariant = sourceVariant;
             this.fresh = fresh;
             this.play = play;
+            this.playIcon = playIcon;
+            this.playDuration = playDuration;
             this.morphPulse = morphPulse;
             this.unavailable = unavailable;
             this.favorite = favorite;

@@ -45,7 +45,8 @@ import static org.robolectric.Shadows.shadowOf;
         SearchScopeTest.QuietKaotic.class,
         SearchScopeTest.QuietXMega.class,
         SearchScopeTest.QuietBaddie.class,
-        SearchScopeTest.QuietBunkr.class
+        SearchScopeTest.QuietBunkr.class,
+        SearchScopeTest.QuietErome.class
 })
 public class SearchScopeTest {
     @Implements(value = CrazyShitRepository.class, isInAndroidSdk = false)
@@ -165,11 +166,34 @@ public class SearchScopeTest {
         }
     }
 
+    @Implements(value = EromeRepository.class, isInAndroidSdk = false)
+    public static class QuietErome {
+        static final AtomicInteger calls = new AtomicInteger();
+        static volatile boolean fail;
+        static volatile boolean restricted;
+        static volatile int lastPage;
+
+        @Implementation
+        public EromeRepository.SearchPage search(Context context, String query, int page) throws java.io.IOException {
+            calls.incrementAndGet();
+            lastPage = page;
+            if (restricted) throw new EromePages.AccessException("verify");
+            if (fail) throw new java.io.IOException("unavailable");
+            return new EromeRepository.SearchPage(Collections.singletonList(new NativeContentItem(
+                    NativeContentItem.KIND_SERIES, "Coastal landscape", "https://www.erome.com/a/Abcd1234",
+                    "", "11.7K", "SampleStudio", "", "3 pictures · 1 video")), page == 1);
+        }
+    }
+
     @Before public void reset() {
         QuietBunkr.calls.set(0);
         QuietBunkr.fail = false;
         QuietBunkr.started = new CountDownLatch(1);
         QuietBunkr.release = new CountDownLatch(0);
+        QuietErome.calls.set(0);
+        QuietErome.fail = false;
+        QuietErome.restricted = false;
+        QuietErome.lastPage = 0;
         QuietCrazy.calls.set(0);
         QuietEfukt.calls.set(0);
         QuietKaotic.calls.set(0);
@@ -185,7 +209,8 @@ public class SearchScopeTest {
         SearchPanel panel = open();
         try {
             List<String> labels = labels(panel);
-            assertEquals(Arrays.asList("Shows", "OnlyFap", "Bunkr", "XMegaDrive", "BaddieHub", "Library"), labels);
+            assertEquals(Arrays.asList(
+                    "Shows", "OnlyFap", "Bunkr", "Erome", "XMegaDrive", "BaddieHub", "Library"), labels);
             assertEquals(SearchPanel.SCOPE_LABELS, labels);
             assertFalse(labels.contains("All"));
             assertFalse(labels.contains("ShitTok"));
@@ -200,7 +225,7 @@ public class SearchScopeTest {
         SearchPanel panel = open();
         try {
             assertEquals(0, QuietXMega.calls.get());
-            for (String label : Arrays.asList("Shows", "OnlyFap", "BaddieHub", "Library", "XMegaDrive")) {
+            for (String label : Arrays.asList("Shows", "OnlyFap", "BaddieHub", "Library", "XMegaDrive", "Erome")) {
                 chip(panel, label).performClick();
                 shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50));
             }
@@ -277,6 +302,36 @@ public class SearchScopeTest {
             assertEquals("https://bunkr.cr/a/sample", opened.getStringExtra(NativeFeedBrowserActivity.EXTRA_BASE_URL));
             assertEquals(0, QuietXMega.calls.get());
             assertEquals(0, QuietCrazy.calls.get());
+            assertEquals(0, QuietErome.calls.get());
+        } finally { close(panel); }
+    }
+
+    @Test public void eromeAlbumSearchUsesNativeAlbumDetailsAndDoesNotCallOtherProviders() throws Exception {
+        SearchPanel panel = open();
+        try {
+            chip(panel, "Erome").performClick();
+            panel.field().setText("nature");
+            ReflectionHelpers.callInstanceMethod(panel, "runSearch");
+            await(() -> QuietErome.calls.get() > 0);
+            await(() -> ((int) ReflectionHelpers.getField(panel, "pendingSources")) == 0);
+            assertEquals(SearchPanel.Scope.EROME, ReflectionHelpers.getField(panel, "scope"));
+            assertEquals(1, QuietErome.lastPage);
+            assertEquals(0, QuietBunkr.calls.get());
+            assertEquals(0, QuietXMega.calls.get());
+            GlobalSearchAdapter adapter = ReflectionHelpers.getField(panel, "adapter");
+            assertTrue(boundText(panel, adapter).contains("Coastal landscape"));
+            assertTrue(boundText(panel, adapter).contains("Erome album"));
+            List<NativeContentItem> results = ReflectionHelpers.getField(panel, "eromeResults");
+            ReflectionHelpers.callInstanceMethod(panel, "openResult",
+                    ReflectionHelpers.ClassParameter.from(NativeContentItem.class, results.get(0)));
+            Activity host = ((Session) panel.view.getTag()).host.get();
+            Intent opened = shadowOf(host).getNextStartedActivity();
+            assertEquals(NativeFeedBrowserActivity.class.getName(), opened.getComponent().getClassName());
+            assertEquals("https://www.erome.com/a/Abcd1234", opened.getStringExtra(NativeFeedBrowserActivity.EXTRA_BASE_URL));
+            assertEquals(NativeFeedBrowserActivity.SOURCE_EROME, opened.getStringExtra(NativeFeedBrowserActivity.EXTRA_SOURCE));
+            chip(panel, "Shows").performClick();
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50));
+            assertEquals(SearchPanel.Scope.SHOWS, ReflectionHelpers.getField(panel, "scope"));
         } finally { close(panel); }
     }
 
@@ -295,6 +350,25 @@ public class SearchScopeTest {
             assertTrue(status.hasOnClickListeners());
             chip(panel, "Shows").performClick();
             assertFalse(status.hasOnClickListeners());
+        } finally { close(panel); }
+    }
+
+    @Test public void eromeVerificationIsNotReportedAsAnEmptySearch() throws Exception {
+        SearchPanel panel = open();
+        try {
+            QuietErome.restricted = true;
+            chip(panel, "Erome").performClick();
+            panel.field().setText("nature");
+            ReflectionHelpers.callInstanceMethod(panel, "runSearch");
+            await(() -> QuietErome.calls.get() > 0);
+            await(() -> ((int) ReflectionHelpers.getField(panel, "pendingSources")) == 0);
+            TextView status = ReflectionHelpers.getField(panel, "status");
+            String message = status.getText().toString();
+            assertTrue(message.contains("verification"));
+            assertFalse(message.contains("No matches"));
+            assertTrue(status.hasOnClickListeners());
+            chip(panel, "Bunkr").performClick();
+            assertEquals(SearchPanel.Scope.BUNKR_ALBUMS, ReflectionHelpers.getField(panel, "scope"));
         } finally { close(panel); }
     }
 
