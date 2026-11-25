@@ -251,6 +251,16 @@ public final class BunkrGalleryActivity extends Activity {
                     @Override
                     public void onResolvedImageFailed(int position, NativeContentItem item) {
                         BunkrGallerySessionStore.clearResolvedUrl(sessionId, item.url);
+                        if (position == pager.getCurrentItem() && EromeRepository.isAlbumUrl(item.url)
+                                && !item.url.equals(retriedBunkrPhoto)) {
+                            retriedBunkrPhoto = item.url;
+                            String thumb = EromeRepository.thumbnailFor(
+                                    !item.sourceMediaUrl.isEmpty() ? item.sourceMediaUrl : item.imageUrl);
+                            if (!thumb.isEmpty()) {
+                                adapter.setResolvedUrl(position, thumb);
+                                return;
+                            }
+                        }
                         if (position == pager.getCurrentItem() && BunkrRepository.isBunkrUrl(item.url)
                                 && !item.url.equals(retriedBunkrPhoto)) {
                             retriedBunkrPhoto = item.url;
@@ -369,9 +379,34 @@ public final class BunkrGalleryActivity extends Activity {
         // An album-specific viewer relies on the already loaded session. Do not
         // send another provider's album URL through the Bunkr fallback loader.
         if (!isCreatorGallery() && EromeRepository.isAlbumUrl(albumUrl)) {
-            initialLoading.setVisibility(View.GONE);
-            ZeroChillToast.makeText(this, "Reopen the album to restore its gallery.",
-                    ZeroChillToast.LENGTH_LONG).show();
+            int requestGeneration = generation;
+            pageIo.execute(() -> {
+                try {
+                    List<NativeContentItem> result = new EromeRepository().fetchAlbum(this, albumUrl);
+                    runOnUiThread(() -> {
+                        if (requestGeneration != generation || isFinishing()) return;
+                        initialLoading.setVisibility(View.GONE);
+                        currentPage = result.isEmpty() ? 0 : 1;
+                        endReached = true;
+                        BunkrGallerySessionStore.replace(sessionId, result, currentPage, endReached);
+                        BunkrGallerySessionStore.Snapshot fresh = BunkrGallerySessionStore.snapshot(sessionId);
+                        if (fresh != null && !fresh.items.isEmpty()) showSnapshot(fresh);
+                        else ZeroChillToast.makeText(this,
+                                "No supported pictures or videos were found.",
+                                ZeroChillToast.LENGTH_LONG).show();
+                    });
+                } catch (Exception error) {
+                    runOnUiThread(() -> {
+                        if (requestGeneration != generation || isFinishing()) return;
+                        initialLoading.setVisibility(View.GONE);
+                        ZeroChillToast.makeText(this,
+                                EromePages.AccessException.find(error) != null
+                                        ? "Erome asked for verification. Open the album and try again."
+                                        : "Couldn't load this album.",
+                                ZeroChillToast.LENGTH_LONG).show();
+                    });
+                }
+            });
             return;
         }
         if (albumUrl.isEmpty() && !isCreatorGallery()) {
@@ -752,6 +787,7 @@ public final class BunkrGalleryActivity extends Activity {
         String directPhoto = useListingOriginal ? FapelloRepository.photoUrlFromItem(item) : "";
         if (directPhoto.isEmpty() && isOnlyHavenDirectImage(item)) directPhoto = item.url;
         if (directPhoto.isEmpty()) directPhoto = PawchiveRepository.original(item);
+        if (directPhoto.isEmpty()) directPhoto = EromeRepository.originalImage(item);
         if (!directPhoto.isEmpty()) {
             adapter.setResolvedUrl(position, directPhoto);
             BunkrGallerySessionStore.setResolvedUrl(sessionId, item.url, directPhoto);
@@ -908,6 +944,11 @@ public final class BunkrGalleryActivity extends Activity {
         }
         if (isOnlyHavenDirectVideo(item)) {
             startPlayer(position, item, item.url, value(item.uploader));
+            return;
+        }
+        if (EromeRepository.isDirectVideo(item.sourceMediaUrl)) {
+            String referer = EromeRepository.canonicalAlbum(item.url);
+            startPlayer(position, item, item.sourceMediaUrl, referer.isEmpty() ? EromeRepository.ORIGIN + "/" : referer);
             return;
         }
 

@@ -93,7 +93,40 @@ public final class EromeRepositoryTest {
         assertEquals("https://www.erome.com/a/Abcd1234#img-still", photo.url);
         assertEquals("https://s1.erome.com/1/Abcd1234/still.jpg", photo.imageUrl);
         assertEquals(0.8f, photo.aspectRatioHint, 0.001f);
+        assertEquals("https://s1.erome.com/1/Abcd1234/thumbs/clip.jpg",
+                EromeRepository.gridArtwork(video));
+        assertEquals("https://s1.erome.com/1/Abcd1234/clip.jpg", video.imageUrl);
+        assertEquals("https://s1.erome.com/1/Abcd1234/still.jpg", EromeRepository.originalImage(photo));
         assertTrue(page.nextUrl.isEmpty());
+    }
+
+    @Test public void missingVideoPosterUsesTheProviderStillName() throws Exception {
+        String album = ALBUM.replace(" poster=\"https://s1.erome.com/1/Abcd1234/clip.jpg\"", "");
+        NativeContentItem video = EromePages.parseAlbum(album, "https://www.erome.com/a/Abcd1234").items.get(0);
+        assertEquals("https://s1.erome.com/1/Abcd1234/clip.jpg", video.imageUrl);
+        assertEquals("https://s1.erome.com/1/Abcd1234/thumbs/clip.jpg", EromeRepository.gridArtwork(video));
+        assertEquals("https://s1.erome.com/1/Abcd1234/clip.jpg",
+                EromeRepository.alternateArtwork(video, EromeRepository.gridArtwork(video)));
+    }
+
+    @Test public void profileUrlsAreExplicitAndDoNotMatchAlbumTitles() throws Exception {
+        assertEquals("https://www.erome.com/SampleStudio",
+                EromeRepository.canonicalUser("https://www.erome.com/SampleStudio"));
+        assertEquals("", EromeRepository.canonicalUser("https://www.erome.com/a/Abcd1234"));
+        assertEquals("", EromeRepository.canonicalUser("https://www.erome.com/search?q=SampleStudio"));
+        assertEquals("", EromeRepository.canonicalUser("https://www.erome.com/explore"));
+        String profile = "<html><head><title>SampleStudio - Profile page - EroMe</title></head><body>"
+                + "<a id=\"user_name\" href=\"https://www.erome.com/SampleStudio\">SampleStudio</a>"
+                + "<div class=\"album\"><a class=\"album-link\" href=\"https://www.erome.com/a/Abcd1234\">"
+                + "<img class=\"album-thumbnail\" src=\"https://s1.erome.com/1/Abcd1234/thumbs/pic.jpg\"></a>"
+                + "<a class=\"album-title\">Coastal landscape</a></div></body></html>";
+        EromePages.SearchPage page = EromePages.parseProfile(profile);
+        assertEquals(1, page.items.size());
+        assertEquals("https://www.erome.com/a/Abcd1234", page.items.get(0).url);
+        String empty = "<html><head><title>SampleStudio - Profile page - EroMe</title></head><body>"
+                + "<a id=\"user_name\" href=\"https://www.erome.com/SampleStudio\">SampleStudio</a>"
+                + "<div id=\"albums\"></div></body></html>";
+        assertTrue(EromePages.parseProfile(empty).items.isEmpty());
     }
 
     @Test public void urlsStayOnEromeAndSearchPaginationIsBounded() {

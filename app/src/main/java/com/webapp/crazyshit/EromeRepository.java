@@ -79,6 +79,18 @@ public final class EromeRepository {
         return new ArrayList<>(media.values());
     }
 
+    /** First page of albums for a profile URL that was explicitly supplied. */
+    public List<NativeContentItem> fetchUserAlbums(Context context, String userUrl) throws IOException {
+        String canonical = canonicalUser(userUrl);
+        if (canonical.isEmpty()) throw new IOException("Not an Erome profile URL");
+        EromePages.SearchPage parsed = EromePages.parseProfile(get(context, canonical));
+        ArrayList<NativeContentItem> albums = new ArrayList<>();
+        for (NativeContentItem item : parsed.items) {
+            if (item != null && isAlbumUrl(item.url)) albums.add(item);
+        }
+        return albums;
+    }
+
     public CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl) throws IOException {
         if (isDirectVideo(pageUrl)) {
             return new CrazyShitRepository.StreamInfo(pageUrl, ORIGIN + "/", "Video", ORIGIN + "/");
@@ -143,6 +155,104 @@ public final class EromeRepository {
     static String mediaUrl(String url) {
         return isMediaUrl(url) ? stripFragment(url) : "";
     }
+
+    /** Smaller sibling used by album grids. Empty when the URL is not an Erome still. */
+    public static String thumbnailFor(String imageUrl) {
+        String clean = mediaUrl(imageUrl);
+        if (!isStillImage(clean) || clean.contains("/thumbs/")) return isStillImage(clean) ? clean : "";
+        int query = clean.indexOf('?');
+        String path = query < 0 ? clean : clean.substring(0, query);
+        String suffix = query < 0 ? "" : clean.substring(query);
+        int slash = path.lastIndexOf('/');
+        if (slash < 0) return "";
+        return path.substring(0, slash) + "/thumbs" + path.substring(slash) + suffix;
+    }
+
+    /**
+     * Erome video stills follow the provider file name: the mp4 host {@code vN}
+     * and a resolution suffix map to {@code sN/.../token.jpg}. No frame is decoded.
+     */
+    public static String stillFromVideo(String videoUrl) {
+        if (!isDirectVideo(videoUrl)) return "";
+        Uri uri;
+        try {
+            uri = Uri.parse(videoUrl.trim());
+        } catch (Exception ignored) {
+            return "";
+        }
+        String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.US);
+        if (!host.matches("v\\d+\\.erome\\.com")) return "";
+        String path = uri.getPath() == null ? "" : uri.getPath();
+        if (!path.matches("(?i).+_\\d{3,4}p\\.mp4")) return "";
+        String stillPath = path.replaceFirst("(?i)_\\d{3,4}p\\.mp4$", ".jpg");
+        return "https://s" + host.substring(1) + stillPath;
+    }
+
+    /** Grid request: a thumb when one can be named, otherwise the still itself. */
+    public static String gridArtwork(NativeContentItem item) {
+        if (item == null || !isAlbumUrl(item.url)) return "";
+        String still = isStillImage(item.imageUrl) ? mediaUrl(item.imageUrl) : "";
+        if (still.isEmpty() && item.isVideo()) still = stillFromVideo(item.sourceMediaUrl);
+        if (still.isEmpty() && isStillImage(item.sourceMediaUrl)) still = mediaUrl(item.sourceMediaUrl);
+        if (still.isEmpty()) return "";
+        String thumb = thumbnailFor(still);
+        return thumb.isEmpty() ? still : thumb;
+    }
+
+    /** Next still to try after a failed Erome image request. Never removes the media item. */
+    public static String alternateArtwork(NativeContentItem item, String rejected) {
+        if (item == null || !isAlbumUrl(item.url)) return "";
+        String still = stillFromVideo(item.sourceMediaUrl);
+        String[] candidates = new String[] {
+                isStillImage(item.imageUrl) ? mediaUrl(item.imageUrl) : "",
+                isStillImage(item.sourceMediaUrl) ? mediaUrl(item.sourceMediaUrl) : "",
+                still,
+                thumbnailFor(item.imageUrl),
+                thumbnailFor(still)
+        };
+        for (String candidate : candidates) {
+            if (candidate == null || candidate.isEmpty()) continue;
+            if (rejected != null && candidate.equals(rejected)) continue;
+            return candidate;
+        }
+        return "";
+    }
+
+    /** Full photo for the existing gallery viewer. Videos stay on the playback resolver. */
+    public static String originalImage(NativeContentItem item) {
+        if (item == null || !item.isImage() || !isAlbumUrl(item.url)) return "";
+        if (isStillImage(item.sourceMediaUrl) && !item.sourceMediaUrl.contains("/thumbs/")) {
+            return mediaUrl(item.sourceMediaUrl);
+        }
+        if (isStillImage(item.imageUrl) && !item.imageUrl.contains("/thumbs/")) return mediaUrl(item.imageUrl);
+        return "";
+    }
+
+    public static String canonicalUser(String url) {
+        if (!isEromeHttpUrl(url) || isAlbumUrl(url)) return "";
+        String path = pathOf(url);
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("^/([A-Za-z0-9][A-Za-z0-9_.-]{1,40})/?$").matcher(path);
+        if (!matcher.matches()) return "";
+        String handle = matcher.group(1);
+        if (RESERVED_USER_PATHS.contains(handle.toLowerCase(Locale.US))) return "";
+        return ORIGIN + "/" + handle;
+    }
+
+    private static boolean isStillImage(String url) {
+        if (!isMediaUrl(url)) return false;
+        String path = pathOf(url).toLowerCase(Locale.US);
+        return path.endsWith(".jpg") || path.endsWith(".jpeg")
+                || path.endsWith(".png") || path.endsWith(".webp");
+    }
+
+    private static final java.util.Set<String> RESERVED_USER_PATHS = new java.util.HashSet<>(
+            java.util.Arrays.asList(
+                    "a", "search", "explore", "login", "signup", "register", "user", "users",
+                    "videos", "video", "pics", "photos", "photo", "albums", "album", "p",
+                    "categories", "category", "trending", "new", "hot", "popular", "account",
+                    "settings", "messages", "upload", "about", "privacy", "terms", "contact"
+            ));
 
     public static String canonicalAlbum(String url) {
         if (!isAlbumUrl(url)) return "";

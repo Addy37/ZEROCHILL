@@ -76,6 +76,29 @@ final class EromePages {
         return new SearchPage(new ArrayList<>(albums.values()), hasNext(doc));
     }
 
+    static SearchPage parseProfile(String html) throws IOException {
+        return parseProfile(Jsoup.parse(html == null ? "" : html, EromeRepository.ORIGIN + "/"));
+    }
+
+    /** Album cards from an explicit uploader profile. Empty profiles stay empty. */
+    static SearchPage parseProfile(Document doc) throws IOException {
+        if (doc == null) throw new IOException("Erome profile response was empty");
+        if (isAccessRestricted(doc)) throw new AccessException("Erome requested verification");
+        SearchPage albums;
+        try {
+            albums = parseSearch(doc);
+        } catch (IOException error) {
+            if (error instanceof AccessException) throw error;
+            if (doc.selectFirst("a#user_name") == null
+                    && doc.selectFirst("div#albums") == null
+                    && (doc.title() == null || !doc.title().toLowerCase(Locale.US).contains("profile"))) {
+                throw error;
+            }
+            return new SearchPage(new ArrayList<>(), false);
+        }
+        return albums;
+    }
+
     static AlbumPage parseAlbum(String html, String albumUrl) throws IOException {
         return parseAlbum(Jsoup.parse(html == null ? "" : html, EromeRepository.ORIGIN + "/"), albumUrl);
     }
@@ -176,6 +199,11 @@ final class EromePages {
         if (token.isEmpty()) return null;
         String poster = EromeRepository.mediaUrl(video.hasAttr("poster") ? video.absUrl("poster") : "");
         if (poster.isEmpty()) poster = EromeRepository.mediaUrl(video.attr("poster"));
+        if (poster.isEmpty() && video.hasAttr("data-poster")) {
+            poster = EromeRepository.mediaUrl(video.absUrl("data-poster"));
+            if (poster.isEmpty()) poster = EromeRepository.mediaUrl(video.attr("data-poster"));
+        }
+        if (poster.isEmpty()) poster = EromeRepository.stillFromVideo(source);
         float aspect = video.className().contains("vjs-portrait") ? 9f / 16f : 0f;
         String duration = text(group.selectFirst("span.duration"));
         NativeContentItem item = new NativeContentItem(

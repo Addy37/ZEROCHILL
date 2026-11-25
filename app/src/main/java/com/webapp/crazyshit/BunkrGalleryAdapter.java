@@ -530,7 +530,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         boolean pawchiveVideo = pawchiveVideoPreview(item);
         File cachedPreview = BunkrRepository.isBunkrUrl(item.url) || pawchiveVideo
                 ? BunkrMediaPreview.cached(context, item) : null;
-        if (cachedPreview != null) {
+        String eromeArtwork = EromeRepository.gridArtwork(item);
+        if (!eromeArtwork.isEmpty()) {
+            loadArtwork(holder, item, eromeArtwork, true);
+        } else if (cachedPreview != null) {
             holder.wantsMediaPreview = true;
             holder.previewAttempted = true;
             loadMediaPreview(holder, item, cachedPreview);
@@ -613,6 +616,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private void repairArtwork(Holder holder, NativeContentItem item, String rejected) {
+        if (EromeRepository.isAlbumUrl(item == null ? "" : item.url)) {
+            String next = EromeRepository.alternateArtwork(item, rejected);
+            if (!next.isEmpty()) loadArtwork(holder, item, next, false);
+            return;
+        }
         if (!BunkrRepository.isBunkrUrl(item.url)) return;
         holder.needsRepair = true;
         if (!previewVisible(holder) || holder.repairPending) return;
@@ -843,7 +851,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             NativeContentItem item = items.get(i);
             if (item.imageUrl == null || item.imageUrl.isEmpty()) continue;
             if (BunkrRepository.isBunkrUrl(item.url) && !BunkrRepository.isUsableArtwork(item.imageUrl)) continue;
-            String imageUrl = item.imageUrl.trim();
+            String imageUrl = EromeRepository.gridArtwork(item);
+            if (imageUrl.isEmpty()) imageUrl = item.imageUrl.trim();
             if (imageUrl.isEmpty()) continue;
             String referer = imageReferer(item);
             String preloadKey = imageUrl + "\n" + (referer == null ? "" : referer.trim());
