@@ -47,8 +47,11 @@ public class LibraryPlaybackTest {
         assertFalse(LibraryPlayback.isShowsPage(CLIP));
     }
 
-    @Test public void oldUrlOnlyEntryStillOpensTheMatchingViewer() {
-        FavoriteStore.add(context, "Saved video", CLIP);
+    @Test public void oldUrlOnlyEntryStillOpensTheMatchingViewer() throws Exception {
+        org.json.JSONArray items = new org.json.JSONArray().put(new org.json.JSONObject()
+                .put("title", "Saved video").put("url", CLIP).put("savedAt", 1L)
+                .put("mediaFavorite", false).put("watchLater", true));
+        context.getSharedPreferences("watch_later", 0).edit().putString("items", items.toString()).commit();
         FavoriteStore.Item saved = FavoriteStore.load(context).get(0);
         assertNull(saved.content);
         assertEquals(LibraryPlayback.Route.EROME_MEDIA, LibraryPlayback.route(
