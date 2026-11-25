@@ -2,13 +2,21 @@ package com.webapp.crazyshit;
 
 import java.util.Arrays;
 import java.util.Collections;
+
+import android.app.Application;
+
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /** Erome's ShitTok lane follows the site versions without touching Spotlight. */
+@RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class, sdk = 35)
 public class EromeShitTokTest {
     private static final String ALBUM = "<html><body>"
             + "<h1 class=\"album-title-page\">Studio clip</h1>"
