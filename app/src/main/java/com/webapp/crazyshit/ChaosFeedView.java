@@ -3913,15 +3913,6 @@ public final class ChaosFeedView extends FrameLayout {
             title.setLineSpacing(dp(2), 1f);
             titleRow.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
             copy.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
-            titleRow.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
-                if (sourceMark.getParent() != titleRow || sourceMark.getVisibility() != View.VISIBLE) return;
-                int trailing = sourceMark.getWidth() + dp(6);
-                if (sourceMarkName.getParent() == titleRow && sourceMarkName.getVisibility() == View.VISIBLE) {
-                    trailing += sourceMarkName.getWidth() + dp(4);
-                }
-                int available = Math.max(dp(48), titleRow.getWidth() - trailing);
-                if (title.getMaxWidth() != available) title.setMaxWidth(available);
-            });
             ZeroChillMotion.installPressFeedback(accessPill);
             accessPill.setOnClickListener(v -> {
                 if (!title.isClickable()) return;
@@ -3998,6 +3989,15 @@ public final class ChaosFeedView extends FrameLayout {
                 sourceMarkName.setVisibility(View.VISIBLE);
                 sourceMarkName.announceForAccessibility(sourceMarkName.getText());
                 sourceMarkName.postDelayed(hideSourceMarkName, 1600L);
+            });
+            titleRow.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                if (sourceMark.getParent() != titleRow || sourceMark.getVisibility() != View.VISIBLE) return;
+                int trailing = sourceMark.getWidth() + dp(6);
+                if (sourceMarkName.getParent() == titleRow && sourceMarkName.getVisibility() == View.VISIBLE) {
+                    trailing += sourceMarkName.getWidth() + dp(4);
+                }
+                int available = Math.max(dp(48), titleRow.getWidth() - trailing);
+                if (title.getMaxWidth() != available) title.setMaxWidth(available);
             });
             copy.addView(metaRow, new LinearLayout.LayoutParams(-1, -2));
             metaRow.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
