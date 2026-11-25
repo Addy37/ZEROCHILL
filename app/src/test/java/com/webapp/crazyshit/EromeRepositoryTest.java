@@ -94,7 +94,7 @@ public final class EromeRepositoryTest {
         assertEquals("https://s1.erome.com/1/Abcd1234/still.jpg", photo.imageUrl);
         assertEquals(0.8f, photo.aspectRatioHint, 0.001f);
         assertEquals(9f / 16f, video.aspectRatioHint, 0.001f);
-        assertEquals("https://s1.erome.com/1/Abcd1234/thumbs/clip.jpg",
+        assertEquals("https://s1.erome.com/1/Abcd1234/clip.jpg",
                 EromeRepository.gridArtwork(video));
         assertEquals("https://s1.erome.com/1/Abcd1234/clip.jpg", video.imageUrl);
         assertEquals("https://s1.erome.com/1/Abcd1234/still.jpg", EromeRepository.originalImage(photo));
@@ -105,8 +105,8 @@ public final class EromeRepositoryTest {
         String album = ALBUM.replace(" poster=\"https://s1.erome.com/1/Abcd1234/clip.jpg\"", "");
         NativeContentItem video = EromePages.parseAlbum(album, "https://www.erome.com/a/Abcd1234").items.get(0);
         assertEquals("https://s1.erome.com/1/Abcd1234/clip.jpg", video.imageUrl);
-        assertEquals("https://s1.erome.com/1/Abcd1234/thumbs/clip.jpg", EromeRepository.gridArtwork(video));
-        assertEquals("https://s1.erome.com/1/Abcd1234/clip.jpg",
+        assertEquals("https://s1.erome.com/1/Abcd1234/clip.jpg", EromeRepository.gridArtwork(video));
+        assertEquals("https://s1.erome.com/1/Abcd1234/thumbs/clip.jpg",
                 EromeRepository.alternateArtwork(video, EromeRepository.gridArtwork(video)));
     }
 
@@ -126,13 +126,13 @@ public final class EromeRepositoryTest {
         assertEquals("https://s87.erome.com/2257/Abcd1234/Dog8eN5s.jpg", video.imageUrl);
         assertEquals("https://v87.erome.com/2257/Abcd1234/Dog8eN5s_720p.mp4", video.sourceMediaUrl);
         assertEquals(16f / 9f, video.aspectRatioHint, 0.001f);
-        assertEquals("https://s87.erome.com/2257/Abcd1234/thumbs/Dog8eN5s.jpg",
-                EromeRepository.gridArtwork(video));
         assertEquals("https://s87.erome.com/2257/Abcd1234/Dog8eN5s.jpg",
+                EromeRepository.gridArtwork(video));
+        assertEquals("https://s87.erome.com/2257/Abcd1234/thumbs/Dog8eN5s.jpg",
                 EromeRepository.nextArtwork(video, java.util.Collections.singleton(
                         EromeRepository.gridArtwork(video))));
         assertEquals("https://s87.erome.com/2257/Abcd1234/Y90g5hUf.jpeg?v=1792147094", photo.imageUrl);
-        assertEquals("https://s87.erome.com/2257/Abcd1234/thumbs/Y90g5hUf.jpeg?v=1792147094",
+        assertEquals("https://s87.erome.com/2257/Abcd1234/Y90g5hUf.jpeg?v=1792147094",
                 EromeRepository.gridArtwork(photo));
         NativeContentItem cached = new NativeContentItem(
                 NativeContentItem.KIND_MEDIA, "Video", "https://www.erome.com/a/Abcd1234#Dog8eN5s",
@@ -140,7 +140,7 @@ public final class EromeRepositoryTest {
                 .withSourceMedia("https://v87.erome.com/2257/Abcd1234/Dog8eN5s_720p.mp4",
                         "https://www.erome.com/a/Abcd1234");
         assertTrue(EromeRepository.missingPoster(java.util.Collections.singletonList(cached)));
-        assertEquals("https://s87.erome.com/2257/Abcd1234/thumbs/Dog8eN5s.jpg",
+        assertEquals("https://s87.erome.com/2257/Abcd1234/Dog8eN5s.jpg",
                 EromeRepository.gridArtwork(cached));
         assertFalse(EromeRepository.missingPoster(page.items));
     }

@@ -188,19 +188,20 @@ public final class EromeRepository {
         return "https://s" + host.substring(1) + stillPath;
     }
 
-    /** Grid request: a thumb when one can be named, otherwise the still itself. */
+    /** Grid request: the real poster first, then the square thumb if that poster fails. */
     public static String gridArtwork(NativeContentItem item) {
         for (String candidate : artworkCandidates(item)) return candidate;
         return "";
     }
 
     /**
-     * Every still worth requesting, smallest first. The provider poster is included
-     * after the thumb so a missing {@code /thumbs/} file cannot leave the tile blank.
+     * Poster first, so the tile can use the same shape as the site. The square
+     * {@code /thumbs/} file is only a fallback and never the only attempt.
      */
     public static java.util.List<String> artworkCandidates(NativeContentItem item) {
         java.util.LinkedHashSet<String> urls = new java.util.LinkedHashSet<>();
         String still = resolvedStill(item);
+        if (!still.isEmpty() && !still.contains("/thumbs/")) urls.add(still);
         String thumb = thumbnailFor(still);
         if (!thumb.isEmpty()) urls.add(thumb);
         if (!still.isEmpty()) urls.add(still);

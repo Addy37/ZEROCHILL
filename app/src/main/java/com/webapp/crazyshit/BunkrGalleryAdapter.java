@@ -946,7 +946,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.playIcon.setLayoutParams(icon);
     }
 
-    /** First layout pass. Erome thumbs are square, so don't open a 16:9 hole around them. */
+    /** First layout pass. A square thumb fallback starts square. The real poster uses the site's shape. */
     static float initialTileAspect(String url, float hint, float cached, String artworkUrl) {
         if (cached > 0f && Float.isFinite(cached)) return cached;
         if (EromeRepository.isAlbumUrl(url) && artworkUrl != null && artworkUrl.contains("/thumbs/")) {
