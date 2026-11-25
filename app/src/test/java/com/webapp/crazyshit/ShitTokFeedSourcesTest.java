@@ -7,7 +7,7 @@ public class ShitTokFeedSourcesTest {
     @Test public void wildSourcesBelongOnlyToChaos() {
         for (String source : new String[]{"crazyshit.com", "kaotic", "efukt", "shit-show"})
             assertTrue(source, ShitTokFeedSources.allows(ShitTokCategoryStrip.Tab.CHAOS, source));
-        for (String source : new String[]{"onlyhaven", "fapello", "bunkr", "baddiehub", "xmegadrive.com"})
+        for (String source : new String[]{"onlyhaven", "fapello", "bunkr", "baddiehub", "xmegadrive.com", "erome.com"})
             assertFalse(source, ShitTokFeedSources.allows(ShitTokCategoryStrip.Tab.CHAOS, source));
     }
 
@@ -29,6 +29,13 @@ public class ShitTokFeedSourcesTest {
         }
         assertFalse(ShitTokFeedSources.allows(ShitTokCategoryStrip.Tab.GUYS, "baddiehub"));
         assertFalse(ShitTokFeedSources.allows(ShitTokCategoryStrip.Tab.TRANS, "baddiehub"));
+        for (ShitTokCategoryStrip.Tab tab : new ShitTokCategoryStrip.Tab[]{
+                ShitTokCategoryStrip.Tab.LADIES, ShitTokCategoryStrip.Tab.GUYS,
+                ShitTokCategoryStrip.Tab.TRANS}) {
+            assertTrue(ShitTokFeedSources.allows(tab, "erome.com"));
+        }
+        assertFalse(ShitTokFeedSources.allows(ShitTokCategoryStrip.Tab.GROUPS, "erome.com"));
+        assertFalse(ShitTokFeedSources.allows(ShitTokCategoryStrip.Tab.CHAOS, "erome.com"));
     }
 
     @Test public void landscapeEligibilityIsExtraOnlyWhenCallerAsksForIt() {

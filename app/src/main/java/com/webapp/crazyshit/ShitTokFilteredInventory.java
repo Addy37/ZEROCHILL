@@ -7,7 +7,7 @@ import java.util.function.LongSupplier;
 
 /** Bounded session inventories keyed by source mode and gender. OnlyHaven owns category evidence. */
 final class ShitTokFilteredInventory {
-    static final int HAVEN = 6, FAPELLO = 5, BUNKR = 9, SHOW = 4, BADDIEHUB = 7;
+    static final int HAVEN = 6, FAPELLO = 5, BUNKR = 9, SHOW = 4, BADDIEHUB = 7, EROME = 11;
     static final int PAGE_SIZE = 12, MAX_CREATORS = 48, MEDIA_PAGE = 36;
     private final Map<String, Session> sessions = new LinkedHashMap<>();
     private ShitTokSourceMode sourceMode = ShitTokSourceMode.ALL;
@@ -24,6 +24,11 @@ final class ShitTokFilteredInventory {
         default boolean supportsBaddieHub() { return false; }
         default List<NativeContentItem> baddieHub(ContentPreference mode, int page) throws Exception {
             return Collections.emptyList();
+        }
+        /** Off unless a backend explicitly opts in, so existing feed tests stay creator-only. */
+        default boolean supportsErome() { return false; }
+        default EromeRepository.ShitTokBatch erome(ContentPreference mode, int page) throws Exception {
+            return EromeRepository.ShitTokBatch.empty(page);
         }
         default List<OnlyHavenRepository.Creator> known(ContentPreference mode) { return Collections.emptyList(); }
     }
@@ -53,6 +58,9 @@ final class ShitTokFilteredInventory {
         final LinkedHashMap<String, Integer> evidence = new LinkedHashMap<>();
         int offset, transMenOffset;
         int baddiePage = 1;
+        int eromePage = 1;
+        boolean eromeHasMore = true;
+        final LinkedHashSet<String> eromeSeen = new LinkedHashSet<>();
         boolean hasMore = true, transMenHasMore = true, nextTransMen, seeded, havenPublished;
         long accepted, categoryRetryAt, transMenRetryAt;
         int categoryFailures, transMenFailures;
@@ -118,6 +126,18 @@ final class ShitTokFilteredInventory {
             session.pool.request(BADDIEHUB, true, backend.available(BADDIEHUB),
                     () -> loadBaddieHub(session), available);
         }
+        // Ladies, Guys, and Trans only. Chaos never reaches this loader, and Groups
+        // has no Erome category. A slow or failed Erome call stays on its own lane.
+        String eromeVersion = EromeRepository.shitTokVersion(mode);
+        boolean eromeEligible = sources == ShitTokSourceMode.ALL && backend.supportsErome()
+                && !eromeVersion.isEmpty();
+        if (eromeEligible) {
+            session.pool.setEligibility(EROME, true, backend.available(EROME));
+            if (session.eromeHasMore) {
+                session.pool.request(EROME, true, backend.available(EROME),
+                        () -> loadErome(session), available);
+            }
+        }
     }
 
     List<NativeContentItem> starter(ShitTokSourceMode sources, ContentPreference mode,
@@ -146,6 +166,30 @@ final class ShitTokFilteredInventory {
             for (NativeContentItem item : candidates) {
                 if (item == null || !item.isVideo() || item.url.isEmpty()) continue;
                 session.evidence.put(item.url, BADDIEHUB);
+                trimEvidence(session);
+                if (accepted.size() < ShitTokSourcePool.MAX_READY_PER_SOURCE) accepted.add(item);
+            }
+        }
+        return accepted;
+    }
+
+    private List<NativeContentItem> loadErome(Session session) throws Exception {
+        final int page;
+        synchronized (session) { page = session.eromePage; }
+        EromeRepository.ShitTokBatch batch = backend.erome(session.mode, page);
+        if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+        ArrayList<NativeContentItem> accepted = new ArrayList<>();
+        synchronized (session) {
+            if (session.eromePage == page) {
+                session.eromePage = Math.max(page, batch.nextPage);
+                session.eromeHasMore = batch.hasMore;
+            }
+            for (NativeContentItem item : batch.items) {
+                if (item == null || !item.isVideo() || item.url.isEmpty() || !session.eromeSeen.add(item.url)) continue;
+                while (session.eromeSeen.size() > 2048) {
+                    session.eromeSeen.remove(session.eromeSeen.iterator().next());
+                }
+                session.evidence.put(item.url, EROME);
                 trimEvidence(session);
                 if (accepted.size() < ShitTokSourcePool.MAX_READY_PER_SOURCE) accepted.add(item);
             }
@@ -383,7 +427,7 @@ final class ShitTokFilteredInventory {
     synchronized boolean hasReady(ContentPreference mode) {
         Session session = session(mode);
         if (active != mode || session == null) return false;
-        for (int source : new int[]{HAVEN, FAPELLO, BUNKR, SHOW, BADDIEHUB})
+        for (int source : new int[]{HAVEN, FAPELLO, BUNKR, SHOW, BADDIEHUB, EROME})
             if (session.pool.hasReady(source)) return true;
         return false;
     }
@@ -450,10 +494,20 @@ final class ShitTokFilteredInventory {
         FapelloRepository fapello = new FapelloRepository();
         BunkrRepository bunkr = new BunkrRepository();
         BaddieHubRepository baddie = new BaddieHubRepository();
+        EromeRepository erome = new EromeRepository();
         return new Backend() {
             private List<NativeContentItem> groupCategories;
 
             @Override public boolean supportsBaddieHub() { return true; }
+
+            @Override public boolean supportsErome() { return true; }
+
+            @Override public EromeRepository.ShitTokBatch erome(ContentPreference mode, int page)
+                    throws Exception {
+                String version = EromeRepository.shitTokVersion(mode);
+                if (version.isEmpty()) return EromeRepository.ShitTokBatch.empty(page);
+                return erome.videosForShitTok(version, page);
+            }
 
             @Override public List<NativeContentItem> baddieHub(ContentPreference mode, int page)
                     throws Exception {
