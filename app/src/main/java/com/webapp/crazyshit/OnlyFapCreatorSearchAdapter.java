@@ -41,7 +41,14 @@ final class OnlyFapCreatorSearchAdapter
 
     private final Consumer<NativeContentItem> open;
     private final SearchResultFades fades = new SearchResultFades();
+    private boolean portraitGrid;
     void resetEntrance() { fades.reset(); }
+
+    void setPortraitGrid(boolean grid) {
+        if (portraitGrid == grid) return;
+        portraitGrid = grid;
+        notifyDataSetChanged();
+    }
     private List<NativeContentItem> items = new ArrayList<>();
 
     OnlyFapCreatorSearchAdapter(Consumer<NativeContentItem> open) {
@@ -96,9 +103,73 @@ final class OnlyFapCreatorSearchAdapter
         return creatorKey(items.get(position)).hashCode();
     }
 
+    @Override
+    public int getItemViewType(int position) {
+        return portraitGrid ? 1 : 0;
+    }
+
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        return viewType == 1 ? createPortrait(parent) : createRow(parent);
+    }
+
+    private Holder createPortrait(ViewGroup parent) {
+        Context context = parent.getContext();
+        MaterialCardView card = new MaterialCardView(context);
+        card.setCardBackgroundColor(Color.TRANSPARENT);
+        card.setTag(R.id.zerochill_surface_styled, true);
+        card.setCardElevation(0f);
+        card.setRadius(dp(context, 16));
+        card.setStrokeWidth(0);
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
+
+        LinearLayout column = new LinearLayout(context);
+        column.setOrientation(LinearLayout.VERTICAL);
+        card.addView(column, new MaterialCardView.LayoutParams(-1, -2));
+
+        GlobalSearchAdapter.RatioImage portrait = new GlobalSearchAdapter.RatioImage(context);
+        portrait.setRatio(3f / 4f);
+        portrait.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        portrait.setBackgroundColor(Color.rgb(20, 20, 23));
+        column.addView(portrait, new LinearLayout.LayoutParams(-1, -2));
+
+        LinearLayout copy = new LinearLayout(context);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(context, 8), dp(context, 8), dp(context, 8), dp(context, 10));
+        TextView name = new TextView(context);
+        name.setTextColor(Color.WHITE);
+        name.setTextSize(14f);
+        name.setTypeface(null, android.graphics.Typeface.BOLD);
+        name.setMaxLines(2);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        copy.addView(name, new LinearLayout.LayoutParams(-1, -2));
+        TextView handle = new TextView(context);
+        handle.setTextColor(ZeroChillUi.color(context, R.color.zc_text_muted));
+        handle.setTextSize(12f);
+        handle.setSingleLine(true);
+        handle.setEllipsize(TextUtils.TruncateAt.END);
+        copy.addView(handle, new LinearLayout.LayoutParams(-1, -2));
+        TextView meta = new TextView(context);
+        meta.setTextColor(ZeroChillUi.color(context, R.color.zc_text_secondary));
+        meta.setTextSize(12f);
+        meta.setMaxLines(1);
+        meta.setEllipsize(TextUtils.TruncateAt.END);
+        copy.addView(meta, new LinearLayout.LayoutParams(-1, -2));
+        column.addView(copy, new LinearLayout.LayoutParams(-1, -2));
+        TextView favorite = SearchResultFavorites.create(context);
+        favorite.setVisibility(android.view.View.GONE);
+        ImageView preview = new ImageView(context);
+        preview.setVisibility(android.view.View.GONE);
+        SearchTextContrast.apply(card);
+        Holder holder = new Holder(card, portrait, preview, name, handle, meta, favorite);
+        holder.portrait = true;
+        return holder;
+    }
+
+    private Holder createRow(ViewGroup parent) {
         Context context = parent.getContext();
 
         MaterialCardView card = new MaterialCardView(context);
@@ -221,7 +292,7 @@ final class OnlyFapCreatorSearchAdapter
         );
 
         if (!item.imageUrl.equals(holder.imageUrl)) {
-            load(holder.avatar, item, true);
+            load(holder.avatar, item, !holder.portrait);
             // The source supplies one avatar URL, not a distinct media preview.
             holder.imageUrl = item.imageUrl;
         }
@@ -335,6 +406,7 @@ final class OnlyFapCreatorSearchAdapter
         final TextView favorite;
         String imageUrl;
         NativeContentItem bound;
+        boolean portrait;
 
         Holder(
                 MaterialCardView card,

@@ -110,24 +110,37 @@ public final class BunkrRepository {
         return parseAlbumIndex(fetchDocument(context, url));
     }
 
-    public List<NativeContentItem> searchAlbums(Context context, String query, int page)
-            throws IOException {
+    public static final class AlbumSearch {
+        public final List<NativeContentItem> albums;
+        public final boolean hasNext;
+
+        public AlbumSearch(List<NativeContentItem> albums, boolean hasNext) {
+            this.albums = albums == null ? new ArrayList<>() : albums;
+            this.hasNext = hasNext;
+        }
+    }
+
+    public AlbumSearch searchAlbumPage(Context context, String query, int page) throws IOException {
         requireEnabled();
-        // The native Bunkr Index API provides album metadata without Balbums' CAPTCHA.
-        // Keep the existing Balbums path as a fallback for an index outage.
         if (query != null && !query.trim().isEmpty()) {
             try {
-                return BunkrIndexSearch.search(query, page);
+                BunkrIndexSearch.Page parsed = BunkrIndexSearch.searchPage(query, page);
+                return new AlbumSearch(parsed.albums, parsed.hasNext());
             } catch (IOException indexError) {
                 try {
-                    return parseAlbumIndex(fetchDocument(context, searchUrl(query, page)));
+                    return new AlbumSearch(parseAlbumIndex(fetchDocument(context, searchUrl(query, page))), false);
                 } catch (IOException balbumsError) {
                     balbumsError.addSuppressed(indexError);
                     throw balbumsError;
                 }
             }
         }
-        return parseAlbumIndex(fetchDocument(context, searchUrl(query, page)));
+        return new AlbumSearch(parseAlbumIndex(fetchDocument(context, searchUrl(query, page))), false);
+    }
+
+    public List<NativeContentItem> searchAlbums(Context context, String query, int page)
+            throws IOException {
+        return searchAlbumPage(context, query, page).albums;
     }
 
     public static String searchUrl(String query) {
