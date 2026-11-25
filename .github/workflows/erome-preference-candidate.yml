@@ -1,7 +1,7 @@
 name: Erome preference signed phone-test candidate
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feature/spotlight-2-search]
     types: [opened, synchronize, reopened]
     paths:
       - 'app/src/**/Erome*.java'
