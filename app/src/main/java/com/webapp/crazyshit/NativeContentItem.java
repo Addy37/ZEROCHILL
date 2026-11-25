@@ -27,6 +27,7 @@ public final class NativeContentItem {
     public final float aspectRatioHint;
     final String sourceMediaUrl;
     final String sourcePageUrl;
+    final String galleryDetail;
     final List<String> creatorAliases;
     final List<String> creatorProfileUrls;
 
@@ -110,14 +111,14 @@ public final class NativeContentItem {
             float aspectRatioHint
     ) {
         this(kind, title, url, imageUrl, views, uploader, comments, description, searchQuery,
-                publishedAtMillis, aspectRatioHint, Collections.emptyList(), Collections.emptyList(), "", "");
+                publishedAtMillis, aspectRatioHint, Collections.emptyList(), Collections.emptyList(), "", "", "");
     }
 
     private NativeContentItem(
             String kind, String title, String url, String imageUrl, String views, String uploader,
             String comments, String description, String searchQuery, long publishedAtMillis,
             float aspectRatioHint, List<String> creatorAliases, List<String> creatorProfileUrls,
-            String sourceMediaUrl, String sourcePageUrl
+            String sourceMediaUrl, String sourcePageUrl, String galleryDetail
     ) {
         this.kind = kind == null ? KIND_MEDIA : kind;
         this.title = title == null ? "" : title;
@@ -134,6 +135,7 @@ public final class NativeContentItem {
                 : 0f;
         this.sourceMediaUrl = sourceMediaUrl;
         this.sourcePageUrl = sourcePageUrl;
+        this.galleryDetail = galleryDetail == null ? "" : galleryDetail;
         this.creatorAliases = creatorAliases;
         this.creatorProfileUrls = creatorProfileUrls;
     }
@@ -145,14 +147,24 @@ public final class NativeContentItem {
         }
         return new NativeContentItem(kind, title, url, imageUrl, views, uploader, comments,
                 description, searchQuery, publishedAtMillis, aspectRatioHint,
-                boundedIdentityValues(aliases), boundedIdentityValues(profileUrls), sourceMediaUrl, sourcePageUrl);
+                boundedIdentityValues(aliases), boundedIdentityValues(profileUrls),
+                sourceMediaUrl, sourcePageUrl, galleryDetail);
     }
 
     NativeContentItem withSourceMedia(String mediaUrl, String pageUrl) {
         if (sourceMediaUrl.equals(mediaUrl) && sourcePageUrl.equals(pageUrl)) return this;
         return new NativeContentItem(kind, title, url, imageUrl, views, uploader, comments,
                 description, searchQuery, publishedAtMillis, aspectRatioHint, creatorAliases,
-                creatorProfileUrls, mediaUrl, pageUrl);
+                creatorProfileUrls, mediaUrl, pageUrl, galleryDetail);
+    }
+
+    /** Album or creator totals already known. Never a count of one loaded page. */
+    NativeContentItem withGalleryDetail(String detail) {
+        String safe = detail == null ? "" : detail;
+        if (galleryDetail.equals(safe)) return this;
+        return new NativeContentItem(kind, title, url, imageUrl, views, uploader, comments,
+                description, searchQuery, publishedAtMillis, aspectRatioHint, creatorAliases,
+                creatorProfileUrls, sourceMediaUrl, sourcePageUrl, safe);
     }
 
     private static List<String> boundedIdentityValues(List<String> input) {
@@ -222,7 +234,8 @@ public final class NativeContentItem {
                 publishedAtMillis > 0L ? publishedAtMillis : other.publishedAtMillis,
                 aspectRatioHint > 0f ? aspectRatioHint : other.aspectRatioHint,
                 creatorAliases, creatorProfileUrls,
-                choose(sourceMediaUrl, other.sourceMediaUrl), choose(sourcePageUrl, other.sourcePageUrl)
+                choose(sourceMediaUrl, other.sourceMediaUrl), choose(sourcePageUrl, other.sourcePageUrl),
+                choose(galleryDetail, other.galleryDetail)
         );
     }
 

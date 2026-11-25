@@ -1,5 +1,6 @@
 package com.webapp.crazyshit;
 
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
@@ -18,6 +19,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Trace;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
@@ -2078,6 +2080,19 @@ public final class ChaosFeedView extends FrameLayout {
         }
     }
 
+    private void beginEromeSwipePreview(NativeContentItem clip, String transitionToken) {
+        ensureCreatorSwipePreview();
+        if (creatorSwipePreview == null || clip == null) return;
+        creatorSwipePreview.animate().withEndAction(null);
+        creatorSwipePreview.animate().cancel();
+        creatorSwipePreview.showEromeAlbum(clip.title, clip.uploader);
+        FrameLayout hostView = creatorSwipeHost();
+        float width = hostView == null ? Math.max(1, getWidth()) : Math.max(1, hostView.getWidth());
+        creatorSwipePreview.setTranslationX(width);
+        installCreatorSwipeSourceSnapshot(transitionToken);
+        creatorSwipePreview.bringToFront();
+    }
+
     private void beginCreatorSwipePreview(String creator, String transitionToken) {
         ensureCreatorSwipePreview();
         if (creatorSwipePreview == null || creator == null || creator.trim().isEmpty()) return;
@@ -2194,6 +2209,7 @@ public final class ChaosFeedView extends FrameLayout {
             View ignoredContent,
             String creator,
             String transitionToken,
+            boolean eromeAlbum,
             Runnable openGallery
     ) {
         if (openGallery == null) return;
@@ -2203,10 +2219,12 @@ public final class ChaosFeedView extends FrameLayout {
             return;
         }
         float width = Math.max(1f, content.getWidth());
-        creatorSwipePreview.refreshCreator(
-                creator,
-                ShitTokCreatorGalleryPreloader.sessionId(activity, creator)
-        );
+        if (!eromeAlbum) {
+            creatorSwipePreview.refreshCreator(
+                    creator,
+                    ShitTokCreatorGalleryPreloader.sessionId(activity, creator)
+            );
+        }
         content.animate().cancel();
         if (creatorSwipeSourceSnapshot != null) creatorSwipeSourceSnapshot.animate().cancel();
         creatorSwipePreview.animate().cancel();
@@ -3729,7 +3747,22 @@ public final class ChaosFeedView extends FrameLayout {
         float creatorSwipeDownX;
         float creatorSwipeDownY;
         boolean creatorSwipeTracking;
+        boolean creatorSwipeOpensErome;
+        String creatorSwipeAlbumUrl = "";
         String creatorSwipeTransitionToken = "";
+        final FrameLayout sourceMark;
+        final ImageView sourceMarkIcon;
+        final TextView sourceMarkGlyph;
+        final TextView sourceMarkName;
+        final Runnable hideSourceMarkName;
+        final LinearLayout titleRow;
+        final LinearLayout metaRow;
+        final TextView sourceDot;
+        final LinearLayout accessPill;
+        final ImageView accessIcon;
+        final TextView accessLabel;
+        final LinearLayout accessChevrons;
+        ValueAnimator accessHintAnimator;
 
         private final Runnable hideControlsRunnable = this::hideControlsNow;
         private final Runnable skipFailedClipRunnable = () -> {
@@ -3818,18 +3851,167 @@ public final class ChaosFeedView extends FrameLayout {
             copy.setBackgroundColor(Color.TRANSPARENT);
             lower.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
+            LinearLayout titleRow = new LinearLayout(activity);
+            titleRow.setOrientation(LinearLayout.HORIZONTAL);
+            titleRow.setGravity(Gravity.CENTER_VERTICAL);
+            this.titleRow = titleRow;
+
+            accessPill = new LinearLayout(activity);
+            accessPill.setTag("shittok_access_pill");
+            accessPill.setOrientation(LinearLayout.HORIZONTAL);
+            accessPill.setGravity(Gravity.CENTER_VERTICAL);
+            accessPill.setMinimumHeight(dp(32));
+            accessPill.setPadding(dp(10), dp(4), dp(8), dp(4));
+            accessPill.setClickable(true);
+            accessPill.setFocusable(true);
+            accessPill.setVisibility(View.GONE);
+            GradientDrawable accessGlass = new GradientDrawable();
+            accessGlass.setColor(0xB3101216);
+            accessGlass.setCornerRadius(dp(18));
+            accessGlass.setStroke(Math.max(1, dp(1)), 0x38FFFFFF);
+            accessPill.setBackground(accessGlass);
+            accessIcon = new ImageView(activity);
+            accessIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            accessIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            accessPill.addView(accessIcon, new LinearLayout.LayoutParams(dp(14), dp(14)));
+            accessLabel = new TextView(activity);
+            accessLabel.setTextColor(Color.WHITE);
+            accessLabel.setTextSize(12.5f);
+            accessLabel.setSingleLine(true);
+            accessLabel.setEllipsize(TextUtils.TruncateAt.END);
+            accessLabel.setIncludeFontPadding(false);
+            accessLabel.setMaxWidth(dp(180));
+            accessLabel.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            LinearLayout.LayoutParams accessLabelParams = new LinearLayout.LayoutParams(-2, -2);
+            accessLabelParams.leftMargin = dp(6);
+            accessLabelParams.rightMargin = dp(2);
+            accessPill.addView(accessLabel, accessLabelParams);
+            accessChevrons = new LinearLayout(activity);
+            accessChevrons.setOrientation(LinearLayout.HORIZONTAL);
+            accessChevrons.setGravity(Gravity.CENTER_VERTICAL);
+            accessChevrons.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            accessPill.addView(accessChevrons, new LinearLayout.LayoutParams(-2, -2));
+            for (int chevron = 0; chevron < 2; chevron++) {
+                ImageView mark = new ImageView(activity);
+                mark.setImageResource(R.drawable.ic_more_chevron);
+                mark.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+                LinearLayout.LayoutParams chevronParams = new LinearLayout.LayoutParams(dp(12), dp(12));
+                if (chevron == 1) chevronParams.leftMargin = -dp(6);
+                accessChevrons.addView(mark, chevronParams);
+            }
+            LinearLayout.LayoutParams pillParams = new LinearLayout.LayoutParams(-2, -2);
+            pillParams.bottomMargin = dp(8);
+            copy.addView(accessPill, pillParams);
+
             title = new ShitTokOverlayTextView(activity);
             title.setTextColor(Color.WHITE);
             title.setTextSize(18);
             title.setTypeface(null, android.graphics.Typeface.BOLD);
             title.setMaxLines(3);
+            title.setEllipsize(TextUtils.TruncateAt.END);
             title.setLineSpacing(dp(2), 1f);
-            copy.addView(title, new LinearLayout.LayoutParams(-1, -2));
+            titleRow.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+            copy.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
+            ZeroChillMotion.installPressFeedback(accessPill);
+            accessPill.setOnClickListener(v -> {
+                if (!title.isClickable()) return;
+                title.performClick();
+            });
 
+            metaRow = new LinearLayout(activity);
+            metaRow.setOrientation(LinearLayout.HORIZONTAL);
+            metaRow.setGravity(Gravity.CENTER_VERTICAL);
+            metaRow.setPadding(0, dp(7), 0, 0);
             meta = new ShitTokOverlayTextView(activity);
             meta.setTextSize(13);
-            meta.setPadding(0, dp(7), 0, 0);
-            copy.addView(meta, new LinearLayout.LayoutParams(-1, -2));
+            meta.setSingleLine(true);
+            meta.setEllipsize(TextUtils.TruncateAt.END);
+            meta.setMaxWidth(dp(220));
+            metaRow.addView(meta, new LinearLayout.LayoutParams(-2, -2));
+            sourceDot = new TextView(activity);
+            sourceDot.setText("·");
+            sourceDot.setTextColor(0x99FFFFFF);
+            sourceDot.setTextSize(13);
+            sourceDot.setGravity(Gravity.CENTER);
+            sourceDot.setIncludeFontPadding(false);
+            sourceDot.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            sourceDot.setVisibility(View.GONE);
+            LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(-2, -2);
+            dotParams.leftMargin = dp(5);
+            dotParams.rightMargin = dp(1);
+            metaRow.addView(sourceDot, dotParams);
+
+            sourceMark = new FrameLayout(activity);
+            sourceMark.setTag("shittok_source_mark");
+            sourceMark.setClickable(true);
+            sourceMark.setFocusable(true);
+            sourceMark.setVisibility(View.GONE);
+            GradientDrawable sourcePlate = new GradientDrawable();
+            sourcePlate.setColor(0xD9141418);
+            sourcePlate.setCornerRadius(dp(5));
+            sourcePlate.setStroke(Math.max(1, dp(1)), 0x33FFFFFF);
+            sourceMark.setBackground(sourcePlate);
+            sourceMark.setPadding(dp(2), dp(2), dp(2), dp(2));
+            sourceMarkIcon = new ImageView(activity);
+            sourceMarkIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            sourceMarkIcon.setAdjustViewBounds(true);
+            sourceMarkIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            sourceMark.addView(sourceMarkIcon, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+            sourceMarkGlyph = new TextView(activity);
+            sourceMarkGlyph.setTextColor(Color.WHITE);
+            sourceMarkGlyph.setTypeface(null, android.graphics.Typeface.BOLD);
+            sourceMarkGlyph.setGravity(Gravity.CENTER);
+            sourceMarkGlyph.setIncludeFontPadding(false);
+            sourceMarkGlyph.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            sourceMark.addView(sourceMarkGlyph, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+            LinearLayout.LayoutParams markParams = sourceBadgeParams();
+            metaRow.addView(sourceMark, markParams);
+            sourceMarkName = new ShitTokOverlayTextView(activity);
+            sourceMarkName.setTextSize(12);
+            sourceMarkName.setTypeface(null, android.graphics.Typeface.BOLD);
+            sourceMarkName.setSingleLine(true);
+            sourceMarkName.setEllipsize(TextUtils.TruncateAt.END);
+            sourceMarkName.setMaxWidth(dp(132));
+            sourceMarkName.setVisibility(View.GONE);
+            LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(-2, -2);
+            nameParams.leftMargin = dp(4);
+            nameParams.gravity = Gravity.CENTER_VERTICAL;
+            metaRow.addView(sourceMarkName, nameParams);
+            hideSourceMarkName = () -> sourceMarkName.setVisibility(View.GONE);
+            sourceMark.setOnClickListener(v -> {
+                haptic(v);
+                sourceMarkName.removeCallbacks(hideSourceMarkName);
+                if (sourceMarkName.getVisibility() == View.VISIBLE) {
+                    sourceMarkName.setVisibility(View.GONE);
+                    return;
+                }
+                sourceMarkName.setVisibility(View.VISIBLE);
+                sourceMarkName.announceForAccessibility(sourceMarkName.getText());
+                sourceMarkName.postDelayed(hideSourceMarkName, 1600L);
+            });
+            titleRow.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                if (sourceMark.getParent() != titleRow || sourceMark.getVisibility() != View.VISIBLE) return;
+                int trailing = sourceMark.getWidth() + dp(6);
+                if (sourceMarkName.getParent() == titleRow && sourceMarkName.getVisibility() == View.VISIBLE) {
+                    trailing += sourceMarkName.getWidth() + dp(4);
+                }
+                int available = Math.max(dp(48), titleRow.getWidth() - trailing);
+                if (title.getMaxWidth() != available) title.setMaxWidth(available);
+            });
+            copy.addView(metaRow, new LinearLayout.LayoutParams(-1, -2));
+            metaRow.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                int trailing = dp(6);
+                if (sourceDot.getVisibility() == View.VISIBLE) trailing += sourceDot.getWidth();
+                if (sourceMark.getParent() == metaRow && sourceMark.getVisibility() == View.VISIBLE) {
+                    trailing += sourceMark.getWidth();
+                }
+                if (sourceMarkName.getParent() == metaRow && sourceMarkName.getVisibility() == View.VISIBLE) {
+                    trailing += sourceMarkName.getWidth();
+                }
+                int available = Math.max(dp(72), metaRow.getWidth() - trailing - dp(8));
+                if (meta.getMaxWidth() != available) meta.setMaxWidth(available);
+            });
 
             actionRail = new LinearLayout(activity);
             actionRail.setOrientation(LinearLayout.VERTICAL);
@@ -4192,14 +4374,19 @@ public final class ChaosFeedView extends FrameLayout {
                 }
 
                 if (action == MotionEvent.ACTION_MOVE && !manualFullscreen) {
+                    String album = ShitTokEromeGallery.albumUrl(item);
                     String creator = creatorIdentity == null ? "" : creatorIdentity.title;
+                    boolean erome = !album.isEmpty();
+                    boolean gallery = erome || !creator.isEmpty();
                     float dx = event.getX() - creatorSwipeDownX;
                     float dy = event.getY() - creatorSwipeDownY;
-                    if (!creator.isEmpty() && dx < -dp(14)
+                    if (gallery && dx < -dp(14)
                             && Math.abs(dx) > Math.abs(dy) * 1.20f) {
                         if (!creatorSwipeTracking) {
                             videoTaps.cancel();
                             creatorSwipeTracking = true;
+                            creatorSwipeOpensErome = erome;
+                            creatorSwipeAlbumUrl = erome ? album : "";
                             View sourceSurface = creatorSwipeSourceView();
                             creatorSwipeTransitionToken =
                                     ShitTokTransitionSnapshotStore.beginCapture(
@@ -4207,7 +4394,8 @@ public final class ChaosFeedView extends FrameLayout {
                                             sourceSurface == null ? root : sourceSurface,
                                             playerView.getVideoSurfaceView()
                                     );
-                            beginCreatorSwipePreview(creator, creatorSwipeTransitionToken);
+                            if (erome) beginEromeSwipePreview(item, creatorSwipeTransitionToken);
+                            else beginCreatorSwipePreview(creator, creatorSwipeTransitionToken);
                         }
                         pager.setUserInputEnabled(false);
                         ViewParentCompat.disallow(v, true);
@@ -4223,14 +4411,20 @@ public final class ChaosFeedView extends FrameLayout {
                         float dx = event.getX() - creatorSwipeDownX;
                         float dy = event.getY() - creatorSwipeDownY;
                         float threshold = Math.max(dp(72), root.getWidth() * 0.18f);
-                        boolean openCreator = action == MotionEvent.ACTION_UP
+                        boolean openGallery = action == MotionEvent.ACTION_UP
                                 && shouldOpenCreatorGallerySwipe(dx, dy, threshold);
+                        boolean erome = creatorSwipeOpensErome;
+                        String album = creatorSwipeAlbumUrl;
                         creatorSwipeTracking = false;
+                        creatorSwipeOpensErome = false;
+                        creatorSwipeAlbumUrl = "";
                         pager.setUserInputEnabled(true);
                         ViewParentCompat.disallow(v, false);
-                        if (openCreator) {
+                        if (openGallery && (erome || creatorIdentity != null)) {
                             String creator = creatorIdentity == null ? "" : creatorIdentity.title;
                             haptic(v);
+                            ShitTokAccessHint.learned(activity);
+                            cancelAccessHint();
                             pauseAndRecord();
                             String transitionToken = creatorSwipeTransitionToken;
                             creatorSwipeTransitionToken = "";
@@ -4238,7 +4432,10 @@ public final class ChaosFeedView extends FrameLayout {
                                     root,
                                     creator,
                                     transitionToken,
-                                    () -> openCreatorGallery(true, transitionToken)
+                                    erome,
+                                    erome
+                                            ? () -> openEromeGallery(item, album, true, transitionToken)
+                                            : () -> openCreatorGallery(true, transitionToken)
                             );
                         } else {
                             cancelCreatorSwipePreview(root);
@@ -4264,6 +4461,12 @@ public final class ChaosFeedView extends FrameLayout {
             title.setOnLongClickListener(menuLongPress);
             meta.setOnLongClickListener(menuLongPress);
             title.setOnClickListener(v -> {
+                String album = ShitTokEromeGallery.albumUrl(item);
+                if (!album.isEmpty()) {
+                    haptic(v);
+                    openEromeGallery(item, album, false, "");
+                    return;
+                }
                 if (creatorIdentity == null) return;
                 haptic(v);
                 openCreatorGallery(false, "");
@@ -4576,9 +4779,11 @@ public final class ChaosFeedView extends FrameLayout {
             title.setText(displayTitle);
             landscapeTitle.setText(next.title == null || next.title.isEmpty()
                     ? displayTitle : next.title);
-            title.setClickable(creatorClip);
+            boolean eromeClip = !ShitTokEromeGallery.albumUrl(next).isEmpty();
+            title.setClickable(creatorClip || eromeClip);
             title.setContentDescription(
-                    creatorClip ? "Open " + creator + " gallery" : displayTitle
+                    eromeClip ? "Open Erome album"
+                            : creatorClip ? "Open " + creator + " gallery" : displayTitle
             );
             StringBuilder info = new StringBuilder();
             if (!creatorClip) {
@@ -4592,8 +4797,137 @@ public final class ChaosFeedView extends FrameLayout {
             if (creatorClip && BaddieHubRepository.isBaddieHubUrl(next.url)) {
                 // Creator identity never changes this clip's source, resolver, or saved media.
                 meta.setText(BaddieHubRepository.LABEL);
-                meta.setVisibility(View.VISIBLE);
-            } else meta.setVisibility(creatorClip ? View.GONE : View.VISIBLE);
+            }
+            boolean named = meta.getText() != null && meta.getText().length() > 0;
+            meta.setVisibility(named ? View.VISIBLE : View.GONE);
+            metaRow.setVisibility(named ? View.VISIBLE : View.GONE);
+            bindSourceMark(next, named);
+            bindAccessPill(next);
+        }
+
+        private void bindAccessPill(NativeContentItem next) {
+            cancelAccessHint();
+            ShitTokGalleryAccess.Presentation access = ShitTokGalleryAccess.of(next, creatorIdentity);
+            if (!access.visible()) {
+                accessPill.setVisibility(View.GONE);
+                accessPill.setContentDescription(null);
+                return;
+            }
+            int accent = AppearanceTheme.accent(activity);
+            accessPill.setVisibility(View.VISIBLE);
+            accessLabel.setText(access.label);
+            accessIcon.setImageResource(access.kind == ShitTokGalleryAccess.Kind.CREATOR
+                    ? R.drawable.ic_more_account : R.drawable.ic_more_view_style);
+            accessIcon.setImageTintList(ColorStateList.valueOf(accent));
+            tintAccessChevrons(accent);
+            accessPill.setContentDescription(access.contentDescription);
+            if (ZeroChillMotion.animationsEnabled(activity)
+                    && ShitTokAccessHint.noteAppearance(activity, next.url)) {
+                nudgeAccessChevrons();
+            }
+        }
+
+        private void tintAccessChevrons(int accent) {
+            ColorStateList tint = ColorStateList.valueOf(accent);
+            for (int index = 0; index < accessChevrons.getChildCount(); index++) {
+                View child = accessChevrons.getChildAt(index);
+                if (child instanceof ImageView) ((ImageView) child).setImageTintList(tint);
+            }
+        }
+
+        private void nudgeAccessChevrons() {
+            cancelAccessHint();
+            accessChevrons.setTranslationX(0f);
+            float distance = dp(4);
+            accessHintAnimator = ValueAnimator.ofFloat(0f, 1f);
+            accessHintAnimator.setDuration(780L);
+            accessHintAnimator.setInterpolator(ZeroChillMotion.EASE_OUT);
+            accessHintAnimator.addUpdateListener(animation -> {
+                float t = (float) animation.getAnimatedValue();
+                float phase = t < 0.55f ? t / 0.55f : 1f - (t - 0.55f) / 0.45f;
+                accessChevrons.setTranslationX(distance * phase);
+            });
+            accessHintAnimator.start();
+        }
+
+        private void cancelAccessHint() {
+            if (accessHintAnimator != null) {
+                accessHintAnimator.cancel();
+                accessHintAnimator = null;
+            }
+            if (accessChevrons != null) accessChevrons.setTranslationX(0f);
+        }
+
+        private LinearLayout.LayoutParams sourceBadgeParams() {
+            LinearLayout.LayoutParams markParams = new LinearLayout.LayoutParams(dp(20), dp(20));
+            markParams.gravity = Gravity.CENTER_VERTICAL;
+            markParams.leftMargin = dp(6);
+            return markParams;
+        }
+
+        private void bindSourceMark(NativeContentItem next, boolean besideUsername) {
+            sourceMarkName.removeCallbacks(hideSourceMarkName);
+            sourceMarkName.setVisibility(View.GONE);
+            sourceDot.setVisibility(View.GONE);
+            ShitTokSourceMark.Provider provider = ShitTokSourceMark.of(next);
+            if (provider == null) {
+                sourceMark.setVisibility(View.GONE);
+                sourceMark.setContentDescription(null);
+                parkTitleFullWidth();
+                return;
+            }
+            LinearLayout row = besideUsername ? metaRow : titleRow;
+            if (sourceMark.getParent() != row) {
+                detachChrome(sourceMark);
+                detachChrome(sourceMarkName);
+                row.addView(sourceMark, sourceBadgeParams());
+                LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(-2, -2);
+                nameParams.leftMargin = dp(4);
+                nameParams.gravity = Gravity.CENTER_VERTICAL;
+                row.addView(sourceMarkName, nameParams);
+            } else {
+                sourceMark.setLayoutParams(sourceBadgeParams());
+            }
+            if (besideUsername) parkTitleFullWidth();
+            else hugTitleBeforeBadge();
+            sourceMark.setVisibility(View.VISIBLE);
+            sourceMark.setContentDescription(provider.name + ". Show provider name");
+            sourceMarkName.setText(provider.name);
+            if (provider.iconRes != 0) {
+                sourceMarkIcon.setImageResource(provider.iconRes);
+                sourceMarkIcon.setImageTintList(null);
+                sourceMarkIcon.setImageAlpha(255);
+                sourceMarkIcon.setVisibility(View.VISIBLE);
+                sourceMarkGlyph.setVisibility(View.GONE);
+            } else {
+                sourceMarkIcon.setImageDrawable(null);
+                sourceMarkIcon.setVisibility(View.GONE);
+                sourceMarkGlyph.setText(provider.monogram);
+                sourceMarkGlyph.setTextColor(Color.WHITE);
+                sourceMarkGlyph.setTextSize(provider.monogram.length() > 1 ? 7f : 11f);
+                sourceMarkGlyph.setVisibility(View.VISIBLE);
+            }
+        }
+
+        private void parkTitleFullWidth() {
+            LinearLayout.LayoutParams titleParams = (LinearLayout.LayoutParams) title.getLayoutParams();
+            titleParams.width = 0;
+            titleParams.weight = 1f;
+            title.setLayoutParams(titleParams);
+            title.setMaxWidth(Integer.MAX_VALUE);
+        }
+
+        private void hugTitleBeforeBadge() {
+            LinearLayout.LayoutParams titleParams = (LinearLayout.LayoutParams) title.getLayoutParams();
+            titleParams.width = LinearLayout.LayoutParams.WRAP_CONTENT;
+            titleParams.weight = 0f;
+            title.setLayoutParams(titleParams);
+        }
+
+        private static void detachChrome(View view) {
+            if (view.getParent() instanceof ViewGroup) {
+                ((ViewGroup) view.getParent()).removeView(view);
+            }
         }
 
         private void bindCreatorAvatar(NativeContentItem media, boolean creatorClip) {
@@ -4678,6 +5012,8 @@ public final class ChaosFeedView extends FrameLayout {
                 updateSaveButton(item, landscapeSave);
             }
             if (heartOverlay != null) heartOverlay.setImageTintList(ColorStateList.valueOf(accent));
+            tintAccessChevrons(accent);
+            accessIcon.setImageTintList(ColorStateList.valueOf(accent));
             syncMuteButtons();
         }
 
@@ -4816,6 +5152,7 @@ public final class ChaosFeedView extends FrameLayout {
             like.animate().withEndAction(null).cancel();
             like.setScaleX(1f);
             like.setScaleY(1f);
+            cancelAccessHint();
             setSwipeAlpha(1f);
         }
 
@@ -5382,6 +5719,51 @@ public final class ChaosFeedView extends FrameLayout {
                 if (key != null && name.equalsIgnoreCase(key)) return;
             }
             headers.put(name, value);
+        }
+
+        private void openEromeGallery(
+                NativeContentItem clip,
+                String albumUrl,
+                boolean seamless,
+                String transitionToken
+        ) {
+            pinch.reset();
+            String album = albumUrl == null || albumUrl.isEmpty()
+                    ? ShitTokEromeGallery.albumUrl(clip) : albumUrl;
+            if (clip == null || album.isEmpty()) return;
+            ShitTokSmartRanker.action(clip, ShitTokSmartRanker.Action.GALLERY);
+            String returnToken = transitionToken == null ? "" : transitionToken.trim();
+            if (returnToken.isEmpty()) {
+                View sourceSurface = creatorSwipeSourceView();
+                returnToken = ShitTokTransitionSnapshotStore.beginCapture(
+                        activity,
+                        sourceSurface == null ? root : sourceSurface,
+                        playerView.getVideoSurfaceView()
+                );
+            }
+            rememberSelectedPosition();
+            pauseAndRecord();
+            NativeContentItem albumItem = new NativeContentItem(
+                    NativeContentItem.KIND_SERIES,
+                    clip.title == null || clip.title.isEmpty() ? "Erome album" : clip.title,
+                    album,
+                    clip.imageUrl,
+                    "",
+                    clip.uploader,
+                    "",
+                    ""
+            );
+            Intent intent = NativeFeedBrowserActivity.createShowDetails(
+                    activity, albumItem, NativeFeedBrowserActivity.SOURCE_EROME);
+            if (!returnToken.isEmpty()) {
+                intent.putExtra(
+                        NativeFeedBrowserActivity.EXTRA_SHITTOK_RETURN_TRANSITION,
+                        returnToken
+                );
+            }
+            creatorGalleryHandoff = true;
+            activity.startActivity(intent);
+            if (seamless) activity.overridePendingTransition(0, 0);
         }
 
         private void openCreatorGallery(boolean seamless, String transitionToken) {

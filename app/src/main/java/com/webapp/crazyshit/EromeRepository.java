@@ -46,10 +46,191 @@ public final class EromeRepository {
         }
     }
 
+    private final java.util.Map<String, String> shitTokCookies = new java.util.HashMap<>();
+    static final int SHITTOK_MAX_PAGE = 30;
+    private static final int SHITTOK_ALBUMS = 2;
+    private static final int SHITTOK_VIDEOS = 6;
+
+    /** One bounded ShitTok page. The cookie that produced it stays inside this repository. */
+    public static final class ShitTokBatch {
+        public final List<NativeContentItem> items;
+        public final int nextPage;
+        public final boolean hasMore;
+
+        ShitTokBatch(List<NativeContentItem> items, int nextPage, boolean hasMore) {
+            this.items = items == null ? new ArrayList<>() : items;
+            this.nextPage = Math.max(1, nextPage);
+            this.hasMore = hasMore;
+        }
+
+        static ShitTokBatch empty(int page) {
+            return new ShitTokBatch(new ArrayList<>(), Math.max(1, page), false);
+        }
+    }
+
+    interface AlbumReader {
+        Document read(String url) throws IOException;
+    }
+
+    /**
+     * Playable Erome videos for one ShitTok feed.
+     * Uses a private straight, trans, or gay cookie. Never Hentai, and never the Spotlight choice.
+     */
+    public ShitTokBatch videosForShitTok(String versionSlug, int page) throws IOException {
+        if (!shitTokVersionAllowed(versionSlug) || page > SHITTOK_MAX_PAGE) return ShitTokBatch.empty(page);
+        int safePage = Math.max(1, page);
+        String cookie = shitTokCookie(EromePreference.Choice.fromSlug(versionSlug));
+        Document listing = getIsolated(exploreUrl(safePage), cookie);
+        return collectShitTokVideos(EromePages.parseSearch(listing), safePage, url -> getIsolated(url, cookie));
+    }
+
+    static ShitTokBatch collectShitTokVideos(EromePages.SearchPage listing, int page, AlbumReader reader)
+            throws IOException {
+        int safePage = Math.max(1, Math.min(page, SHITTOK_MAX_PAGE));
+        boolean hasMore = listing != null && listing.hasNext && safePage < SHITTOK_MAX_PAGE;
+        int nextPage = hasMore ? safePage + 1 : safePage;
+        ArrayList<NativeContentItem> videos = new ArrayList<>();
+        if (listing == null || reader == null) return new ShitTokBatch(videos, nextPage, hasMore);
+        int opened = 0;
+        IOException failure = null;
+        for (NativeContentItem album : listing.items) {
+            if (opened >= SHITTOK_ALBUMS || videos.size() >= SHITTOK_VIDEOS) break;
+            if (!albumHasPlayableVideo(album)) continue;
+            opened++;
+            Document document;
+            try {
+                document = reader.read(album.url);
+            } catch (IOException error) {
+                failure = error;
+                continue;
+            }
+            java.util.List<NativeContentItem> media = EromePages.parseAlbum(document, album.url).items;
+            String detail = ShitTokGalleryAccess.confirmedAlbumDetail(
+                    ShitTokGalleryAccess.albumDetail(media), album.description);
+            for (NativeContentItem clip : shitTokClips(media)) {
+                if (videos.size() >= SHITTOK_VIDEOS) break;
+                NativeContentItem stamped = detail.isEmpty() ? clip : clip.withGalleryDetail(detail);
+                boolean duplicate = false;
+                for (NativeContentItem existing : videos) {
+                    if (existing.url.equals(stamped.url)) duplicate = true;
+                }
+                if (!duplicate) videos.add(stamped);
+            }
+        }
+        if (videos.isEmpty() && failure != null) throw failure;
+        return new ShitTokBatch(videos, nextPage, hasMore);
+    }
+
+    static boolean shitTokVersionAllowed(String slug) {
+        EromePreference.Choice choice = EromePreference.Choice.fromSlug(slug);
+        return choice == EromePreference.Choice.STRAIGHT
+                || choice == EromePreference.Choice.TRANS
+                || choice == EromePreference.Choice.GAY;
+    }
+
+    /** Ladies, Guys, and Trans only. Chaos and Groups stay on their existing providers. */
+    static String shitTokVersion(ContentPreference mode) {
+        if (mode == ContentPreference.WOMEN) return EromePreference.Choice.STRAIGHT.slug;
+        if (mode == ContentPreference.MEN) return EromePreference.Choice.GAY.slug;
+        if (mode == ContentPreference.TRANS_WOMEN || mode == ContentPreference.TRANS_MEN
+                || mode == ContentPreference.TRANS) {
+            return EromePreference.Choice.TRANS.slug;
+        }
+        return "";
+    }
+
+    static boolean albumHasPlayableVideo(NativeContentItem album) {
+        return album != null && album.description != null
+                && album.description.toLowerCase(Locale.US).contains("video");
+    }
+
+    static List<NativeContentItem> shitTokClips(List<NativeContentItem> media) {
+        ArrayList<NativeContentItem> videos = new ArrayList<>();
+        if (media == null) return videos;
+        for (NativeContentItem item : media) {
+            if (item == null || !item.isVideo()) continue;
+            if (!isDirectVideo(item.sourceMediaUrl)) continue;
+            videos.add(item);
+        }
+        return videos;
+    }
+
+    static String cookieHeader(List<String> setCookies) {
+        LinkedHashMap<String, String> pairs = new LinkedHashMap<>();
+        if (setCookies == null) return "";
+        for (String header : setCookies) {
+            if (header == null) continue;
+            String pair = header.split(";", 2)[0].trim();
+            int eq = pair.indexOf('=');
+            if (eq <= 0) continue;
+            pairs.put(pair.substring(0, eq).trim().toLowerCase(Locale.US), pair);
+        }
+        return String.join("; ", pairs.values());
+    }
+
+    private String shitTokCookie(EromePreference.Choice choice) throws IOException {
+        synchronized (shitTokCookies) {
+            String existing = shitTokCookies.get(choice.slug);
+            if (existing != null && existing.toLowerCase(Locale.US).contains("erome_version=")) return existing;
+        }
+        Connection.Response response = Jsoup.connect(EromePreference.versionUrl(choice))
+                .userAgent(USER_AGENT)
+                .timeout(TIMEOUT_MS)
+                .maxBodySize(64 * 1024)
+                .followRedirects(false)
+                .ignoreHttpErrors(true)
+                .ignoreContentType(true)
+                .referrer(ORIGIN + "/")
+                .header("Accept", "text/html,application/xhtml+xml")
+                .execute();
+        if (response.statusCode() != 200 && response.statusCode() != 302 && response.statusCode() != 303) {
+            throw new IOException("Erome preference returned HTTP " + response.statusCode());
+        }
+        String header = cookieHeader(response.headers("Set-Cookie"));
+        if (!header.toLowerCase(Locale.US).contains("erome_version=")) {
+            throw new IOException("Erome did not provide a ShitTok preference");
+        }
+        synchronized (shitTokCookies) { shitTokCookies.put(choice.slug, header); }
+        return header;
+    }
+
+    private static String exploreUrl(int page) {
+        return page <= 1 ? ORIGIN + "/explore" : ORIGIN + "/explore?page=" + page;
+    }
+
+    private Document getIsolated(String url, String cookie) throws IOException {
+        if (!isEromeHttpUrl(url)) throw new IOException("Refusing a non-Erome URL");
+        Connection connection = Jsoup.connect(url)
+                .userAgent(USER_AGENT)
+                .timeout(TIMEOUT_MS)
+                .maxBodySize(MAX_BODY_BYTES)
+                .followRedirects(true)
+                .ignoreHttpErrors(true)
+                .ignoreContentType(false)
+                .referrer(ORIGIN + "/")
+                .header("Accept", "text/html,application/xhtml+xml")
+                .header("Accept-Language", "en-US,en;q=0.9");
+        if (cookie != null && !cookie.isEmpty()) connection.header("Cookie", cookie);
+        Connection.Response response = connection.execute();
+        String finalUrl = response.url() == null ? "" : response.url().toString();
+        if (!isEromeHttpUrl(finalUrl)) throw new IOException("Erome redirected away from the provider");
+        int status = response.statusCode();
+        if (status == 401 || status == 403 || status == 429 || status == 451) {
+            throw new EromePages.AccessException("Erome returned HTTP " + status);
+        }
+        if (status != 200) throw new IOException("Erome returned HTTP " + status);
+        Document document = response.parse();
+        if (EromePages.isAccessRestricted(document)) {
+            throw new EromePages.AccessException("Erome requested verification");
+        }
+        return document;
+    }
+
     public SearchPage search(Context context, String query, int page) throws IOException {
         String trimmed = query == null ? "" : query.trim();
         if (trimmed.length() < 2 || trimmed.length() > 100) return SearchPage.empty();
         int safePage = Math.max(1, Math.min(page, MAX_PAGE));
+        preparePreference(context);
         Document document = get(context, searchUrl(trimmed, safePage));
         EromePages.SearchPage parsed = EromePages.parseSearch(document);
         return new SearchPage(parsed.items, parsed.hasNext);
@@ -58,6 +239,7 @@ public final class EromeRepository {
     public List<NativeContentItem> fetchAlbum(Context context, String albumUrl) throws IOException {
         String canonical = canonicalAlbum(albumUrl);
         if (canonical.isEmpty()) throw new IOException("Not an Erome album URL");
+        preparePreference(context);
         LinkedHashMap<String, NativeContentItem> media = new LinkedHashMap<>();
         String next = canonical;
         for (int page = 0; page < MAX_ALBUM_PAGES && !next.isEmpty() && media.size() < EromePages.MAX_ALBUM_MEDIA; page++) {
@@ -88,6 +270,7 @@ public final class EromeRepository {
         if (album.isEmpty() || token.isEmpty() || token.startsWith("img-")) {
             throw new IOException("Not an Erome video");
         }
+        preparePreference(context);
         Document document = get(context, album);
         String media = EromePages.videoSource(document, album, token);
         if (!isDirectVideo(media)) throw new IOException("Erome video was not available");
@@ -275,6 +458,50 @@ public final class EromeRepository {
             activity.startActivity(browser);
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Asks Erome to set its own {@code erome_version} cookie.
+     * Results are not filtered in the app. A matching cookie is reused.
+     */
+    public void preparePreference(Context context) throws IOException {
+        if (context == null) return;
+        EromePreference.Choice choice = EromePreference.get(context);
+        String jar = cookies(ORIGIN + "/");
+        if (choice.slug.equals(EromePreference.applied(context))
+                && jar.toLowerCase(Locale.US).contains("erome_version=")) return;
+        String url = EromePreference.versionUrl(choice);
+        if (url.isEmpty()) throw new IOException("Erome preference is not supported");
+        Connection.Response response = Jsoup.connect(url)
+                .userAgent(USER_AGENT)
+                .timeout(TIMEOUT_MS)
+                .maxBodySize(64 * 1024)
+                .followRedirects(false)
+                .ignoreHttpErrors(true)
+                .ignoreContentType(true)
+                .referrer(ORIGIN + "/")
+                .header("Accept", "text/html,application/xhtml+xml")
+                .execute();
+        if (!acceptPreference(context, choice, response.statusCode(), response.headers("Set-Cookie"))) {
+            throw new IOException("Erome did not apply the selected preference");
+        }
+    }
+
+    static boolean acceptPreference(Context context, EromePreference.Choice choice, int status,
+                                    java.util.List<String> setCookies) {
+        if (choice == null || (status != 200 && status != 302 && status != 303)) return false;
+        if (!EromePreference.hasVersionCookie(setCookies)) return false;
+        try {
+            CookieManager manager = CookieManager.getInstance();
+            for (String header : setCookies) {
+                if (header != null && !header.trim().isEmpty()) manager.setCookie(ORIGIN + "/", header);
+            }
+            manager.flush();
+        } catch (Exception ignored) {
+            return false;
+        }
+        EromePreference.markApplied(context, choice);
+        return choice.slug.equals(EromePreference.applied(context));
     }
 
     private Document get(Context context, String url) throws IOException {

@@ -152,6 +152,11 @@ public class SearchScopeTest {
         static volatile boolean fail;
         static volatile CountDownLatch started = new CountDownLatch(1);
         static volatile CountDownLatch release = new CountDownLatch(0);
+        @Implementation protected BunkrRepository.AlbumSearch searchAlbumPage(Context context, String query, int page)
+                throws java.io.IOException {
+            return new BunkrRepository.AlbumSearch(searchAlbums(context, query, page), false);
+        }
+
         @Implementation protected List<NativeContentItem> searchAlbums(Context context, String query, int page)
                 throws java.io.IOException {
             calls.incrementAndGet(); started.countDown();
