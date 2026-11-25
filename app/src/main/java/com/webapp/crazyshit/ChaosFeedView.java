@@ -3913,6 +3913,15 @@ public final class ChaosFeedView extends FrameLayout {
             title.setLineSpacing(dp(2), 1f);
             titleRow.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
             copy.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
+            titleRow.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                if (sourceMark.getParent() != titleRow || sourceMark.getVisibility() != View.VISIBLE) return;
+                int trailing = sourceMark.getWidth() + dp(6);
+                if (sourceMarkName.getParent() == titleRow && sourceMarkName.getVisibility() == View.VISIBLE) {
+                    trailing += sourceMarkName.getWidth() + dp(4);
+                }
+                int available = Math.max(dp(48), titleRow.getWidth() - trailing);
+                if (title.getMaxWidth() != available) title.setMaxWidth(available);
+            });
             ZeroChillMotion.installPressFeedback(accessPill);
             accessPill.setOnClickListener(v -> {
                 if (!title.isClickable()) return;
@@ -3947,21 +3956,25 @@ public final class ChaosFeedView extends FrameLayout {
             sourceMark.setClickable(true);
             sourceMark.setFocusable(true);
             sourceMark.setVisibility(View.GONE);
-            sourceMark.setBackgroundColor(Color.TRANSPARENT);
+            GradientDrawable sourcePlate = new GradientDrawable();
+            sourcePlate.setColor(0xD9141418);
+            sourcePlate.setCornerRadius(dp(5));
+            sourcePlate.setStroke(Math.max(1, dp(1)), 0x33FFFFFF);
+            sourceMark.setBackground(sourcePlate);
+            sourceMark.setPadding(dp(2), dp(2), dp(2), dp(2));
             sourceMarkIcon = new ImageView(activity);
-            sourceMarkIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            sourceMarkIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            sourceMarkIcon.setAdjustViewBounds(true);
             sourceMarkIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            sourceMark.addView(sourceMarkIcon, new FrameLayout.LayoutParams(dp(15), dp(15), Gravity.CENTER));
+            sourceMark.addView(sourceMarkIcon, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
             sourceMarkGlyph = new TextView(activity);
-            sourceMarkGlyph.setTextColor(0xD9FFFFFF);
+            sourceMarkGlyph.setTextColor(Color.WHITE);
             sourceMarkGlyph.setTypeface(null, android.graphics.Typeface.BOLD);
             sourceMarkGlyph.setGravity(Gravity.CENTER);
             sourceMarkGlyph.setIncludeFontPadding(false);
-            sourceMarkGlyph.setShadowLayer(dp(2), 0f, dp(1), 0xD9000000);
             sourceMarkGlyph.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             sourceMark.addView(sourceMarkGlyph, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
-            LinearLayout.LayoutParams markParams = new LinearLayout.LayoutParams(dp(28), dp(22));
-            markParams.gravity = Gravity.CENTER_VERTICAL;
+            LinearLayout.LayoutParams markParams = sourceBadgeParams();
             metaRow.addView(sourceMark, markParams);
             sourceMarkName = new ShitTokOverlayTextView(activity);
             sourceMarkName.setTextSize(12);
@@ -3988,7 +4001,7 @@ public final class ChaosFeedView extends FrameLayout {
             });
             copy.addView(metaRow, new LinearLayout.LayoutParams(-1, -2));
             metaRow.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
-                int trailing = 0;
+                int trailing = dp(6);
                 if (sourceDot.getVisibility() == View.VISIBLE) trailing += sourceDot.getWidth();
                 if (sourceMark.getParent() == metaRow && sourceMark.getVisibility() == View.VISIBLE) {
                     trailing += sourceMark.getWidth();
@@ -4845,46 +4858,70 @@ public final class ChaosFeedView extends FrameLayout {
             if (accessChevrons != null) accessChevrons.setTranslationX(0f);
         }
 
+        private LinearLayout.LayoutParams sourceBadgeParams() {
+            LinearLayout.LayoutParams markParams = new LinearLayout.LayoutParams(dp(20), dp(20));
+            markParams.gravity = Gravity.CENTER_VERTICAL;
+            markParams.leftMargin = dp(6);
+            return markParams;
+        }
+
         private void bindSourceMark(NativeContentItem next, boolean besideUsername) {
             sourceMarkName.removeCallbacks(hideSourceMarkName);
             sourceMarkName.setVisibility(View.GONE);
+            sourceDot.setVisibility(View.GONE);
             ShitTokSourceMark.Provider provider = ShitTokSourceMark.of(next);
             if (provider == null) {
                 sourceMark.setVisibility(View.GONE);
-                sourceDot.setVisibility(View.GONE);
                 sourceMark.setContentDescription(null);
+                parkTitleFullWidth();
                 return;
             }
             LinearLayout row = besideUsername ? metaRow : titleRow;
             if (sourceMark.getParent() != row) {
                 detachChrome(sourceMark);
                 detachChrome(sourceMarkName);
-                LinearLayout.LayoutParams markParams = new LinearLayout.LayoutParams(dp(28), dp(22));
-                markParams.gravity = Gravity.CENTER_VERTICAL;
-                row.addView(sourceMark, markParams);
+                row.addView(sourceMark, sourceBadgeParams());
                 LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(-2, -2);
                 nameParams.leftMargin = dp(4);
                 nameParams.gravity = Gravity.CENTER_VERTICAL;
                 row.addView(sourceMarkName, nameParams);
+            } else {
+                sourceMark.setLayoutParams(sourceBadgeParams());
             }
-            sourceDot.setVisibility(besideUsername ? View.VISIBLE : View.GONE);
+            if (besideUsername) parkTitleFullWidth();
+            else hugTitleBeforeBadge();
             sourceMark.setVisibility(View.VISIBLE);
             sourceMark.setContentDescription(provider.name + ". Show provider name");
             sourceMarkName.setText(provider.name);
             if (provider.iconRes != 0) {
                 sourceMarkIcon.setImageResource(provider.iconRes);
                 sourceMarkIcon.setImageTintList(null);
-                sourceMarkIcon.setImageAlpha(210);
+                sourceMarkIcon.setImageAlpha(255);
                 sourceMarkIcon.setVisibility(View.VISIBLE);
                 sourceMarkGlyph.setVisibility(View.GONE);
             } else {
                 sourceMarkIcon.setImageDrawable(null);
                 sourceMarkIcon.setVisibility(View.GONE);
                 sourceMarkGlyph.setText(provider.monogram);
-                sourceMarkGlyph.setTextColor(0xD9FFFFFF);
-                sourceMarkGlyph.setTextSize(provider.monogram.length() > 1 ? 8f : 13f);
+                sourceMarkGlyph.setTextColor(Color.WHITE);
+                sourceMarkGlyph.setTextSize(provider.monogram.length() > 1 ? 7f : 11f);
                 sourceMarkGlyph.setVisibility(View.VISIBLE);
             }
+        }
+
+        private void parkTitleFullWidth() {
+            LinearLayout.LayoutParams titleParams = (LinearLayout.LayoutParams) title.getLayoutParams();
+            titleParams.width = 0;
+            titleParams.weight = 1f;
+            title.setLayoutParams(titleParams);
+            title.setMaxWidth(Integer.MAX_VALUE);
+        }
+
+        private void hugTitleBeforeBadge() {
+            LinearLayout.LayoutParams titleParams = (LinearLayout.LayoutParams) title.getLayoutParams();
+            titleParams.width = LinearLayout.LayoutParams.WRAP_CONTENT;
+            titleParams.weight = 0f;
+            title.setLayoutParams(titleParams);
         }
 
         private static void detachChrome(View view) {

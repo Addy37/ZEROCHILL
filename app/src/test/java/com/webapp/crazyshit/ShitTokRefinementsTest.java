@@ -60,7 +60,7 @@ public class ShitTokRefinementsTest {
                 "OnlyFap").withSourceMedia(
                 "https://v1.erome.com/video.mp4", "https://www.erome.com/a/Ab12Cd");
         assertEquals("Erome", ShitTokSourceMark.of(erome).name);
-        assertEquals(0, ShitTokSourceMark.of(erome).iconRes);
+        assertEquals(R.drawable.ic_source_erome, ShitTokSourceMark.of(erome).iconRes);
 
         NativeContentItem bunkr = clip(
                 "https://bunkr.fi/v/clip", "", "Creator Name", "OnlyFap");
@@ -70,19 +70,20 @@ public class ShitTokRefinementsTest {
         NativeContentItem baddie = clip(
                 "https://baddiehub.com/video/1", "", "Creator Name", "OnlyFap");
         assertEquals("BaddieHub", ShitTokSourceMark.of(baddie).name);
+        assertEquals(R.drawable.ic_source_baddiehub, ShitTokSourceMark.of(baddie).iconRes);
 
         assertEquals("Fapello", ShitTokSourceMark.of(clip(
                 "https://fapello.com/model/1/", "", "Creator Name", "OnlyFap")).name);
         assertEquals("OnlyHaven", ShitTokSourceMark.of(clip(
                 "https://e1.cum.st/media/clip.mp4", "", "onlyhaven", "")).name);
-        assertEquals("Kaotic", ShitTokSourceMark.of(clip(
-                "https://kaotic.com/video/1", "", "Kaotic", "")).name);
-        assertEquals("eFukt", ShitTokSourceMark.of(clip(
-                "https://efukt.com/1", "", "efukt", "")).name);
-        assertEquals("Shit Show", ShitTokSourceMark.of(clip(
-                "https://crazyshit.com/shitshow/1", "", "Shit Show", "")).name);
-        assertEquals("CrazyShit", ShitTokSourceMark.of(clip(
-                "https://crazyshit.com/video/1", "", "CrazyShit", "")).name);
+        assertEquals(R.drawable.ic_source_kaotic, ShitTokSourceMark.of(clip(
+                "https://kaotic.com/video/1", "", "Kaotic", "")).iconRes);
+        assertEquals(R.drawable.ic_source_efukt, ShitTokSourceMark.of(clip(
+                "https://efukt.com/1", "", "efukt", "")).iconRes);
+        assertEquals(R.drawable.ic_source_shitshow, ShitTokSourceMark.of(clip(
+                "https://crazyshit.com/shitshow/1", "", "Shit Show", "")).iconRes);
+        assertEquals(R.drawable.ic_source_crazyshit, ShitTokSourceMark.of(clip(
+                "https://crazyshit.com/video/1", "", "CrazyShit", "")).iconRes);
         assertNull(ShitTokSourceMark.of(null));
         assertNull(ShitTokSourceMark.of(clip("https://example.com/video", "", "Someone", "")));
     }
