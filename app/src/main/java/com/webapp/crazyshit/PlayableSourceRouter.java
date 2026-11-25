@@ -18,6 +18,12 @@ final class PlayableSourceRouter {
         if (item == null) return null;
         if (WikiFeetRepository.isRetiredItem(item)) return null;
         if (PawchiveRepository.isDirectMedia(item.url)) return new PawchiveRepository().resolve(item);
+        if (EromeRepository.isDirectVideo(item.sourceMediaUrl)) {
+            String album = EromeRepository.canonicalAlbum(item.url);
+            String referer = album.isEmpty() ? EromeRepository.ORIGIN + "/" : album;
+            String title = item.title == null || item.title.trim().isEmpty() ? "Video" : item.title;
+            return new CrazyShitRepository.StreamInfo(item.sourceMediaUrl, referer, title, referer);
+        }
         return resolve(context, item.url, item.uploader);
     }
 

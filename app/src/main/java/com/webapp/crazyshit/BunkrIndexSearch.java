@@ -29,7 +29,25 @@ final class BunkrIndexSearch {
 
     private BunkrIndexSearch() {}
 
+    static final class Page {
+        final List<NativeContentItem> albums;
+        final int page;
+        final int pages;
+
+        Page(List<NativeContentItem> albums, int page, int pages) {
+            this.albums = albums;
+            this.page = page;
+            this.pages = pages;
+        }
+
+        boolean hasNext() { return pages > page; }
+    }
+
     static List<NativeContentItem> search(String query, int page) throws IOException {
+        return searchPage(query, page).albums;
+    }
+
+    static Page searchPage(String query, int page) throws IOException {
         String request = searchUrl(query, page);
         Connection.Response response = Jsoup.connect(request)
                 .userAgent(BunkrRepository.userAgent())
@@ -43,7 +61,15 @@ final class BunkrIndexSearch {
         if (response.statusCode() != 200) {
             throw new IOException("Bunkr Index search returned HTTP " + response.statusCode());
         }
-        return parseResponse(response);
+        String body = response.readBody();
+        int current = Math.max(1, page);
+        int pages = -1;
+        try {
+            JSONObject root = new JSONObject(body);
+            current = Math.max(1, root.optInt("page", current));
+            if (root.has("pages")) pages = root.optInt("pages");
+        } catch (JSONException ignored) { }
+        return new Page(parseResults(body), current, pages);
     }
 
     static List<NativeContentItem> parseResponse(Connection.Response response) throws IOException {

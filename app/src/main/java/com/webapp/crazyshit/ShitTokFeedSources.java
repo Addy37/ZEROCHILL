@@ -17,12 +17,12 @@ final class ShitTokFeedSources {
                         || source.equals("shit-show");
             case LADIES:
                 return creatorSource(source) || source.equals("baddiehub")
-                        || source.equals("shit-show");
+                        || source.equals("shit-show") || eromeSource(source);
             case GROUPS:
                 return creatorSource(source) || source.equals("baddiehub");
             case GUYS:
             case TRANS:
-                return creatorSource(source);
+                return creatorSource(source) || eromeSource(source);
             default:
                 return false;
         }
@@ -32,5 +32,9 @@ final class ShitTokFeedSources {
         return source.equals("onlyhaven") || source.contains("cum.st")
                 || source.equals("fapello") || source.endsWith("fapello.com")
                 || source.equals("bunkr") || source.contains("bunkr");
+    }
+
+    private static boolean eromeSource(String source) {
+        return source.equals("erome") || source.equals("erome.com") || source.endsWith(".erome.com");
     }
 }
