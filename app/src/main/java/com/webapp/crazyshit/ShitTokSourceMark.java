@@ -26,13 +26,13 @@ final class ShitTokSourceMark {
     static Provider of(NativeContentItem item) {
         if (item == null) return null;
         if (any(item, EromeRepository::isEromeHttpUrl)) {
-            return new Provider("Erome", 0, "E", 0);
+            return new Provider("Erome", R.drawable.ic_source_erome, "", 0);
         }
         if (any(item, BunkrRepository::isBunkrUrl)) {
             return new Provider("Bunkr", R.drawable.ic_source_bunkr, "", 0);
         }
         if (any(item, BaddieHubRepository::isBaddieHubUrl)) {
-            return new Provider("BaddieHub", 0, "BH", 0);
+            return new Provider("BaddieHub", R.drawable.ic_source_baddiehub, "", 0);
         }
         if (any(item, PawchiveRepository::isDirectMedia) || PawchiveRepository.isProfile(item.url)
                 || PawchiveRepository.isProfile(item.sourcePageUrl)) {
@@ -51,15 +51,15 @@ final class ShitTokSourceMark {
             return new Provider("Fapello", R.drawable.ic_source_fapello, "", 0);
         }
         if (any(item, WebVideoSourceRepository::isKaoticUrl) || labeled(item.uploader, "kaotic")) {
-            return new Provider("Kaotic", 0, "K", 0);
+            return new Provider("Kaotic", R.drawable.ic_source_kaotic, "", 0);
         }
         if (any(item, EfuktRepository::isEfuktUrl) || labeled(item.uploader, "efukt")) {
-            return new Provider("eFukt", 0, "eF", 0);
+            return new Provider("eFukt", R.drawable.ic_source_efukt, "", 0);
         }
         if (shitShow(item)) return new Provider("Shit Show", 0, "SS", 0);
-        if (crazyShit(item)) return new Provider("CrazyShit", 0, "CS", 0);
+        if (crazyShit(item)) return new Provider("CrazyShit", R.drawable.ic_source_crazyshit, "", 0);
         if (any(item, XMegaDriveRepository::isXMegaDriveUrl)) {
-            return new Provider("XMegaDrive", 0, "X", 0);
+            return new Provider("XMegaDrive", R.drawable.ic_source_xmegadrive, "", 0);
         }
         return null;
     }
