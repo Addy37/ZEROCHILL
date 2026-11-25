@@ -25,14 +25,15 @@ final class OnlyFapVideoMetadata {
     static NativeContentItem decode(JSONObject object, String url) {
         if (object == null) return null;
         NativeContentItem item = ContentItemCodec.decode(object);
-        return url.equals(item.url) && (item.isVideo() || item.isImage())
-                && applies(item) ? item : null;
+        if (item.url == null || !url.equals(item.url)) return null;
+        if (!(item.isVideo() || item.isImage() || item.isSeries())) return null;
+        return applies(item) || LibraryPlayback.keepStored(item) ? item : null;
     }
 
     static NativeContentItem merge(NativeContentItem current, NativeContentItem saved) {
         if (current == null) return saved;
         if (saved == null || !current.url.equals(saved.url)) return current;
-        if (!applies(current) && !applies(saved)) return current;
+        if (!applies(current) && !applies(saved)) return current.merge(saved);
         if (ShitTokCreatorMetadata.knownProfileUrl(current).isEmpty()
                 && !ShitTokCreatorMetadata.knownProfileUrl(saved).isEmpty()) return saved.merge(current);
         return current.merge(saved);

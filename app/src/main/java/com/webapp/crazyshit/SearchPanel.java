@@ -1571,6 +1571,29 @@ final class SearchPanel {
             SavedGalleryMedia.open(activity, item);
             return;
         }
+        if (scope == Scope.LIBRARY) {
+            LibraryPlayback.Route libraryRoute = LibraryPlayback.route(item);
+            if (libraryRoute == LibraryPlayback.Route.EROME_ALBUM) {
+                LibraryPlayback.openAlbum(activity, item);
+                return;
+            }
+            if (libraryRoute == LibraryPlayback.Route.EROME_MEDIA || libraryRoute == LibraryPlayback.Route.GALLERY) {
+                progress.setVisibility(View.VISIBLE);
+                final int requestGeneration = generation;
+                io.execute(() -> {
+                    NativeContentItem full = LibraryPlayback.recover(activity, item);
+                    long resume = LibraryPlayback.resumePosition(activity, full.url);
+                    activity.runOnUiThread(() -> {
+                        if (destroyed || activity.isFinishing() || requestGeneration != generation) return;
+                        progress.setVisibility(View.GONE);
+                        if (LibraryPlayback.route(full) == LibraryPlayback.Route.GALLERY || full.isImage()) {
+                            SavedGalleryMedia.open(activity, full);
+                        } else LibraryPlayback.openMedia(activity, full, resume);
+                    });
+                });
+                return;
+            }
+        }
         progress.setVisibility(View.VISIBLE);
         final int requestGeneration = generation;
         final Scope requestedScope = scope;
@@ -1579,12 +1602,14 @@ final class SearchPanel {
             watchItems.addAll(rankedShows);
         } else if (requestedScope == Scope.LIBRARY) {
             for (NativeContentItem candidate : library) {
-                if (!OnlyFapVideoMetadata.applies(candidate)) watchItems.add(candidate);
+                if (LibraryPlayback.route(candidate) == LibraryPlayback.Route.SHOWS) watchItems.add(candidate);
             }
         }
         io.execute(() -> {
             CrazyShitRepository.StreamInfo stream = null;
             Throwable resolveError = null;
+            long libraryResume = requestedScope == Scope.LIBRARY
+                    ? LibraryPlayback.resumePosition(activity, item.url) : -1L;
             try { stream = PlayableSourceRouter.resolve(activity, item.url); }
             catch (Exception error) { resolveError = error; }
             CrazyShitRepository.StreamInfo resolved = stream;
@@ -1612,9 +1637,16 @@ final class SearchPanel {
                 playback.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 playback.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, resolved.requestReferer);
                 putPlaybackSource(playback, item);
-                if (requestedScope == Scope.SHOWS || (requestedScope == Scope.LIBRARY
-                        && !OnlyFapVideoMetadata.applies(item))) {
+                boolean libraryShows = requestedScope == Scope.LIBRARY && LibraryPlayback.route(item) == LibraryPlayback.Route.SHOWS;
+                boolean libraryStandalone = requestedScope == Scope.LIBRARY && !libraryShows
+                        && !OnlyFapVideoMetadata.applies(item);
+                if (requestedScope == Scope.SHOWS || libraryShows) {
                     ShowsWatchSession.attach(playback, watchItems, false, "Shows");
+                } else if (libraryStandalone) {
+                    playback.putExtra(VideoDetailActivity.EXTRA_SUPPRESS_RELATED, true);
+                }
+                if (libraryResume > 0L) {
+                    playback.putExtra(PlayerActivity.EXTRA_START_POSITION, libraryResume);
                 }
                 try {
                     String agent = WebSettings.getDefaultUserAgent(activity);

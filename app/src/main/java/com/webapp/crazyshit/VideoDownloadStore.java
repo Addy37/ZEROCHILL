@@ -356,13 +356,18 @@ final class VideoDownloadStore {
             toast(activity, "The downloaded file is no longer available.");
             return;
         }
+        NativeContentItem content = entry.content == null
+                ? OnlyFapVideoMetadata.basic(entry.title, entry.pageUrl, entry.imageUrl) : entry.content;
+        LibraryPlayback.Route route = LibraryPlayback.route(content);
         Intent player = new Intent(activity, VideoDetailActivity.class);
         player.putExtra(PlayerActivity.EXTRA_MEDIA_URL, uri.toString());
         player.putExtra(PlayerActivity.EXTRA_PAGE_URL, entry.pageUrl);
         player.putExtra(PlayerActivity.EXTRA_TITLE, entry.title);
         player.putExtra(VideoDetailActivity.EXTRA_POSTER_URL, entry.imageUrl);
-        player.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, !OnlyFapVideoMetadata.applies(
-                entry.content == null ? OnlyFapVideoMetadata.basic(entry.title, entry.pageUrl, entry.imageUrl) : entry.content));
+        player.putExtra(VideoDetailActivity.EXTRA_SHOWS_ORIGIN, route == LibraryPlayback.Route.SHOWS);
+        if (route != LibraryPlayback.Route.SHOWS && !OnlyFapVideoMetadata.applies(content)) {
+            player.putExtra(VideoDetailActivity.EXTRA_SUPPRESS_RELATED, true);
+        }
         OnlyFapVideoMetadata.put(player, entry.content);
         player.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         activity.startActivity(player);

@@ -126,6 +126,8 @@ public final class BunkrGalleryActivity extends Activity {
     private final Map<String, String> videoReferers = new HashMap<>();
     private int pendingVideoPosition = -1;
     private boolean autoplayInitialSelection;
+    private long libraryResumeMs = -1L;
+    private boolean enrichEromeAlbum;
     private String sharedElementName = "";
     private boolean sharedElementPending;
     private boolean sharedElementStarted;
@@ -175,6 +177,8 @@ public final class BunkrGalleryActivity extends Activity {
             postponeEnterTransition();
         }
         autoplayInitialSelection = state == null && !initialUrl.isEmpty();
+        libraryResumeMs = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
+        enrichEromeAlbum = state == null && getIntent().getBooleanExtra(LibraryPlayback.EXTRA_ENRICH_ALBUM, false);
         if (albumTitle.isEmpty()) albumTitle = "OnlyFap gallery";
 
         if (state != null) {
@@ -373,6 +377,7 @@ public final class BunkrGalleryActivity extends Activity {
         int initialStart = start;
         pager.post(() -> maybeAutoplayInitialSelection(initialStart));
         if (start >= Math.max(0, adapter.getItemCount() - 5)) loadMore();
+        if (enrichEromeAlbum && adapter.getItemCount() <= 1) requestEromeAlbumContext();
     }
 
     private void loadInitialPage() {
@@ -1185,6 +1190,10 @@ public final class BunkrGalleryActivity extends Activity {
         });
         player.setPlayWhenReady(true);
         player.prepare();
+        if (libraryResumeMs > 0L && item != null && item.url.equals(initialUrl)) {
+            player.seekTo(libraryResumeMs);
+            libraryResumeMs = -1L;
+        }
         setChromeVisible(true);
     }
 
@@ -1274,6 +1283,7 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void releasePlayer() {
+        rememberEromePosition();
         if (player != null) {
             manualVideoFullscreen = sensorVideoFullscreen = videoSizeKnown = false;
             PhoneOrientationPolicy.applyBrowsingOrientation(this);
@@ -1288,13 +1298,66 @@ public final class BunkrGalleryActivity extends Activity {
         if (viewerChrome != null) { viewerChrome.updatePlayer(null); viewerChrome.updateOrientation(false, landscapeFullscreen); }
     }
 
+    private void rememberEromePosition() {
+        if (player == null || adapter == null || activeVideoPosition < 0) return;
+        NativeContentItem item = adapter.itemAt(activeVideoPosition);
+        if (!LibraryPlayback.isEromeMedia(item)) return;
+        long position = Math.max(0L, player.getCurrentPosition());
+        long duration = Math.max(0L, player.getDuration());
+        boolean ended = player.getPlaybackState() == Player.STATE_ENDED;
+        PlaybackHistoryStore.record(this, item, position, duration, ended, false);
+    }
+
+    private void openEromeAlbum() {
+        String album = EromeRepository.canonicalAlbum(albumUrl);
+        if (album.isEmpty()) return;
+        NativeContentItem item = new NativeContentItem(
+                NativeContentItem.KIND_SERIES,
+                albumTitle == null || albumTitle.isEmpty() ? "Erome album" : albumTitle,
+                album, "", "", "", "", "Erome album");
+        startActivity(NativeFeedBrowserActivity.createShowDetails(
+                this, item, NativeFeedBrowserActivity.SOURCE_EROME));
+    }
+
+    private void requestEromeAlbumContext() {
+        if (!enrichEromeAlbum || !EromeRepository.isAlbumUrl(albumUrl)) return;
+        enrichEromeAlbum = false;
+        int requestGeneration = generation;
+        pageIo.execute(() -> {
+            List<NativeContentItem> result;
+            try {
+                result = new EromeRepository().fetchAlbum(this, albumUrl);
+            } catch (Exception ignored) {
+                return;
+            }
+            if (result == null || !LibraryPlayback.viewAlbum(result.size())) return;
+            runOnUiThread(() -> {
+                if (requestGeneration != generation || isFinishing() || isDestroyed() || adapter == null || pager == null) {
+                    return;
+                }
+                NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
+                if (current != null && current.url != null && !current.url.isEmpty()) initialUrl = current.url;
+                if (player != null) {
+                    long position = Math.max(0L, player.getCurrentPosition());
+                    if (position > 0L) libraryResumeMs = position;
+                }
+                BunkrGallerySessionStore.replace(sessionId, result, 1, true);
+                BunkrGallerySessionStore.Snapshot fresh = BunkrGallerySessionStore.snapshot(sessionId);
+                if (fresh != null && !fresh.items.isEmpty()) showSnapshot(fresh);
+            });
+        });
+    }
+
     private void updateChrome(int position) {
         if (viewerChrome == null) return;
         NativeContentItem item = adapter.itemAt(position);
         viewerChrome.updateMedia(item == null ? "" : item.url, item == null ? albumTitle : item.title,
                 item == null ? 0 : position + 1, adapter.getItemCount(), item != null && item.isVideo());
         String name = ""; Runnable open = null;
-        if (savedFavoriteImage(item) || (item != null && PawchiveRepository.isDirectMedia(item.url)
+        if (EromeRepository.isAlbumUrl(albumUrl) && LibraryPlayback.viewAlbum(adapter.getItemCount())) {
+            name = "View Album";
+            open = this::openEromeAlbum;
+        } else if (savedFavoriteImage(item) || (item != null && PawchiveRepository.isDirectMedia(item.url)
                 && savedCreatorGallery() != null)) {
             Intent gallery = savedCreatorGallery();
             name = gallery == null ? item.title : value(gallery.getStringExtra(NativeFeedBrowserActivity.EXTRA_TITLE));

@@ -83,6 +83,7 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_MEDIA_REFERER = "media_referer";
     public static final String EXTRA_POSTER_URL = "poster_url";
     public static final String EXTRA_SHOWS_ORIGIN = "shows_origin";
+    public static final String EXTRA_SUPPRESS_RELATED = "suppress_related";
     public static final String EXTRA_PLAYBACK_IDENT = "playback_ident";
     public static final String EXTRA_SHOWS_CONTINUE_RESUME = "shows_continue_resume";
     public static final String EXTRA_DEFERRED_SHOWS_RESOLVE = "deferred_shows_resolve";
@@ -167,6 +168,7 @@ public class VideoDetailActivity extends Activity {
     private String mediaReferer;
     private String posterUrl;
     private boolean showsOrigin;
+    private boolean suppressRelated;
     private boolean deferredShowsResolve;
     private int deferredShowsResolveGeneration;
     private boolean manualLandscapeFullscreen;
@@ -354,6 +356,7 @@ public class VideoDetailActivity extends Activity {
         mediaReferer = clean(getIntent().getStringExtra(EXTRA_MEDIA_REFERER));
         posterUrl = clean(getIntent().getStringExtra(EXTRA_POSTER_URL));
         showsOrigin = getIntent().getBooleanExtra(EXTRA_SHOWS_ORIGIN, false);
+        suppressRelated = !showsOrigin && getIntent().getBooleanExtra(EXTRA_SUPPRESS_RELATED, false);
         deferredShowsResolve = showsOrigin &&
                 getIntent().getBooleanExtra(EXTRA_DEFERRED_SHOWS_RESOLVE, false);
         showsSession = showsOrigin ? ShowsWatchSession.from(getIntent()) : null;
@@ -410,6 +413,10 @@ public class VideoDetailActivity extends Activity {
                 if (detailsScroll != null) detailsScroll.scrollTo(0, showsRestoreScrollY);
                 if (showsRailScroll != null) showsRailScroll.scrollTo(showsRestoreRailX, 0);
             });
+        } else if (suppressRelated) {
+            if (relatedTitle != null) relatedTitle.setVisibility(View.GONE);
+            if (relatedContainer != null) relatedContainer.setVisibility(View.GONE);
+            if (onlyFapCreatorRow != null) onlyFapCreatorRow.setVisibility(View.GONE);
         } else loadRelated();
         if (!deferredShowsResolve && showsOrigin && showsSession.related(pageUrl).isEmpty() &&
                 !"content".equalsIgnoreCase(Uri.parse(mediaUrl).getScheme()) &&
@@ -1662,7 +1669,7 @@ public class VideoDetailActivity extends Activity {
     }
 
     private void loadRelated() {
-        if (relatedContainer == null) return;
+        if (suppressRelated || relatedContainer == null) return;
         if (showsOrigin && showsSession != null && !showsSession.albumSession.isEmpty()) {
             maybeLoadShowsAlbum();
             return;
