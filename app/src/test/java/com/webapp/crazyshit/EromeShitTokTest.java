@@ -71,6 +71,7 @@ public class EromeShitTokTest {
         assertTrue(video.isVideo());
         assertEquals("https://www.erome.com/a/Abcd1234#clip", video.url);
         assertEquals("https://v1.erome.com/1/Abcd1234/clip_720p.mp4", video.sourceMediaUrl);
+        assertEquals("1 video · 1 photo", video.galleryDetail);
         NativeContentItem photo = EromePages.parseAlbum(ALBUM, "https://www.erome.com/a/Abcd1234").items.get(1);
         NativeContentItem gif = video.withSourceMedia(
                 "https://v1.erome.com/1/Abcd1234/anim.gif", "https://www.erome.com/a/Abcd1234");
@@ -111,5 +112,24 @@ public class EromeShitTokTest {
         assertFalse(batch.hasMore);
         assertEquals(EromeRepository.SHITTOK_MAX_PAGE, batch.nextPage);
         assertEquals(1, batch.items.size());
+    }
+
+    @Test public void singleVideoAlbumDoesNotOfferGalleryAccess() throws Exception {
+        String onlyVideo = ALBUM.replace(
+                "<div class=\"media-group\"><div class=\"img\">"
+                        + "<img class=\"img-front\" width=\"800\" height=\"1000\" "
+                        + "src=\"https://s1.erome.com/1/Abcd1234/still.jpg\">"
+                        + "</div></div>",
+                "");
+        NativeContentItem clips = new NativeContentItem(
+                NativeContentItem.KIND_SERIES, "clips", "https://www.erome.com/a/Abcd1234",
+                "", "", "", "", "1 video");
+        EromeRepository.ShitTokBatch batch = EromeRepository.collectShitTokVideos(
+                new EromePages.SearchPage(Collections.singletonList(clips), false),
+                1,
+                url -> org.jsoup.Jsoup.parse(onlyVideo, EromeRepository.ORIGIN + "/"));
+        assertEquals(1, batch.items.size());
+        assertEquals("", batch.items.get(0).galleryDetail);
+        assertFalse(ShitTokGalleryAccess.of(batch.items.get(0), null).visible());
     }
 }

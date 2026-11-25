@@ -907,7 +907,7 @@ public class NativeFeedBrowserActivity extends Activity {
             creatorGalleryReveal = new CreatorGalleryReveal(this, root,
                     CreatorGalleryTransition.shouldAnimate(this, restoredBrowserState != null));
             setContentView(creatorGalleryReveal);
-        } else if (isCreatorGallery() && !shitTokReturnTransition.isEmpty()) {
+        } else if (wantsShitTokReturn()) {
             installShitTokReturnSurface(root);
         } else {
             setContentView(root);
@@ -1104,6 +1104,11 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private boolean creatorGalleryFirstFrameReady() {
+        if (isEromeAlbum()) {
+            if (recycler == null || albumGridAdapter == null || recycler.getWidth() == 0) return false;
+            if (albumGridAdapter.size() == 0) return progress == null || progress.getVisibility() != View.VISIBLE;
+            return recycler.getChildCount() > 0;
+        }
         RecyclerView first = creatorTabRecyclers[CREATOR_TAB_ALL];
         BunkrGalleryAdapter galleryAdapter = creatorTabAdapters[CREATOR_TAB_ALL];
         if (first == null || galleryAdapter == null || first.getWidth() == 0) return false;
@@ -1215,16 +1220,36 @@ public class NativeFeedBrowserActivity extends Activity {
         return shitTokReturnTracking || super.dispatchTouchEvent(event);
     }
 
+    static boolean allowsShitTokReturnGesture(
+            boolean creatorGallery,
+            boolean eromeAlbum,
+            boolean transitionPresent,
+            boolean creatorAllTab,
+            boolean finishing
+    ) {
+        if (!transitionPresent || finishing) return false;
+        if (creatorGallery) return creatorAllTab;
+        return eromeAlbum;
+    }
+
+    private boolean wantsShitTokReturn() {
+        return allowsShitTokReturnGesture(
+                isCreatorGallery(), isEromeAlbum(), !shitTokReturnTransition.isEmpty(), true, false);
+    }
+
     private boolean canUseShitTokReturnGesture(MotionEvent event) {
-        if (!isCreatorGallery()
-                || shitTokReturnTransition.isEmpty()
+        if (!allowsShitTokReturnGesture(
+                isCreatorGallery(),
+                isEromeAlbum(),
+                !shitTokReturnTransition.isEmpty(),
+                !isCreatorGallery() || activeCreatorTab() == CREATOR_TAB_ALL,
+                shitTokReturnFinishing)
                 || shitTokTransitionContent == null
-                || shitTokReturnFinishing
-                || event == null) {
+                || event == null
+                || event.getPointerCount() > 1) {
             return false;
         }
-        if (event.getPointerCount() > 1) return false;
-        return activeCreatorTab() == CREATOR_TAB_ALL;
+        return true;
     }
 
     private void cancelShitTokReturnGesture() {

@@ -104,13 +104,17 @@ public final class EromeRepository {
                 failure = error;
                 continue;
             }
-            for (NativeContentItem clip : shitTokClips(EromePages.parseAlbum(document, album.url).items)) {
+            java.util.List<NativeContentItem> media = EromePages.parseAlbum(document, album.url).items;
+            String detail = ShitTokGalleryAccess.confirmedAlbumDetail(
+                    ShitTokGalleryAccess.albumDetail(media), album.description);
+            for (NativeContentItem clip : shitTokClips(media)) {
                 if (videos.size() >= SHITTOK_VIDEOS) break;
+                NativeContentItem stamped = detail.isEmpty() ? clip : clip.withGalleryDetail(detail);
                 boolean duplicate = false;
                 for (NativeContentItem existing : videos) {
-                    if (existing.url.equals(clip.url)) duplicate = true;
+                    if (existing.url.equals(stamped.url)) duplicate = true;
                 }
-                if (!duplicate) videos.add(clip);
+                if (!duplicate) videos.add(stamped);
             }
         }
         if (videos.isEmpty() && failure != null) throw failure;

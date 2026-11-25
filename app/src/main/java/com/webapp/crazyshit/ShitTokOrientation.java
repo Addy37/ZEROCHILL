@@ -36,7 +36,12 @@ final class ShitTokOrientation {
         NativeContentItem copied = new NativeContentItem(item.kind, item.title, item.url, item.imageUrl, item.views,
                 item.uploader, item.comments, item.description, item.searchQuery,
                 item.publishedAtMillis, aspect);
-        if (item.sourceMediaUrl == null || item.sourceMediaUrl.isEmpty()) return copied;
-        return copied.withSourceMedia(item.sourceMediaUrl, item.sourcePageUrl);
+        if (item.sourceMediaUrl != null && !item.sourceMediaUrl.isEmpty()) {
+            copied = copied.withSourceMedia(item.sourceMediaUrl, item.sourcePageUrl);
+        }
+        if (item.galleryDetail != null && !item.galleryDetail.isEmpty()) {
+            copied = copied.withGalleryDetail(item.galleryDetail);
+        }
+        return copied;
     }
 }

@@ -19,8 +19,8 @@ import java.util.EnumMap;
 final class ShitTokCategoryStrip extends LinearLayout {
     enum Tab {
         CHAOS("chaos", "Chaos", ContentPreference.ALL),
-        LADIES("ladies", "Ladies", ContentPreference.WOMEN),
-        GUYS("guys", "Guys", ContentPreference.MEN),
+        LADIES("ladies", "Straight", ContentPreference.WOMEN),
+        GUYS("guys", "Gay", ContentPreference.MEN),
         TRANS("trans", "Trans", ContentPreference.TRANS_WOMEN),
         GROUPS("groups", "Groups", ContentPreference.GROUPS);
 
@@ -95,8 +95,8 @@ final class ShitTokCategoryStrip extends LinearLayout {
             cell.setOrientation(VERTICAL);
             cell.setGravity(Gravity.CENTER);
             cell.setMinimumHeight(dp(46));
-            cell.setMinimumWidth(dp(48));
-            cell.setPadding(dp(9), 0, dp(9), 0);
+            cell.setMinimumWidth(dp(option.label.length() > 6 ? 68 : 48));
+            cell.setPadding(dp(6), 0, dp(6), 0);
             cell.setTag("shittok_category_cell_" + option.value);
             cell.setClickable(true);
             cell.setFocusable(true);
