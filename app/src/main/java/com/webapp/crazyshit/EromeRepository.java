@@ -50,6 +50,7 @@ public final class EromeRepository {
         String trimmed = query == null ? "" : query.trim();
         if (trimmed.length() < 2 || trimmed.length() > 100) return SearchPage.empty();
         int safePage = Math.max(1, Math.min(page, MAX_PAGE));
+        preparePreference(context);
         Document document = get(context, searchUrl(trimmed, safePage));
         EromePages.SearchPage parsed = EromePages.parseSearch(document);
         return new SearchPage(parsed.items, parsed.hasNext);
@@ -58,6 +59,7 @@ public final class EromeRepository {
     public List<NativeContentItem> fetchAlbum(Context context, String albumUrl) throws IOException {
         String canonical = canonicalAlbum(albumUrl);
         if (canonical.isEmpty()) throw new IOException("Not an Erome album URL");
+        preparePreference(context);
         LinkedHashMap<String, NativeContentItem> media = new LinkedHashMap<>();
         String next = canonical;
         for (int page = 0; page < MAX_ALBUM_PAGES && !next.isEmpty() && media.size() < EromePages.MAX_ALBUM_MEDIA; page++) {
@@ -88,6 +90,7 @@ public final class EromeRepository {
         if (album.isEmpty() || token.isEmpty() || token.startsWith("img-")) {
             throw new IOException("Not an Erome video");
         }
+        preparePreference(context);
         Document document = get(context, album);
         String media = EromePages.videoSource(document, album, token);
         if (!isDirectVideo(media)) throw new IOException("Erome video was not available");
@@ -275,6 +278,50 @@ public final class EromeRepository {
             activity.startActivity(browser);
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Asks Erome to set its own {@code erome_version} cookie.
+     * Results are not filtered in the app. A matching cookie is reused.
+     */
+    public void preparePreference(Context context) throws IOException {
+        if (context == null) return;
+        EromePreference.Choice choice = EromePreference.get(context);
+        String jar = cookies(ORIGIN + "/");
+        if (choice.slug.equals(EromePreference.applied(context))
+                && jar.toLowerCase(Locale.US).contains("erome_version=")) return;
+        String url = EromePreference.versionUrl(choice);
+        if (url.isEmpty()) throw new IOException("Erome preference is not supported");
+        Connection.Response response = Jsoup.connect(url)
+                .userAgent(USER_AGENT)
+                .timeout(TIMEOUT_MS)
+                .maxBodySize(64 * 1024)
+                .followRedirects(false)
+                .ignoreHttpErrors(true)
+                .ignoreContentType(true)
+                .referrer(ORIGIN + "/")
+                .header("Accept", "text/html,application/xhtml+xml")
+                .execute();
+        if (!acceptPreference(context, choice, response.statusCode(), response.headers("Set-Cookie"))) {
+            throw new IOException("Erome did not apply the selected preference");
+        }
+    }
+
+    static boolean acceptPreference(Context context, EromePreference.Choice choice, int status,
+                                    java.util.List<String> setCookies) {
+        if (choice == null || (status != 200 && status != 302 && status != 303)) return false;
+        if (!EromePreference.hasVersionCookie(setCookies)) return false;
+        try {
+            CookieManager manager = CookieManager.getInstance();
+            for (String header : setCookies) {
+                if (header != null && !header.trim().isEmpty()) manager.setCookie(ORIGIN + "/", header);
+            }
+            manager.flush();
+        } catch (Exception ignored) {
+            return false;
+        }
+        EromePreference.markApplied(context, choice);
+        return choice.slug.equals(EromePreference.applied(context));
     }
 
     private Document get(Context context, String url) throws IOException {
