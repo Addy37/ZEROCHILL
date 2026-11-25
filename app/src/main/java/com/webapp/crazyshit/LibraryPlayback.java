@@ -25,7 +25,7 @@ final class LibraryPlayback {
     private LibraryPlayback() {}
 
     static Route route(NativeContentItem item) {
-        if (item == null || item.url == null || item.url.trim().isEmpty()) return STANDALONE;
+        if (item == null || item.url == null || item.url.trim().isEmpty()) return Route.STANDALONE;
         if (isEromeAlbum(item)) return Route.EROME_ALBUM;
         if (isEromeMedia(item)) return Route.EROME_MEDIA;
         if (item.isImage() || item.isMeme() || !item.isVideo()) return Route.GALLERY;
