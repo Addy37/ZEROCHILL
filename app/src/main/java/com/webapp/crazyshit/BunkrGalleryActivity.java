@@ -366,6 +366,14 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void loadInitialPage() {
+        // An album-specific viewer relies on the already loaded session. Do not
+        // send another provider's album URL through the Bunkr fallback loader.
+        if (!isCreatorGallery() && EromeRepository.isAlbumUrl(albumUrl)) {
+            initialLoading.setVisibility(View.GONE);
+            ZeroChillToast.makeText(this, "Reopen the album to restore its gallery.",
+                    ZeroChillToast.LENGTH_LONG).show();
+            return;
+        }
         if (albumUrl.isEmpty() && !isCreatorGallery()) {
             initialLoading.setVisibility(View.GONE);
             ZeroChillToast.makeText(this, "This album could not be opened.", ZeroChillToast.LENGTH_SHORT).show();
@@ -431,6 +439,7 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void loadMore() {
+        if (!isCreatorGallery() && EromeRepository.isAlbumUrl(albumUrl)) return;
         if (loadingMore || endReached ||
                 (albumUrl.isEmpty() && !isCreatorGallery()) ||
                 (adapter.getItemCount() == 0 && !isCreatorGallery())) return;

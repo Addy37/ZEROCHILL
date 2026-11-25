@@ -1307,8 +1307,7 @@ public class NativeFeedBrowserActivity extends Activity {
                             pickCreatorAvatar(item);
                             return;
                         }
-                        if (isEromeAlbum() && item.isVideo()) openVideo(item, -1L, transitionAnchor);
-                        else openBunkrGallery(position, item, transitionAnchor);
+                        openBunkrGallery(position, item, transitionAnchor);
                     }
 
                     @Override
@@ -2135,7 +2134,8 @@ public class NativeFeedBrowserActivity extends Activity {
         intent.putStringArrayListExtra(EXTRA_CREATOR_ALIASES, creatorAliases);
         intent.putExtra(
                 BunkrGalleryActivity.EXTRA_MEDIA_FILTER,
-                isMixedMediaAlbum() ? BunkrGalleryActivity.FILTER_PICTURES
+                isEromeAlbum() ? AlbumMediaPresentation.viewerFilter(albumMediaFilter)
+                        : isMixedMediaAlbum() ? BunkrGalleryActivity.FILTER_PICTURES
                         : !isCreatorGallery() || activeCreatorTab() == CREATOR_TAB_ALL
                         ? BunkrGalleryActivity.FILTER_ALL
                         : activeCreatorTab() == CREATOR_TAB_PICTURES

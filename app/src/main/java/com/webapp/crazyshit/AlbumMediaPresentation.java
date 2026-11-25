@@ -3,7 +3,7 @@ package com.webapp.crazyshit;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Layout policy for an album with full-width video rows and a photo grid. */
+/** Layout and viewer filter policy for mixed-media albums. */
 final class AlbumMediaPresentation {
     static final int ALL = 0;
     static final int PICTURES = 1;
@@ -34,6 +34,14 @@ final class AlbumMediaPresentation {
                 result.add(item);
         }
         return result;
+    }
+
+    static String viewerFilter(int filter) {
+        switch (normalize(filter)) {
+            case PICTURES: return BunkrGalleryActivity.FILTER_PICTURES;
+            case VIDEOS: return BunkrGalleryActivity.FILTER_VIDEOS;
+            default: return BunkrGalleryActivity.FILTER_ALL;
+        }
     }
 
     static String countLabel(int pictures, int videos) {

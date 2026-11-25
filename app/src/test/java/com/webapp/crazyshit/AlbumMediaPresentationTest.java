@@ -28,6 +28,16 @@ public class AlbumMediaPresentationTest {
         assertEquals("1 picture · 1 video", AlbumMediaPresentation.countLabel(1, 1));
     }
 
+    @Test public void viewerPreservesTheSelectedGalleryFilter() {
+        assertEquals(BunkrGalleryActivity.FILTER_ALL,
+                AlbumMediaPresentation.viewerFilter(AlbumMediaPresentation.ALL));
+        assertEquals(BunkrGalleryActivity.FILTER_PICTURES,
+                AlbumMediaPresentation.viewerFilter(AlbumMediaPresentation.PICTURES));
+        assertEquals(BunkrGalleryActivity.FILTER_VIDEOS,
+                AlbumMediaPresentation.viewerFilter(AlbumMediaPresentation.VIDEOS));
+        assertEquals(BunkrGalleryActivity.FILTER_ALL, AlbumMediaPresentation.viewerFilter(-1));
+    }
+
     @Test public void singleMediaTypeNeverKeepsAnEmptyFilter() {
         assertEquals(AlbumMediaPresentation.ALL,
                 AlbumMediaPresentation.availableFilter(AlbumMediaPresentation.VIDEOS, 3, 0));
