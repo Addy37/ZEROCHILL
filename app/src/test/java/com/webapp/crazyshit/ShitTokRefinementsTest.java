@@ -60,7 +60,8 @@ public class ShitTokRefinementsTest {
                 "OnlyFap").withSourceMedia(
                 "https://v1.erome.com/video.mp4", "https://www.erome.com/a/Ab12Cd");
         assertEquals("Erome", ShitTokSourceMark.of(erome).name);
-        assertEquals(R.drawable.ic_source_erome, ShitTokSourceMark.of(erome).iconRes);
+        assertEquals(0, ShitTokSourceMark.of(erome).iconRes);
+        assertEquals("E", ShitTokSourceMark.of(erome).monogram);
 
         NativeContentItem bunkr = clip(
                 "https://bunkr.fi/v/clip", "", "Creator Name", "OnlyFap");
@@ -70,20 +71,20 @@ public class ShitTokRefinementsTest {
         NativeContentItem baddie = clip(
                 "https://baddiehub.com/video/1", "", "Creator Name", "OnlyFap");
         assertEquals("BaddieHub", ShitTokSourceMark.of(baddie).name);
-        assertEquals(R.drawable.ic_source_baddiehub, ShitTokSourceMark.of(baddie).iconRes);
+        assertEquals(0, ShitTokSourceMark.of(baddie).iconRes);
 
-        assertEquals("Fapello", ShitTokSourceMark.of(clip(
-                "https://fapello.com/model/1/", "", "Creator Name", "OnlyFap")).name);
-        assertEquals("OnlyHaven", ShitTokSourceMark.of(clip(
-                "https://e1.cum.st/media/clip.mp4", "", "onlyhaven", "")).name);
-        assertEquals(R.drawable.ic_source_kaotic, ShitTokSourceMark.of(clip(
-                "https://kaotic.com/video/1", "", "Kaotic", "")).iconRes);
-        assertEquals(R.drawable.ic_source_efukt, ShitTokSourceMark.of(clip(
+        assertEquals(R.drawable.ic_source_fapello, ShitTokSourceMark.of(clip(
+                "https://fapello.com/model/1/", "", "Creator Name", "OnlyFap")).iconRes);
+        assertEquals(R.drawable.ic_source_onlyhaven, ShitTokSourceMark.of(clip(
+                "https://e1.cum.st/media/clip.mp4", "", "onlyhaven", "")).iconRes);
+        assertEquals("K", ShitTokSourceMark.of(clip(
+                "https://kaotic.com/video/1", "", "Kaotic", "")).monogram);
+        assertEquals(0, ShitTokSourceMark.of(clip(
                 "https://efukt.com/1", "", "efukt", "")).iconRes);
-        assertEquals(R.drawable.ic_source_shitshow, ShitTokSourceMark.of(clip(
-                "https://crazyshit.com/shitshow/1", "", "Shit Show", "")).iconRes);
-        assertEquals(R.drawable.ic_source_crazyshit, ShitTokSourceMark.of(clip(
-                "https://crazyshit.com/video/1", "", "CrazyShit", "")).iconRes);
+        assertEquals("SS", ShitTokSourceMark.of(clip(
+                "https://crazyshit.com/shitshow/1", "", "Shit Show", "")).monogram);
+        assertEquals("CS", ShitTokSourceMark.of(clip(
+                "https://crazyshit.com/video/1", "", "CrazyShit", "")).monogram);
         assertNull(ShitTokSourceMark.of(null));
         assertNull(ShitTokSourceMark.of(clip("https://example.com/video", "", "Someone", "")));
     }
@@ -118,9 +119,12 @@ public class ShitTokRefinementsTest {
                 "https://www.erome.com/a/Ab12Cd#tok", "", "Uploader", "")
                 .withSourceMedia("https://v1.erome.com/video.mp4", "https://www.erome.com/a/Ab12Cd");
         ShitTokGalleryAccess.Presentation missing = ShitTokGalleryAccess.of(erome, null);
-        assertEquals(ShitTokGalleryAccess.Kind.ALBUM, missing.kind);
-        assertEquals("View album", missing.label);
-        assertTrue(missing.contentDescription.contains("Swipe right"));
+        assertFalse(missing.visible());
+        assertFalse(ShitTokGalleryAccess.of(erome.withGalleryDetail("1 video"), null).visible());
+        assertEquals("1 video · 2 photos", ShitTokGalleryAccess.of(
+                erome.withGalleryDetail("1 video · 2 photos"), null).label);
+        assertEquals("2 videos", ShitTokGalleryAccess.of(
+                erome.withGalleryDetail("2 videos"), null).label);
 
         NativeContentItem counted = erome.withGalleryDetail(
                 ShitTokGalleryAccess.countsLabel("12 videos · 24 pictures"));

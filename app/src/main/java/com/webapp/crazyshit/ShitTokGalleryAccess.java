@@ -35,7 +35,9 @@ final class ShitTokGalleryAccess {
     static Presentation of(NativeContentItem clip, NativeContentItem creator) {
         if (clip == null) return Presentation.NONE;
         if (!ShitTokEromeGallery.albumUrl(clip).isEmpty()) {
-            return present(Kind.ALBUM, "View album", "Open album", countsLabel(clip.galleryDetail));
+            String counts = countsLabel(clip.galleryDetail);
+            if (!hasAdditionalAlbumMedia(counts)) return Presentation.NONE;
+            return present(Kind.ALBUM, "View album", "Open album", counts);
         }
         if (creator != null && !clean(creator.title).isEmpty()) {
             String counts = countsLabel(creator.galleryDetail);
@@ -71,6 +73,69 @@ final class ShitTokGalleryAccess {
         }
         if (positive(posts)) return phrase(posts, "post", "posts");
         return "";
+    }
+
+    /** Counts already parsed from an Erome album page. Empty when that page is only the playing video. */
+    static String albumDetail(java.util.List<NativeContentItem> media) {
+        int videos = 0;
+        int photos = 0;
+        if (media != null) {
+            for (NativeContentItem item : media) {
+                if (item == null) continue;
+                if (item.isImage()) photos++;
+                else if (item.isVideo()) videos++;
+            }
+        }
+        if (!hasAdditionalAlbumMedia(videos, photos)) return "";
+        StringBuilder label = new StringBuilder();
+        if (videos > 0) label.append(phrase(Integer.toString(videos), "video", "videos"));
+        if (photos > 0) {
+            if (label.length() > 0) label.append(" · ");
+            label.append(phrase(Integer.toString(photos), "photo", "photos"));
+        }
+        return label.toString();
+    }
+
+    /**
+     * Prefer the opened album page. Fall back to the listing card only when that card
+     * already states more videos or photos. A lone playing video stays blank.
+     */
+    static String confirmedAlbumDetail(String pageDetail, String cardDescription) {
+        String page = countsLabel(pageDetail);
+        if (hasAdditionalAlbumMedia(page)) return page;
+        String card = countsLabel(cardDescription);
+        return hasAdditionalAlbumMedia(card) ? card : "";
+    }
+
+    static boolean hasAdditionalAlbumMedia(String counts) {
+        int[] totals = totals(counts);
+        return hasAdditionalAlbumMedia(totals[0], totals[1]);
+    }
+
+    private static boolean hasAdditionalAlbumMedia(int videos, int photos) {
+        return videos > 1 || photos > 0;
+    }
+
+    private static int[] totals(String text) {
+        int videos = 0;
+        int photos = 0;
+        if (text == null || text.isEmpty()) return new int[] {0, 0};
+        Matcher matcher = COUNT.matcher(text);
+        while (matcher.find()) {
+            int number = number(matcher.group(1));
+            String unit = matcher.group(2).toLowerCase(Locale.US);
+            if (unit.startsWith("video") && videos == 0) videos = number;
+            else if ((unit.startsWith("photo") || unit.startsWith("picture")) && photos == 0) photos = number;
+        }
+        return new int[] {videos, photos};
+    }
+
+    private static int number(String raw) {
+        try {
+            return Integer.parseInt(raw.replace(",", ""));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
     }
 
     private static Presentation present(Kind kind, String fallback, String action, String counts) {

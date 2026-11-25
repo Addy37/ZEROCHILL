@@ -104,8 +104,10 @@ public final class EromeRepository {
                 failure = error;
                 continue;
             }
-            String detail = ShitTokGalleryAccess.countsLabel(album.description);
-            for (NativeContentItem clip : shitTokClips(EromePages.parseAlbum(document, album.url).items)) {
+            java.util.List<NativeContentItem> media = EromePages.parseAlbum(document, album.url).items;
+            String detail = ShitTokGalleryAccess.confirmedAlbumDetail(
+                    ShitTokGalleryAccess.albumDetail(media), album.description);
+            for (NativeContentItem clip : shitTokClips(media)) {
                 if (videos.size() >= SHITTOK_VIDEOS) break;
                 NativeContentItem stamped = detail.isEmpty() ? clip : clip.withGalleryDetail(detail);
                 boolean duplicate = false;
