@@ -1,5 +1,6 @@
 package com.webapp.crazyshit;
 
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
@@ -18,6 +19,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Trace;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
@@ -3753,6 +3755,14 @@ public final class ChaosFeedView extends FrameLayout {
         final TextView sourceMarkGlyph;
         final TextView sourceMarkName;
         final Runnable hideSourceMarkName;
+        final LinearLayout titleRow;
+        final LinearLayout metaRow;
+        final TextView sourceDot;
+        final LinearLayout accessPill;
+        final ImageView accessIcon;
+        final TextView accessLabel;
+        final LinearLayout accessChevrons;
+        ValueAnimator accessHintAnimator;
 
         private final Runnable hideControlsRunnable = this::hideControlsNow;
         private final Runnable skipFailedClipRunnable = () -> {
@@ -3844,41 +3854,126 @@ public final class ChaosFeedView extends FrameLayout {
             LinearLayout titleRow = new LinearLayout(activity);
             titleRow.setOrientation(LinearLayout.HORIZONTAL);
             titleRow.setGravity(Gravity.CENTER_VERTICAL);
+            this.titleRow = titleRow;
+
+            accessPill = new LinearLayout(activity);
+            accessPill.setTag("shittok_access_pill");
+            accessPill.setOrientation(LinearLayout.HORIZONTAL);
+            accessPill.setGravity(Gravity.CENTER_VERTICAL);
+            accessPill.setMinimumHeight(dp(32));
+            accessPill.setPadding(dp(10), dp(4), dp(8), dp(4));
+            accessPill.setClickable(true);
+            accessPill.setFocusable(true);
+            accessPill.setVisibility(View.GONE);
+            GradientDrawable accessGlass = new GradientDrawable();
+            accessGlass.setColor(0xB3101216);
+            accessGlass.setCornerRadius(dp(18));
+            accessGlass.setStroke(Math.max(1, dp(1)), 0x38FFFFFF);
+            accessPill.setBackground(accessGlass);
+            accessIcon = new ImageView(activity);
+            accessIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            accessIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            accessPill.addView(accessIcon, new LinearLayout.LayoutParams(dp(14), dp(14)));
+            accessLabel = new TextView(activity);
+            accessLabel.setTextColor(Color.WHITE);
+            accessLabel.setTextSize(12.5f);
+            accessLabel.setSingleLine(true);
+            accessLabel.setEllipsize(TextUtils.TruncateAt.END);
+            accessLabel.setIncludeFontPadding(false);
+            accessLabel.setMaxWidth(dp(180));
+            accessLabel.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            LinearLayout.LayoutParams accessLabelParams = new LinearLayout.LayoutParams(-2, -2);
+            accessLabelParams.leftMargin = dp(6);
+            accessLabelParams.rightMargin = dp(2);
+            accessPill.addView(accessLabel, accessLabelParams);
+            accessChevrons = new LinearLayout(activity);
+            accessChevrons.setOrientation(LinearLayout.HORIZONTAL);
+            accessChevrons.setGravity(Gravity.CENTER_VERTICAL);
+            accessChevrons.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            accessPill.addView(accessChevrons, new LinearLayout.LayoutParams(-2, -2));
+            for (int chevron = 0; chevron < 2; chevron++) {
+                ImageView mark = new ImageView(activity);
+                mark.setImageResource(R.drawable.ic_more_chevron);
+                mark.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+                LinearLayout.LayoutParams chevronParams = new LinearLayout.LayoutParams(dp(12), dp(12));
+                if (chevron == 1) chevronParams.leftMargin = -dp(6);
+                accessChevrons.addView(mark, chevronParams);
+            }
+            LinearLayout.LayoutParams pillParams = new LinearLayout.LayoutParams(-2, -2);
+            pillParams.bottomMargin = dp(8);
+            copy.addView(accessPill, pillParams);
+
+            title = new ShitTokOverlayTextView(activity);
+            title.setTextColor(Color.WHITE);
+            title.setTextSize(18);
+            title.setTypeface(null, android.graphics.Typeface.BOLD);
+            title.setMaxLines(3);
+            title.setEllipsize(TextUtils.TruncateAt.END);
+            title.setLineSpacing(dp(2), 1f);
+            titleRow.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+            copy.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
+            ZeroChillMotion.installPressFeedback(accessPill);
+            accessPill.setOnClickListener(v -> {
+                if (!title.isClickable()) return;
+                title.performClick();
+            });
+
+            metaRow = new LinearLayout(activity);
+            metaRow.setOrientation(LinearLayout.HORIZONTAL);
+            metaRow.setGravity(Gravity.CENTER_VERTICAL);
+            metaRow.setPadding(0, dp(7), 0, 0);
+            meta = new ShitTokOverlayTextView(activity);
+            meta.setTextSize(13);
+            meta.setSingleLine(true);
+            meta.setEllipsize(TextUtils.TruncateAt.END);
+            meta.setMaxWidth(dp(220));
+            metaRow.addView(meta, new LinearLayout.LayoutParams(-2, -2));
+            sourceDot = new TextView(activity);
+            sourceDot.setText("·");
+            sourceDot.setTextColor(0x99FFFFFF);
+            sourceDot.setTextSize(13);
+            sourceDot.setGravity(Gravity.CENTER);
+            sourceDot.setIncludeFontPadding(false);
+            sourceDot.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            sourceDot.setVisibility(View.GONE);
+            LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(-2, -2);
+            dotParams.leftMargin = dp(5);
+            dotParams.rightMargin = dp(1);
+            metaRow.addView(sourceDot, dotParams);
+
             sourceMark = new FrameLayout(activity);
             sourceMark.setTag("shittok_source_mark");
             sourceMark.setClickable(true);
             sourceMark.setFocusable(true);
             sourceMark.setVisibility(View.GONE);
-            FrameLayout plate = new FrameLayout(activity);
-            GradientDrawable plateBackground = new GradientDrawable();
-            plateBackground.setColor(0x8C000000);
-            plateBackground.setCornerRadius(dp(4));
-            plateBackground.setStroke(Math.max(1, dp(1)), 0x99FFFFFF);
-            plate.setBackground(plateBackground);
-            plate.setAlpha(0.88f);
+            sourceMark.setBackgroundColor(Color.TRANSPARENT);
             sourceMarkIcon = new ImageView(activity);
             sourceMarkIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             sourceMarkIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            plate.addView(sourceMarkIcon, new FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER));
+            sourceMark.addView(sourceMarkIcon, new FrameLayout.LayoutParams(dp(15), dp(15), Gravity.CENTER));
             sourceMarkGlyph = new TextView(activity);
-            sourceMarkGlyph.setTextColor(Color.WHITE);
+            sourceMarkGlyph.setTextColor(0xD9FFFFFF);
             sourceMarkGlyph.setTypeface(null, android.graphics.Typeface.BOLD);
             sourceMarkGlyph.setGravity(Gravity.CENTER);
+            sourceMarkGlyph.setIncludeFontPadding(false);
             sourceMarkGlyph.setShadowLayer(dp(2), 0f, dp(1), 0xD9000000);
             sourceMarkGlyph.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            plate.addView(sourceMarkGlyph, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
-            sourceMark.addView(plate, new FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER));
-            LinearLayout.LayoutParams markParams = new LinearLayout.LayoutParams(dp(32), dp(32));
-            markParams.rightMargin = dp(6);
-            titleRow.addView(sourceMark, markParams);
+            sourceMark.addView(sourceMarkGlyph, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+            LinearLayout.LayoutParams markParams = new LinearLayout.LayoutParams(dp(28), dp(22));
+            markParams.gravity = Gravity.CENTER_VERTICAL;
+            metaRow.addView(sourceMark, markParams);
             sourceMarkName = new ShitTokOverlayTextView(activity);
-            sourceMarkName.setTextSize(13);
+            sourceMarkName.setTextSize(12);
             sourceMarkName.setTypeface(null, android.graphics.Typeface.BOLD);
             sourceMarkName.setSingleLine(true);
+            sourceMarkName.setEllipsize(TextUtils.TruncateAt.END);
+            sourceMarkName.setMaxWidth(dp(132));
             sourceMarkName.setVisibility(View.GONE);
             LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(-2, -2);
-            nameParams.rightMargin = dp(6);
-            titleRow.addView(sourceMarkName, nameParams);
+            nameParams.leftMargin = dp(4);
+            nameParams.gravity = Gravity.CENTER_VERTICAL;
+            metaRow.addView(sourceMarkName, nameParams);
             hideSourceMarkName = () -> sourceMarkName.setVisibility(View.GONE);
             sourceMark.setOnClickListener(v -> {
                 haptic(v);
@@ -3891,20 +3986,19 @@ public final class ChaosFeedView extends FrameLayout {
                 sourceMarkName.announceForAccessibility(sourceMarkName.getText());
                 sourceMarkName.postDelayed(hideSourceMarkName, 1600L);
             });
-
-            title = new ShitTokOverlayTextView(activity);
-            title.setTextColor(Color.WHITE);
-            title.setTextSize(18);
-            title.setTypeface(null, android.graphics.Typeface.BOLD);
-            title.setMaxLines(3);
-            title.setLineSpacing(dp(2), 1f);
-            titleRow.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
-            copy.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
-
-            meta = new ShitTokOverlayTextView(activity);
-            meta.setTextSize(13);
-            meta.setPadding(0, dp(7), 0, 0);
-            copy.addView(meta, new LinearLayout.LayoutParams(-1, -2));
+            copy.addView(metaRow, new LinearLayout.LayoutParams(-1, -2));
+            metaRow.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                int trailing = 0;
+                if (sourceDot.getVisibility() == View.VISIBLE) trailing += sourceDot.getWidth();
+                if (sourceMark.getParent() == metaRow && sourceMark.getVisibility() == View.VISIBLE) {
+                    trailing += sourceMark.getWidth();
+                }
+                if (sourceMarkName.getParent() == metaRow && sourceMarkName.getVisibility() == View.VISIBLE) {
+                    trailing += sourceMarkName.getWidth();
+                }
+                int available = Math.max(dp(72), metaRow.getWidth() - trailing - dp(8));
+                if (meta.getMaxWidth() != available) meta.setMaxWidth(available);
+            });
 
             actionRail = new LinearLayout(activity);
             actionRail.setOrientation(LinearLayout.VERTICAL);
@@ -4316,6 +4410,8 @@ public final class ChaosFeedView extends FrameLayout {
                         if (openGallery && (erome || creatorIdentity != null)) {
                             String creator = creatorIdentity == null ? "" : creatorIdentity.title;
                             haptic(v);
+                            ShitTokAccessHint.learned(activity);
+                            cancelAccessHint();
                             pauseAndRecord();
                             String transitionToken = creatorSwipeTransitionToken;
                             creatorSwipeTransitionToken = "";
@@ -4688,34 +4784,112 @@ public final class ChaosFeedView extends FrameLayout {
             if (creatorClip && BaddieHubRepository.isBaddieHubUrl(next.url)) {
                 // Creator identity never changes this clip's source, resolver, or saved media.
                 meta.setText(BaddieHubRepository.LABEL);
-                meta.setVisibility(View.VISIBLE);
-            } else meta.setVisibility(creatorClip ? View.GONE : View.VISIBLE);
-            bindSourceMark(next);
+            }
+            boolean named = meta.getText() != null && meta.getText().length() > 0;
+            meta.setVisibility(named ? View.VISIBLE : View.GONE);
+            metaRow.setVisibility(named ? View.VISIBLE : View.GONE);
+            bindSourceMark(next, named);
+            bindAccessPill(next);
         }
 
-        private void bindSourceMark(NativeContentItem next) {
+        private void bindAccessPill(NativeContentItem next) {
+            cancelAccessHint();
+            ShitTokGalleryAccess.Presentation access = ShitTokGalleryAccess.of(next, creatorIdentity);
+            if (!access.visible()) {
+                accessPill.setVisibility(View.GONE);
+                accessPill.setContentDescription(null);
+                return;
+            }
+            int accent = AppearanceTheme.accent(activity);
+            accessPill.setVisibility(View.VISIBLE);
+            accessLabel.setText(access.label);
+            accessIcon.setImageResource(access.kind == ShitTokGalleryAccess.Kind.CREATOR
+                    ? R.drawable.ic_more_account : R.drawable.ic_more_view_style);
+            accessIcon.setImageTintList(ColorStateList.valueOf(accent));
+            tintAccessChevrons(accent);
+            accessPill.setContentDescription(access.contentDescription);
+            if (ZeroChillMotion.animationsEnabled(activity)
+                    && ShitTokAccessHint.noteAppearance(activity, next.url)) {
+                nudgeAccessChevrons();
+            }
+        }
+
+        private void tintAccessChevrons(int accent) {
+            ColorStateList tint = ColorStateList.valueOf(accent);
+            for (int index = 0; index < accessChevrons.getChildCount(); index++) {
+                View child = accessChevrons.getChildAt(index);
+                if (child instanceof ImageView) ((ImageView) child).setImageTintList(tint);
+            }
+        }
+
+        private void nudgeAccessChevrons() {
+            cancelAccessHint();
+            accessChevrons.setTranslationX(0f);
+            float distance = dp(4);
+            accessHintAnimator = ValueAnimator.ofFloat(0f, 1f);
+            accessHintAnimator.setDuration(780L);
+            accessHintAnimator.setInterpolator(ZeroChillMotion.EASE_OUT);
+            accessHintAnimator.addUpdateListener(animation -> {
+                float t = (float) animation.getAnimatedValue();
+                float phase = t < 0.55f ? t / 0.55f : 1f - (t - 0.55f) / 0.45f;
+                accessChevrons.setTranslationX(distance * phase);
+            });
+            accessHintAnimator.start();
+        }
+
+        private void cancelAccessHint() {
+            if (accessHintAnimator != null) {
+                accessHintAnimator.cancel();
+                accessHintAnimator = null;
+            }
+            if (accessChevrons != null) accessChevrons.setTranslationX(0f);
+        }
+
+        private void bindSourceMark(NativeContentItem next, boolean besideUsername) {
             sourceMarkName.removeCallbacks(hideSourceMarkName);
             sourceMarkName.setVisibility(View.GONE);
             ShitTokSourceMark.Provider provider = ShitTokSourceMark.of(next);
             if (provider == null) {
                 sourceMark.setVisibility(View.GONE);
+                sourceDot.setVisibility(View.GONE);
                 sourceMark.setContentDescription(null);
                 return;
             }
+            LinearLayout row = besideUsername ? metaRow : titleRow;
+            if (sourceMark.getParent() != row) {
+                detachChrome(sourceMark);
+                detachChrome(sourceMarkName);
+                LinearLayout.LayoutParams markParams = new LinearLayout.LayoutParams(dp(28), dp(22));
+                markParams.gravity = Gravity.CENTER_VERTICAL;
+                row.addView(sourceMark, markParams);
+                LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(-2, -2);
+                nameParams.leftMargin = dp(4);
+                nameParams.gravity = Gravity.CENTER_VERTICAL;
+                row.addView(sourceMarkName, nameParams);
+            }
+            sourceDot.setVisibility(besideUsername ? View.VISIBLE : View.GONE);
             sourceMark.setVisibility(View.VISIBLE);
             sourceMark.setContentDescription(provider.name + ". Show provider name");
             sourceMarkName.setText(provider.name);
             if (provider.iconRes != 0) {
                 sourceMarkIcon.setImageResource(provider.iconRes);
+                sourceMarkIcon.setImageTintList(null);
+                sourceMarkIcon.setImageAlpha(210);
                 sourceMarkIcon.setVisibility(View.VISIBLE);
                 sourceMarkGlyph.setVisibility(View.GONE);
             } else {
                 sourceMarkIcon.setImageDrawable(null);
                 sourceMarkIcon.setVisibility(View.GONE);
                 sourceMarkGlyph.setText(provider.monogram);
-                sourceMarkGlyph.setTextColor(provider.color == 0 ? Color.WHITE : provider.color);
-                sourceMarkGlyph.setTextSize(provider.monogram.length() > 1 ? 8f : 11f);
+                sourceMarkGlyph.setTextColor(0xD9FFFFFF);
+                sourceMarkGlyph.setTextSize(provider.monogram.length() > 1 ? 8f : 13f);
                 sourceMarkGlyph.setVisibility(View.VISIBLE);
+            }
+        }
+
+        private static void detachChrome(View view) {
+            if (view.getParent() instanceof ViewGroup) {
+                ((ViewGroup) view.getParent()).removeView(view);
             }
         }
 
@@ -4801,6 +4975,8 @@ public final class ChaosFeedView extends FrameLayout {
                 updateSaveButton(item, landscapeSave);
             }
             if (heartOverlay != null) heartOverlay.setImageTintList(ColorStateList.valueOf(accent));
+            tintAccessChevrons(accent);
+            accessIcon.setImageTintList(ColorStateList.valueOf(accent));
             syncMuteButtons();
         }
 
@@ -4939,6 +5115,7 @@ public final class ChaosFeedView extends FrameLayout {
             like.animate().withEndAction(null).cancel();
             like.setScaleX(1f);
             like.setScaleY(1f);
+            cancelAccessHint();
             setSwipeAlpha(1f);
         }
 

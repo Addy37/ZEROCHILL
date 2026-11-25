@@ -71,6 +71,7 @@ public class EromeShitTokTest {
         assertTrue(video.isVideo());
         assertEquals("https://www.erome.com/a/Abcd1234#clip", video.url);
         assertEquals("https://v1.erome.com/1/Abcd1234/clip_720p.mp4", video.sourceMediaUrl);
+        assertEquals("1 video · 2 photos", video.galleryDetail);
         NativeContentItem photo = EromePages.parseAlbum(ALBUM, "https://www.erome.com/a/Abcd1234").items.get(1);
         NativeContentItem gif = video.withSourceMedia(
                 "https://v1.erome.com/1/Abcd1234/anim.gif", "https://www.erome.com/a/Abcd1234");

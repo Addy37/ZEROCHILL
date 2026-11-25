@@ -10,6 +10,8 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
+import android.content.Context;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -108,6 +110,58 @@ public class ShitTokRefinementsTest {
                 false, true, true, true, true));
         assertFalse(NativeFeedBrowserActivity.allowsShitTokReturnGesture(
                 false, false, true, true, false));
+    }
+
+    @Test public void galleryPillUsesKnownTotalsAndFallsBackWithoutGuessing() {
+        NativeContentItem erome = clip(
+                "https://www.erome.com/a/Ab12Cd#tok", "", "Uploader", "")
+                .withSourceMedia("https://v1.erome.com/video.mp4", "https://www.erome.com/a/Ab12Cd");
+        ShitTokGalleryAccess.Presentation missing = ShitTokGalleryAccess.of(erome, null);
+        assertEquals(ShitTokGalleryAccess.Kind.ALBUM, missing.kind);
+        assertEquals("View album", missing.label);
+        assertTrue(missing.contentDescription.contains("Swipe right"));
+
+        NativeContentItem counted = erome.withGalleryDetail(
+                ShitTokGalleryAccess.countsLabel("12 videos · 24 pictures"));
+        NativeContentItem creator = new NativeContentItem(
+                NativeContentItem.KIND_CREATOR, "Uploader", "https://example.com/uploader",
+                "", "", "", "", "9 posts");
+        ShitTokGalleryAccess.Presentation album = ShitTokGalleryAccess.of(counted, creator);
+        assertEquals("12 videos · 24 photos", album.label);
+        assertEquals(ShitTokGalleryAccess.Kind.ALBUM, album.kind);
+        assertEquals("", ShitTokGalleryAccess.countsLabel("one loaded page"));
+        assertEquals("", ShitTokGalleryAccess.countsLabel("0 videos · 0 photos"));
+
+        NativeContentItem fapello = clip(
+                "https://fapello.com/model/1/", "", "Name", "OnlyFap");
+        assertFalse(ShitTokGalleryAccess.of(fapello, null).visible());
+        assertEquals("View creator", ShitTokGalleryAccess.of(fapello, new NativeContentItem(
+                NativeContentItem.KIND_CREATOR, "Name", "https://fapello.com/name/",
+                "", "", "", "", "Fapello")).label);
+        assertEquals("1,482 posts", ShitTokGalleryAccess.of(fapello, new NativeContentItem(
+                NativeContentItem.KIND_CREATOR, "Name", "https://e1.cum.st/creators/fansly/name",
+                "", "", "", "", "OnlyHaven · Fansly · 1,482 posts")).label);
+        assertEquals("36 photos", ShitTokGalleryAccess.countsLabel("WikiFeet X · 36 photos"));
+        assertEquals("8 videos", ShitTokGalleryAccess.countsLabel("8 videos"));
+        assertEquals("1 video", ShitTokGalleryAccess.countsLabel("1 video"));
+
+        NativeContentItem copied = ShitTokOrientation.copy(counted, 0.56f);
+        assertEquals("12 videos · 24 photos", copied.galleryDetail);
+        assertEquals(counted.sourceMediaUrl, copied.sourceMediaUrl);
+        assertEquals("https://www.erome.com/a/Ab12Cd", copied.sourcePageUrl);
+    }
+
+    @Test public void accessHintStopsAfterAFewAppearancesOrASuccessfulSwipe() {
+        activity.getSharedPreferences("shittok_access_hint", Context.MODE_PRIVATE).edit().clear().commit();
+        assertTrue(ShitTokAccessHint.noteAppearance(activity, "clip-a"));
+        assertFalse(ShitTokAccessHint.noteAppearance(activity, "clip-a"));
+        assertTrue(ShitTokAccessHint.noteAppearance(activity, "clip-b"));
+        assertTrue(ShitTokAccessHint.noteAppearance(activity, "clip-c"));
+        assertFalse(ShitTokAccessHint.noteAppearance(activity, "clip-d"));
+        activity.getSharedPreferences("shittok_access_hint", Context.MODE_PRIVATE).edit().clear().commit();
+        assertTrue(ShitTokAccessHint.noteAppearance(activity, "clip-a"));
+        ShitTokAccessHint.learned(activity);
+        assertFalse(ShitTokAccessHint.noteAppearance(activity, "clip-b"));
     }
 
     private static String label(ShitTokCategoryStrip strip, String value) {
