@@ -593,7 +593,17 @@ final class LibraryHubView extends ScrollView {
             boolean retired = WikiFeetRepository.isRetiredItem(content);
             View card = compactMediaCard(item.title, retired ? "" : item.url,
                     retired ? "" : content.imageUrl, "♥", false, WikiFeetRepository.imageReferer(content));
-            card.setOnClickListener(v -> SavedGalleryMedia.open(activity, item));
+            card.setOnClickListener(v -> {
+                LibraryPlayback.Route route = LibraryPlayback.route(content);
+                if (route == LibraryPlayback.Route.EROME_ALBUM) LibraryPlayback.openAlbum(activity, content);
+                else if (route == LibraryPlayback.Route.EROME_MEDIA) {
+                    LibraryPlayback.openMedia(activity, content, LibraryPlayback.resumePosition(activity, content.url));
+                } else if (route == LibraryPlayback.Route.ONLYFAP_VIDEO
+                        || route == LibraryPlayback.Route.SHOWS
+                        || route == LibraryPlayback.Route.STANDALONE) {
+                    if (listener != null) listener.onOpenWatchLater(content);
+                } else SavedGalleryMedia.open(activity, item);
+            });
             rail.addCard(card, item.url, portraitThumbnails.getOrDefault(item.url, false));
         }
     }
@@ -612,10 +622,14 @@ final class LibraryHubView extends ScrollView {
         for (int i = 0; i < count; i++) {
             FavoriteStore.Item item = items.get(i);
             PlaybackHistoryStore.Item historyItem = historyByUrl.get(item.url);
-            boolean pawchive = item.content != null && PawchiveRepository.isDirectMedia(item.url);
-            String poster = pawchive ? item.content.imageUrl : historyItem == null ? "" : historyItem.posterUrl;
+            boolean hasPoster = item.content != null && item.content.imageUrl != null
+                    && !item.content.imageUrl.isEmpty();
+            String poster = hasPoster ? item.content.imageUrl
+                    : historyItem == null ? "" : historyItem.posterUrl;
             View card = compactMediaCard(item.title, item.url, poster, "", false);
-            if (pawchive) card.setOnClickListener(v -> SavedGalleryMedia.open(activity, item));
+            if (item.content != null && PawchiveRepository.isDirectMedia(item.url)) {
+                card.setOnClickListener(v -> SavedGalleryMedia.open(activity, item));
+            }
             rail.addCard(card, item.url, portraitThumbnails.getOrDefault(item.url, false));
         }
     }
@@ -733,7 +747,9 @@ final class LibraryHubView extends ScrollView {
         shade.setBackground(bottomShade());
         frame.addView(shade, new FrameLayout.LayoutParams(-1, dp(88), Gravity.BOTTOM));
 
-        if ((badge == null || badge.isEmpty()) && OnlyFapVideoMetadata.applies(
+        if ((badge == null || badge.isEmpty()) && EromeRepository.isEromeHttpUrl(pageUrl)) badge = "Erome";
+        else if ((badge == null || badge.isEmpty()) && PawchiveRepository.isDirectMedia(pageUrl)) badge = "Pawchive";
+        else if ((badge == null || badge.isEmpty()) && OnlyFapVideoMetadata.applies(
                 videoItem(title, pageUrl, posterUrl))) badge = "OnlyFap";
         if (badge != null && !badge.isEmpty()) {
             TextView badgeView = pill(badge);

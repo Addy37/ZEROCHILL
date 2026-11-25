@@ -32,6 +32,10 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
     private final CreatorGallerySkeleton gallerySkeleton;
     private final ZeroChillLoadingView galleryLoading;
     private final BunkrGalleryAdapter adapter;
+    private final TextView heading;
+    private final TextView more;
+    private final FrameLayout albumSlot;
+    private boolean albumMode;
     private String currentCreator = "";
     private String currentSessionId = "";
     private int refreshGeneration;
@@ -59,17 +63,22 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
         back.setGravity(Gravity.CENTER);
         top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(52)));
 
-        TextView heading = text("OnlyFap", 20, Color.WHITE);
-        heading.setTypeface(null, android.graphics.Typeface.BOLD);
+        TextView headingView = text("OnlyFap", 20, Color.WHITE);
+        headingView.setTypeface(null, android.graphics.Typeface.BOLD);
+        heading = headingView;
         top.addView(heading, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView more = text("⋮", 28, Color.rgb(220, 220, 226));
-        more.setGravity(Gravity.CENTER);
+        TextView moreView = text("⋮", 28, Color.rgb(220, 220, 226));
+        moreView.setGravity(Gravity.CENTER);
+        more = moreView;
         top.addView(more, new LinearLayout.LayoutParams(dp(48), dp(52)));
         shell.addView(top, new LinearLayout.LayoutParams(-1, dp(64)));
 
         profileSlot = new FrameLayout(activity);
         shell.addView(profileSlot, new LinearLayout.LayoutParams(-1, dp(184)));
+        albumSlot = new FrameLayout(activity);
+        albumSlot.setVisibility(View.GONE);
+        shell.addView(albumSlot, new LinearLayout.LayoutParams(-1, -2));
 
         tabs = new TabLayout(activity);
         tabs.setBackgroundColor(Color.BLACK);
@@ -125,6 +134,7 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
     }
 
     void showCreator(String creator, String sessionId) {
+        showCreatorChrome();
         String cleanCreator = clean(creator);
         if (!cleanCreator.equals(currentCreator)) {
             currentCreator = cleanCreator;
@@ -135,7 +145,60 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
         refreshCreator(currentCreator, currentSessionId);
     }
 
+    void showEromeAlbum(String title, String uploader) {
+        albumMode = true;
+        refreshGeneration++;
+        currentCreator = "";
+        heading.setText("Album");
+        more.setVisibility(View.GONE);
+        profileSlot.setVisibility(View.GONE);
+        tabs.setVisibility(View.GONE);
+        albumSlot.setVisibility(View.VISIBLE);
+        albumSlot.removeAllViews();
+        albumSlot.addView(albumCard(clean(title), clean(uploader)));
+        adapter.replace(new ArrayList<>(), false);
+        gallerySkeleton.setVisibility(View.VISIBLE);
+        galleryLoading.setVisibility(View.VISIBLE);
+        setVisibility(View.VISIBLE);
+    }
+
+    private void showCreatorChrome() {
+        albumMode = false;
+        heading.setText("OnlyFap");
+        more.setVisibility(View.VISIBLE);
+        profileSlot.setVisibility(View.VISIBLE);
+        tabs.setVisibility(View.VISIBLE);
+        albumSlot.setVisibility(View.GONE);
+    }
+
+    private View albumCard(String title, String uploader) {
+        LinearLayout row = new LinearLayout(activity);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(8), dp(16), dp(8));
+        View cover = new View(activity);
+        cover.setBackgroundColor(Color.rgb(25, 27, 31));
+        row.addView(cover, new LinearLayout.LayoutParams(dp(88), dp(100)));
+        LinearLayout copy = new LinearLayout(activity);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(12), 0, 0, 0);
+        TextView kind = text("ALBUM", 11, AppearanceTheme.accent(activity));
+        kind.setTypeface(null, android.graphics.Typeface.BOLD);
+        copy.addView(kind);
+        TextView name = text(title.isEmpty() ? "Erome album" : title, 17, Color.WHITE);
+        name.setTypeface(null, android.graphics.Typeface.BOLD);
+        name.setMaxLines(3);
+        copy.addView(name);
+        if (!uploader.isEmpty()) {
+            TextView by = text(uploader, 12, Color.rgb(180, 180, 190));
+            by.setSingleLine(true);
+            copy.addView(by);
+        }
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
+        return row;
+    }
+
     void refreshCreator(String creator, String sessionId) {
+        if (albumMode) return;
         String cleanCreator = clean(creator);
         if (!cleanCreator.isEmpty() && !cleanCreator.equals(currentCreator)) {
             currentCreator = cleanCreator;
@@ -174,7 +237,7 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
     private void scheduleRefresh(int generation, int attempt) {
         if (attempt >= 6) return;
         postDelayed(() -> {
-            if (generation != refreshGeneration || getVisibility() != View.VISIBLE) return;
+            if (albumMode || generation != refreshGeneration || getVisibility() != View.VISIBLE) return;
             String newest = ShitTokCreatorGalleryPreloader.sessionId(activity, currentCreator);
             if (!newest.isEmpty()) currentSessionId = newest;
             BunkrGallerySessionStore.Snapshot later =

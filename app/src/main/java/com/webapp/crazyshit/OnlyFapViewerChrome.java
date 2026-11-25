@@ -167,7 +167,8 @@ final class OnlyFapViewerChrome extends FrameLayout {
     void setCreatorAction(String name, Runnable action) {
         photoName.setText(name); photoName.setVisibility(name.isEmpty() ? GONE : VISIBLE);
         photoPosition.setTextSize(name.isEmpty() ? 14 : 10);
-        photoName.setContentDescription(action == null ? name : "Open gallery for " + name);
+        photoName.setContentDescription(action == null ? name
+                : "View Album".equals(name) ? "View Album" : "Open gallery for " + name);
         photoName.setOnClickListener(action == null ? null : v -> { interact(); action.run(); });
         photoName.setClickable(action != null); photoName.setFocusable(action != null);
     }

@@ -409,6 +409,17 @@ public class FavoritesActivity extends Activity {
         wrapper.setFocusable(true);
         wrapper.setContentDescription((mediaFavorites ? "Favorite " : "Watch Later ") + item.title);
         wrapper.setOnClickListener(v -> {
+            NativeContentItem content = item.content != null ? item.content
+                    : OnlyFapVideoMetadata.basic(item.title, item.url, "");
+            LibraryPlayback.Route route = LibraryPlayback.route(content);
+            if (route == LibraryPlayback.Route.EROME_ALBUM) {
+                LibraryPlayback.openAlbum(this, content);
+                return;
+            }
+            if (route == LibraryPlayback.Route.EROME_MEDIA) {
+                LibraryPlayback.openMedia(this, content, LibraryPlayback.resumePosition(this, content.url));
+                return;
+            }
             if (item.content != null && (mediaFavorites || PawchiveRepository.isDirectMedia(item.url)))
                 SavedGalleryMedia.open(this, item);
             else select(item.url, item.title);

@@ -175,7 +175,7 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
 
             @Override
             public void onOpenHistory(PlaybackHistoryStore.Item item) {
-                openShowsResume(item, false);
+                openLibraryHistoryItem(item);
             }
 
             @Override
@@ -660,25 +660,73 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     }
 
     void openLibraryVideo(NativeContentItem item) {
-        if (item != null && item.isImage()) { SavedGalleryMedia.open(activity, item); return; }
-        if (OnlyFapVideoMetadata.applies(item)) openLibraryHistory(item);
-        else openShowsVideo(item, false);
+        dispatchLibrary(item, -1L, false, false);
     }
 
     void openLibraryHistory(NativeContentItem item) {
-        if (item == null) return;
+        dispatchLibrary(item, -1L, false, true);
+    }
+
+    void openLibraryHistoryItem(PlaybackHistoryStore.Item history) {
+        if (history == null || history.pageUrl == null || history.pageUrl.trim().isEmpty()) return;
+        NativeContentItem content = history.content != null ? history.content
+                : OnlyFapVideoMetadata.basic(history.title, history.pageUrl, history.posterUrl);
+        if ((content.imageUrl == null || content.imageUrl.isEmpty())
+                && history.posterUrl != null && !history.posterUrl.isEmpty()) {
+            content = content.merge(OnlyFapVideoMetadata.basic(
+                    history.title, history.pageUrl, history.posterUrl));
+        }
+        dispatchLibrary(content, history.complete ? 0L : history.positionMs, true, true);
+    }
+
+    private void dispatchLibrary(NativeContentItem raw, long knownPosition, boolean positionKnown,
+            boolean forceResume) {
+        if (raw == null || raw.url == null || raw.url.trim().isEmpty()) return;
         io.execute(() -> {
-            PlaybackHistoryStore.Item resume = null;
-            for (PlaybackHistoryStore.Item history : PlaybackHistoryStore.load(activity)) {
-                if (history.pageUrl.equals(item.url)) { resume = history; break; }
+            NativeContentItem item = LibraryPlayback.recover(activity, raw);
+            LibraryPlayback.Route route = LibraryPlayback.route(item);
+            long start = positionKnown ? knownPosition : -1L;
+            if (!positionKnown && (forceResume || route != LibraryPlayback.Route.SHOWS)) {
+                start = LibraryPlayback.resumePosition(activity, item.url);
             }
-            PlaybackHistoryStore.Item saved = resume;
+            long position = start;
             activity.runOnUiThread(() -> {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
-                if (saved != null) openShowsResume(saved, false);
-                else openShowsVideo(item, false);
+                presentLibrary(item, position);
             });
         });
+    }
+
+    private void presentLibrary(NativeContentItem item, long start) {
+        if (item == null) return;
+        switch (LibraryPlayback.route(item)) {
+            case EROME_ALBUM:
+                LibraryPlayback.openAlbum(activity, item);
+                return;
+            case EROME_MEDIA:
+                LibraryPlayback.openMedia(activity, item, start);
+                return;
+            case GALLERY:
+                SavedGalleryMedia.open(activity, item);
+                return;
+            case STANDALONE:
+                openShowsVideo(item, false, null, start, true);
+                return;
+            case ONLYFAP_VIDEO:
+                if (start >= 0L) openShowsResume(libraryHistory(item, start), false);
+                else openShowsVideo(item, false);
+                return;
+            case SHOWS:
+            default:
+                if (start >= 0L) openShowsResume(libraryHistory(item, start), false);
+                else openShowsVideo(item, false);
+        }
+    }
+
+    private PlaybackHistoryStore.Item libraryHistory(NativeContentItem item, long start) {
+        boolean complete = start == 0L;
+        return new PlaybackHistoryStore.Item(
+                item.title, item.url, item.imageUrl, Math.max(0L, start), 0L, 0L, complete, true, item);
     }
 
     private List<NativeContentItem> showsWatchItems(NativeContentItem selected) {
@@ -707,6 +755,16 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
             boolean manualLandscapeFullscreen,
             android.view.View sourceView
     ) {
+        openShowsVideo(item, manualLandscapeFullscreen, sourceView, -1L, false);
+    }
+
+    private void openShowsVideo(
+            NativeContentItem item,
+            boolean manualLandscapeFullscreen,
+            android.view.View sourceView,
+            long startPosition,
+            boolean suppressRelated
+    ) {
         if (item == null || !item.isVideo() || item.url == null || item.url.trim().isEmpty()) {
             return;
         }
@@ -731,7 +789,8 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 if (activity.isFinishing() || activity.isDestroyed()) return;
                 if (resolved == null || resolved.mediaUrl == null || resolved.mediaUrl.isEmpty()) {
                     if (BunkrMaintenanceUi.showIfConfirmed(activity, item.url, failure,
-                            () -> openShowsVideo(item, manualLandscapeFullscreen, sourceView))) return;
+                            () -> openShowsVideo(item, manualLandscapeFullscreen, sourceView,
+                                    startPosition, suppressRelated))) return;
                     ZeroChillToast.makeText(
                             activity,
                             "Couldn't resolve this video natively right now.",
@@ -764,7 +823,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
                 intent.putExtra(VideoDetailActivity.EXTRA_COMMENTS, item.comments);
                 intent.putExtra(VideoDetailActivity.EXTRA_SOURCE, source);
                 OnlyFapVideoMetadata.put(intent, libraryContent);
-                if (!OnlyFapVideoMetadata.applies(libraryContent)) {
+                if (startPosition >= 0L) {
+                    intent.putExtra(PlayerActivity.EXTRA_START_POSITION, startPosition);
+                }
+                if (suppressRelated) {
+                    intent.putExtra(VideoDetailActivity.EXTRA_SUPPRESS_RELATED, true);
+                } else if (!OnlyFapVideoMetadata.applies(libraryContent)) {
                     ShowsWatchSession.attach(intent, watchItems, false, "Shows");
                 }
                 if (manualLandscapeFullscreen) {

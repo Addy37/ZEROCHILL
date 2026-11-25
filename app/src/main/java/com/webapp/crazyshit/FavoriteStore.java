@@ -60,7 +60,7 @@ public final class FavoriteStore {
                 title == null || title.trim().isEmpty() ? "Saved video" : title.trim(),
                 url,
                 System.currentTimeMillis(),
-                OnlyFapVideoMetadata.applies(content) ? content : null, favorite, true, galleryKey
+                OnlyFapVideoMetadata.applies(content) || LibraryPlayback.keepStored(content) ? content : null, favorite, true, galleryKey
         ));
         save(context, items);
     }

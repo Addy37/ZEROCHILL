@@ -88,7 +88,7 @@ public final class PlaybackHistoryStore {
                 ended,
                 fromShows,
                 System.currentTimeMillis(),
-                OnlyFapVideoMetadata.applies(content) ? content : null
+                OnlyFapVideoMetadata.applies(content) || LibraryPlayback.keepStored(content) ? content : null
         );
 
         synchronized (LOCK) {
@@ -330,7 +330,9 @@ public final class PlaybackHistoryStore {
     private static boolean isKnownNonShowsSource(String pageUrl) {
         return FapelloRepository.isFapelloUrl(pageUrl) ||
                 OnlyHavenRepository.isOnlyHavenUrl(pageUrl) ||
-                BunkrRepository.isBunkrUrl(pageUrl);
+                BunkrRepository.isBunkrUrl(pageUrl) ||
+                EromeRepository.isEromeHttpUrl(pageUrl) ||
+                PawchiveRepository.isDirectMedia(pageUrl);
     }
 
     private static boolean isContinueCandidate(Item item) {
