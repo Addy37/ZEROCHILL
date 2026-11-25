@@ -151,6 +151,11 @@ public class NativeFeedBrowserActivity extends Activity {
     private final ArrayList<NativeContentItem> showEpisodes = new ArrayList<>();
     private final ArrayList<NativeContentItem> bunkrAlbumItems = new ArrayList<>();
     private TextView albumImagesAction;
+    private TextView albumMediaHeading;
+    private LinearLayout albumMediaFilters;
+    private final TextView[] albumMediaButtons = new TextView[3];
+    private BunkrGalleryAdapter albumPicturesAdapter;
+    private int albumMediaFilter = AlbumMediaPresentation.ALL;
     private TextView episodeRangeAction;
     private TextView episodePageSummary;
     private TextView episodePrevious;
@@ -435,6 +440,8 @@ public class NativeFeedBrowserActivity extends Activity {
         // Albums share Shows chrome; creator galleries retain their existing mixed grid.
         if (isMixedMediaAlbum()) showDetailsMode = true;
         restoredBrowserState = state;
+        if (state != null) albumMediaFilter = AlbumMediaPresentation.normalize(
+                state.getInt("album_media_filter", AlbumMediaPresentation.ALL));
         episodeRangeStart = state == null
                 ? 0
                 : Math.max(0, state.getInt("episode_range_start", 0));
@@ -693,13 +700,14 @@ public class NativeFeedBrowserActivity extends Activity {
             episodeBar.setPadding(dp(16), dp(5), dp(12), dp(5));
             episodeBar.setBackgroundColor(Color.BLACK);
 
-            TextView section = text("EPISODES", 12, AppearanceTheme.accent(this));
+            TextView section = text(isEromeAlbum() ? "MEDIA" : "EPISODES", 12, AppearanceTheme.accent(this));
+            if (isEromeAlbum()) albumMediaHeading = section;
             section.setTypeface(null, android.graphics.Typeface.BOLD);
             section.setLetterSpacing(0.12f);
             section.setGravity(Gravity.CENTER_VERTICAL);
             episodeBar.addView(section, new LinearLayout.LayoutParams(0, -1, 1f));
 
-            if (isMixedMediaAlbum()) {
+            if (isMixedMediaAlbum() && !isEromeAlbum()) {
                 albumImagesAction = text("Pictures", 12, AppearanceTheme.accent(this));
                 albumImagesAction.setGravity(Gravity.CENTER);
                 styleEpisodeControl(albumImagesAction, false);
@@ -719,6 +727,30 @@ public class NativeFeedBrowserActivity extends Activity {
             ZeroChillMotion.installPressFeedback(episodeRangeAction);
             episodeBar.addView(episodeRangeAction, new LinearLayout.LayoutParams(-2, dp(48)));
             showsEpisodeBar = episodeBar;
+            if (isEromeAlbum()) {
+                LinearLayout mediaHeader = new LinearLayout(this);
+                mediaHeader.setOrientation(LinearLayout.VERTICAL);
+                mediaHeader.addView(episodeBar, new LinearLayout.LayoutParams(-1, -2));
+                albumMediaFilters = new LinearLayout(this);
+                albumMediaFilters.setOrientation(LinearLayout.HORIZONTAL);
+                albumMediaFilters.setPadding(dp(12), 0, dp(12), dp(8));
+                String[] labels = {"All", "Pictures", "Videos"};
+                for (int i = 0; i < labels.length; i++) {
+                    final int filter = i;
+                    TextView button = text(labels[i], 12, AppearanceTheme.accent(this));
+                    button.setGravity(Gravity.CENTER);
+                    button.setTypeface(null, android.graphics.Typeface.BOLD);
+                    styleEpisodeControl(button, i == albumMediaFilter);
+                    LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1f);
+                    if (i > 0) params.leftMargin = dp(6);
+                    albumMediaFilters.addView(button, params);
+                    albumMediaButtons[i] = button;
+                    button.setOnClickListener(v -> selectAlbumMediaFilter(filter));
+                }
+                albumMediaFilters.setVisibility(View.GONE);
+                mediaHeader.addView(albumMediaFilters, new LinearLayout.LayoutParams(-1, -2));
+                showsEpisodeBar = mediaHeader;
+            }
 
             body.addView(refresh, new FrameLayout.LayoutParams(-1, -1));
             LinearLayout episodePager = new LinearLayout(this);
@@ -834,10 +866,19 @@ public class NativeFeedBrowserActivity extends Activity {
             adapter.setEpisodePresentation(showDetailsMode);
             if (showDetailsMode) {
                 recycler.setPadding(0, 0, 0, dp(18));
-                recycler.setAdapter(new ConcatAdapter(new ConcatAdapter.Config.Builder()
-                        .setStableIdMode(ConcatAdapter.Config.StableIdMode.ISOLATED_STABLE_IDS).build(),
-                        new SingleViewAdapter(showsEpisodeBar), adapter,
-                        new SingleViewAdapter(showsEpisodePager)));
+                ConcatAdapter.Config config = new ConcatAdapter.Config.Builder()
+                        .setStableIdMode(ConcatAdapter.Config.StableIdMode.ISOLATED_STABLE_IDS).build();
+                if (isEromeAlbum()) {
+                    albumPicturesAdapter = createBunkrGalleryAdapter(true);
+                    albumPicturesAdapter.setGridColumns(2);
+                    recycler.setAdapter(new ConcatAdapter(config,
+                            new SingleViewAdapter(showsEpisodeBar), albumPicturesAdapter,
+                            adapter, new SingleViewAdapter(showsEpisodePager)));
+                } else {
+                    recycler.setAdapter(new ConcatAdapter(config,
+                            new SingleViewAdapter(showsEpisodeBar), adapter,
+                            new SingleViewAdapter(showsEpisodePager)));
+                }
             } else recycler.setAdapter(adapter);
             refresh.addView(recycler, new SwipeRefreshLayout.LayoutParams(-1, -1));
             attachFeedScrollListener(recycler);
@@ -1362,8 +1403,18 @@ public class NativeFeedBrowserActivity extends Activity {
             public void onScrolled(@NonNull RecyclerView view, int dx, int dy) {
                 int[] range = visibleRange(view.getLayoutManager());
                 int headerRows = showDetailsMode ? 1 : 0;
-                adapter.preloadVisible(Math.max(0, range[0] - headerRows),
-                        Math.max(0, range[1] - headerRows));
+                if (albumPicturesAdapter != null) {
+                    int pictures = albumPicturesAdapter.getItemCount();
+                    if (pictures > 0 && range[1] >= 1 && range[0] <= pictures) {
+                        albumPicturesAdapter.preloadVisible(Math.max(0, range[0] - 1),
+                                Math.min(pictures - 1, range[1] - 1));
+                    }
+                    headerRows += pictures;
+                }
+                if (range[1] >= headerRows && adapter.getItemCount() > 0) {
+                    adapter.preloadVisible(Math.max(0, range[0] - headerRows),
+                            Math.max(0, range[1] - headerRows));
+                }
                 if (showDetailsMode) {
                     if (dy > 0) maybePrefetchShowEpisodes();
                     return;
@@ -1724,6 +1775,7 @@ public class NativeFeedBrowserActivity extends Activity {
                         && !item.url.isEmpty() && seen.add(item.url)) bunkrAlbumItems.add(item);
             }
             replaceShowEpisodes(bunkrAlbumItems);
+            updateAlbumMediaPresentation();
             applyEpisodeRange(false, -1);
             updateShowDetailsHeader();
             return;
@@ -2394,7 +2446,18 @@ public class NativeFeedBrowserActivity extends Activity {
         }
         if (recycler == null || (adapter == null && bunkrGalleryAdapter == null)) return;
         if (showDetailsMode) {
-            if (recycler.getLayoutManager() == null) recycler.setLayoutManager(new LinearLayoutManager(this));
+            if (recycler.getLayoutManager() == null) {
+                if (albumPicturesAdapter != null) {
+                    GridLayoutManager grid = new GridLayoutManager(this, 2);
+                    grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+                        @Override public int getSpanSize(int position) {
+                            return AlbumMediaPresentation.spanSize(position,
+                                    albumPicturesAdapter.getItemCount(), 2);
+                        }
+                    });
+                    recycler.setLayoutManager(grid);
+                } else recycler.setLayoutManager(new LinearLayoutManager(this));
+            }
             return;
         }
         RecyclerView.LayoutManager old = recycler.getLayoutManager();
@@ -2977,8 +3040,49 @@ public class NativeFeedBrowserActivity extends Activity {
         }
     }
 
+    private void selectAlbumMediaFilter(int filter) {
+        if (albumPicturesAdapter == null || albumMediaFilter == filter) return;
+        albumMediaFilter = AlbumMediaPresentation.normalize(filter);
+        updateAlbumMediaPresentation();
+        applyEpisodeRange(false, -1);
+        if (recycler != null) recycler.scrollToPosition(0);
+    }
+
+    private void updateAlbumMediaPresentation() {
+        if (albumPicturesAdapter == null) return;
+        List<NativeContentItem> pictures = AlbumMediaPresentation.pictures(bunkrAlbumItems);
+        int videos = showEpisodes.size();
+        if (!bunkrAlbumItems.isEmpty()) {
+            albumMediaFilter = AlbumMediaPresentation.availableFilter(
+                    albumMediaFilter, pictures.size(), videos);
+        }
+        List<NativeContentItem> visible = albumMediaFilter == AlbumMediaPresentation.VIDEOS
+                ? java.util.Collections.emptyList() : pictures;
+        if (!albumPicturesAdapter.snapshot().equals(visible)) albumPicturesAdapter.replace(visible);
+        if (albumMediaHeading != null) albumMediaHeading.setText(
+                pictures.isEmpty() ? "VIDEOS" : videos == 0 ? "PICTURES" : "MEDIA");
+        if (albumMediaFilters != null) {
+            albumMediaFilters.setVisibility(!pictures.isEmpty() && videos > 0 ? View.VISIBLE : View.GONE);
+            String[] labels = {"All " + (pictures.size() + videos),
+                    "Pictures " + pictures.size(), "Videos " + videos};
+            for (int i = 0; i < albumMediaButtons.length; i++) {
+                TextView button = albumMediaButtons[i];
+                button.setText(labels[i]);
+                button.setSelected(i == albumMediaFilter);
+                button.setTextColor(i == albumMediaFilter
+                        ? AppearanceTheme.accent(this) : Color.WHITE);
+                button.setContentDescription(labels[i] + (i == albumMediaFilter ? ", selected" : ""));
+            }
+        }
+    }
+
     private void applyEpisodeRange(boolean scrollToSelection, int selectedIndex) {
         if (!showDetailsMode || adapter == null) return;
+        if (albumPicturesAdapter != null && albumMediaFilter == AlbumMediaPresentation.PICTURES) {
+            if (adapter.getItemCount() != 0) adapter.replace(new ArrayList<>());
+            updateEpisodeRangeUi();
+            return;
+        }
         if (showEpisodes.isEmpty()) {
             episodeRangeStart = 0;
             adapter.setEpisodeNumberOffset(0);
@@ -2996,7 +3100,8 @@ public class NativeFeedBrowserActivity extends Activity {
         updateEpisodeRangeUi();
         if (scrollToSelection && recycler != null && adapter.getItemCount() > 0) {
             int local = selectedIndex >= 0 ? selectedIndex - episodeRangeStart : 0;
-            int target = 1 + Math.max(0, Math.min(local, adapter.getItemCount() - 1));
+            int target = 1 + (albumPicturesAdapter == null ? 0 : albumPicturesAdapter.getItemCount())
+                    + Math.max(0, Math.min(local, adapter.getItemCount() - 1));
             recycler.post(() -> {
                 if (isFinishing() || isDestroyed() || recycler == null
                         || recycler.getLayoutManager() == null) return;
@@ -3026,6 +3131,12 @@ public class NativeFeedBrowserActivity extends Activity {
     private void updateEpisodeRangeUi() {
         if (episodeRangeAction == null) return;
         int total = showEpisodes.size();
+        if (albumPicturesAdapter != null &&
+                (total == 0 || albumMediaFilter == AlbumMediaPresentation.PICTURES)) {
+            episodeRangeAction.setVisibility(View.GONE);
+            if (showsEpisodePager != null) showsEpisodePager.setVisibility(View.GONE);
+            return;
+        }
         episodeRangeAction.setVisibility(
                 total > ShowsEpisodeRanges.RANGE_SIZE ? View.VISIBLE : View.GONE
         );
@@ -3111,6 +3222,7 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private int itemCount() {
+        if (isEromeAlbum()) return bunkrAlbumItems.size();
         if (showDetailsMode) return showEpisodes.size();
         return isBunkr()
                 ? (bunkrGalleryAdapter == null ? 0 : bunkrGalleryAdapter.getItemCount())
@@ -3225,6 +3337,7 @@ public class NativeFeedBrowserActivity extends Activity {
         state.putString("browser_snapshot", browserSnapshot);
         state.putString("gallery_session", bunkrGallerySessionId);
         state.putInt("episode_range_start", episodeRangeStart);
+        if (isEromeAlbum()) state.putInt("album_media_filter", albumMediaFilter);
         if (showDetailsAppBar != null) {
             AppBarLayout.Behavior behavior = (AppBarLayout.Behavior)
                     ((CoordinatorLayout.LayoutParams) showDetailsAppBar.getLayoutParams()).getBehavior();
@@ -3327,6 +3440,7 @@ public class NativeFeedBrowserActivity extends Activity {
 
     private void setGalleryPreviewsActive(boolean active) {
         if (bunkrGalleryAdapter != null) bunkrGalleryAdapter.setPreviewsActive(active);
+        if (albumPicturesAdapter != null) albumPicturesAdapter.setPreviewsActive(active);
         for (BunkrGalleryAdapter gallery : creatorTabAdapters) {
             if (gallery != null && gallery != bunkrGalleryAdapter) gallery.setPreviewsActive(active);
         }
