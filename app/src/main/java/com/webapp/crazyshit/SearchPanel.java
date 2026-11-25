@@ -768,19 +768,39 @@ final class SearchPanel {
         ZeroChillUi.styleSourceRailChip(gridToggle, mode == SearchLayoutPreference.Mode.GRID);
         ZeroChillUi.styleSourceRailChip(listToggle, mode == SearchLayoutPreference.Mode.LIST);
         while (controls.getChildCount() > 2) controls.removeViewAt(2);
+        EromePreference.Choice selected = EromePreference.get(activity);
         for (SearchProviderControls.Option option : SearchProviderControls.supported(scope)) {
             TextView chip = new TextView(activity);
             chip.setText(option.label);
-            chip.setContentDescription(option.label);
             chip.setTextSize(13f);
             chip.setGravity(Gravity.CENTER);
             chip.setMinHeight(dp(32));
             chip.setPadding(dp(12), 0, dp(12), 0);
-            ZeroChillUi.styleSourceRailChip(chip, false);
+            EromePreference.Choice choice = EromePreference.Choice.fromSlug(option.id);
+            boolean eromeChoice = scope == Scope.EROME && choice != null;
+            chip.setContentDescription(eromeChoice ? "Erome preference " + choice.label : option.label);
+            chip.setOnClickListener(eromeChoice ? v -> chooseEromePreference(choice, v) : null);
+            ZeroChillUi.styleSourceRailChip(chip, eromeChoice && choice == selected);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(32));
             params.setMargins(dp(3), 0, dp(3), 0);
             controls.addView(chip, params);
         }
+    }
+
+    private void chooseEromePreference(EromePreference.Choice choice, View source) {
+        if (destroyed || choice == null || scope != Scope.EROME) return;
+        if (EromePreference.get(activity) == choice) return;
+        haptic(source);
+        EromePreference.set(activity, choice);
+        cancelSearchWork();
+        eromeResults = new ArrayList<>();
+        eromePage = 1;
+        eromeHasNext = false;
+        errors.clear();
+        refreshControls();
+        String query = input.getText().toString().trim();
+        if (query.length() >= 2) startEromeSearch(query);
+        else updateContentVisibility();
     }
 
     private void loadMore() {
@@ -1121,7 +1141,7 @@ final class SearchPanel {
     private void fetchEromePage(int token, String requested, int page, boolean append) {
         if (page < 1 || destroyed || !requested.equals(activeQuery) || scope != Scope.EROME) return;
         if (!append) {
-            List<NativeContentItem> cached = resultCache.get("EROME:0:Erome", requested);
+            List<NativeContentItem> cached = resultCache.get(eromeCacheKey(), requested);
             if (cached != null) {
                 eromeResults = cached;
                 eromePage = 1;
@@ -1138,6 +1158,7 @@ final class SearchPanel {
         pendingSources = 1;
         if (append) renderResults();
         long started = android.os.SystemClock.elapsedRealtime();
+        final String preference = EromePreference.get(activity).slug;
         requests.add(eromeIo.submit(() -> {
             EromeRepository.SearchPage result = null;
             Exception failure = null;
@@ -1153,6 +1174,7 @@ final class SearchPanel {
             long elapsed = android.os.SystemClock.elapsedRealtime() - started;
             activity.runOnUiThread(() -> {
                 if (!delivers(token, Scope.EROME, requested)) return;
+                if (!preference.equals(EromePreference.get(activity).slug)) return;
                 searchSourceTimings.put("Erome", elapsed);
                 pendingSources = 0;
                 if (error != null || pageResult == null) {
@@ -1180,7 +1202,7 @@ final class SearchPanel {
                     eromeHasNext = pageResult.hasNext && merged.size() > before
                             && eromeResults.size() < 180 && page < 5;
                     if (page == 1 && !eromeResults.isEmpty()) {
-                        resultCache.put("EROME:0:Erome", requested, eromeResults);
+                        resultCache.put(eromeCacheKey(), requested, eromeResults);
                     }
                 }
                 renderResults();
@@ -1300,7 +1322,7 @@ final class SearchPanel {
             data.put("xmega", ContentItemCodec.encodeList(xmegaResults, 40));
             data.put("bunkrAlbums", ContentItemCodec.encodeList(bunkrResults, 120));
             data.put("eromeAlbums", ContentItemCodec.encodeList(eromeResults, 180));
-            data.put("eromeHasNext", eromeHasNext);
+            data.put("eromePreference", EromePreference.get(activity).slug);
             data.put("eromePage", eromePage);
             data.put("bunkrPage", bunkrPage);
             data.put("bunkrHasNext", bunkrHasNext);
@@ -1315,6 +1337,8 @@ final class SearchPanel {
         if (!scope.name().equals(data.optString("scope"))) return false;
         if (scope == Scope.ONLYFAP
                 && !ContentPreference.getOnlyFap(activity).value.equals(data.optString("preference"))) return false;
+        if (scope == Scope.EROME
+                && !EromePreference.get(activity).slug.equals(data.optString("eromePreference", "all"))) return false;
         searchPreference = ContentPreference.getOnlyFap(activity);
         crazyVideos = ContentItemCodec.decodeList(data.optJSONArray("crazyVideos"), 80);
         efuktVideos = ContentItemCodec.decodeList(data.optJSONArray("efuktVideos"), 80);
@@ -1493,6 +1517,10 @@ final class SearchPanel {
         ArrayList<String> unavailable = new ArrayList<>();
         for (String error : errors.values()) if (error != null && !error.isEmpty()) unavailable.add(error);
         return String.join(", ", unavailable);
+    }
+
+    private String eromeCacheKey() {
+        return "EROME:" + EromePreference.get(activity).slug + ":0:Erome";
     }
 
     private static String scopeLabel(Scope value) {

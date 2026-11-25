@@ -1,5 +1,6 @@
 package com.webapp.crazyshit;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -22,6 +23,11 @@ final class SearchProviderControls {
     private SearchProviderControls() {}
 
     static List<Option> supported(SearchPanel.Scope scope) {
-        return Collections.emptyList();
+        if (scope != SearchPanel.Scope.EROME) return Collections.emptyList();
+        ArrayList<Option> options = new ArrayList<>();
+        for (EromePreference.Choice choice : EromePreference.Choice.values()) {
+            options.add(new Option(choice.slug, choice.label));
+        }
+        return options;
     }
 }
