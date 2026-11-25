@@ -79,18 +79,6 @@ public final class EromeRepository {
         return new ArrayList<>(media.values());
     }
 
-    /** First page of albums for a profile URL that was explicitly supplied. */
-    public List<NativeContentItem> fetchUserAlbums(Context context, String userUrl) throws IOException {
-        String canonical = canonicalUser(userUrl);
-        if (canonical.isEmpty()) throw new IOException("Not an Erome profile URL");
-        EromePages.SearchPage parsed = EromePages.parseProfile(get(context, canonical));
-        ArrayList<NativeContentItem> albums = new ArrayList<>();
-        for (NativeContentItem item : parsed.items) {
-            if (item != null && isAlbumUrl(item.url)) albums.add(item);
-        }
-        return albums;
-    }
-
     public CrazyShitRepository.StreamInfo resolvePlayable(Context context, String pageUrl) throws IOException {
         if (isDirectVideo(pageUrl)) {
             return new CrazyShitRepository.StreamInfo(pageUrl, ORIGIN + "/", "Video", ORIGIN + "/");
@@ -256,31 +244,12 @@ public final class EromeRepository {
         return "";
     }
 
-    public static String canonicalUser(String url) {
-        if (!isEromeHttpUrl(url) || isAlbumUrl(url)) return "";
-        String path = pathOf(url);
-        java.util.regex.Matcher matcher = java.util.regex.Pattern
-                .compile("^/([A-Za-z0-9][A-Za-z0-9_.-]{1,40})/?$").matcher(path);
-        if (!matcher.matches()) return "";
-        String handle = matcher.group(1);
-        if (RESERVED_USER_PATHS.contains(handle.toLowerCase(Locale.US))) return "";
-        return ORIGIN + "/" + handle;
-    }
-
     private static boolean isStillImage(String url) {
         if (!isMediaUrl(url)) return false;
         String path = pathOf(url).toLowerCase(Locale.US);
         return path.endsWith(".jpg") || path.endsWith(".jpeg")
                 || path.endsWith(".png") || path.endsWith(".webp");
     }
-
-    private static final java.util.Set<String> RESERVED_USER_PATHS = new java.util.HashSet<>(
-            java.util.Arrays.asList(
-                    "a", "search", "explore", "login", "signup", "register", "user", "users",
-                    "videos", "video", "pics", "photos", "photo", "albums", "album", "p",
-                    "categories", "category", "trending", "new", "hot", "popular", "account",
-                    "settings", "messages", "upload", "about", "privacy", "terms", "contact"
-            ));
 
     public static String canonicalAlbum(String url) {
         if (!isAlbumUrl(url)) return "";

@@ -272,8 +272,6 @@ final class BunkrCreatorGalleryRepository {
         boolean fapelloReady = !state.fapelloPending.isEmpty();
         boolean wikiFeetReady = !state.wikiFeetPending.isEmpty();
         boolean onlyHavenReady = !state.onlyHavenPending.isEmpty();
-        ArrayList<NativeContentItem> eromeReady = takeEromeIfDone(state);
-        startEromeIfIdle(appContext, state);
         Future<IOException> wikiCatalog = ALBUM_IO.submit(() -> loadWikiFeetCatalog(appContext, state));
         Future<IOException> havenCatalog = ALBUM_IO.submit(() -> loadOnlyHavenCatalog(appContext, state));
         Future<IOException> fapelloCatalog = ALBUM_IO.submit(() -> {
@@ -380,21 +378,12 @@ final class BunkrCreatorGalleryRepository {
         ArrayList<NativeContentItem> result = listener == null
                 ? interleave(batch.bunkrItems, batch.fapelloItems, batch.onlyHavenItems, batch.wikiFeetItems)
                 : batch.progressiveItems;
-        eromeReady.addAll(takeEromeIfDone(state));
-        startEromeIfIdle(appContext, state);
-        if (!eromeReady.isEmpty()) {
-            if (listener != null) listener.onItems(new ArrayList<>(eromeReady));
-            result.addAll(0, eromeReady);
-        }
 
         if (state.loadedMediaUrls.size() >= MAX_MEDIA_ITEMS) {
             state.pending.clear();
             state.fapelloPending.clear();
             state.wikiFeetPending.clear();
             state.onlyHavenPending.clear();
-            state.eromeProfiles.clear();
-            state.eromeAlbums.clear();
-            state.eromeFinished = true;
             state.searchFinished = true;
             state.nextBunkrAlias = state.discoveryQueries.size();
             state.fapelloCatalogLoaded = true;
@@ -893,82 +882,6 @@ final class BunkrCreatorGalleryRepository {
         }
     }
 
-    private ArrayList<NativeContentItem> takeEromeIfDone(State state) {
-        ArrayList<NativeContentItem> accepted = new ArrayList<>();
-        Future<List<NativeContentItem>> task = state.eromeTask;
-        if (task == null || !task.isDone()) return accepted;
-        boolean albumTask = state.eromeTaskAlbum;
-        String target = state.eromeTaskTarget;
-        state.eromeTask = null;
-        state.eromeTaskTarget = "";
-        List<NativeContentItem> loaded = null;
-        try {
-            loaded = task.get();
-            state.eromeFailures = 0;
-        } catch (Exception error) {
-            if (error instanceof InterruptedException) Thread.currentThread().interrupt();
-        }
-        if (loaded == null) {
-            if (++state.eromeFailures >= 2) {
-                dropEromeTarget(state, albumTask, target);
-                state.eromeFailures = 0;
-            }
-        } else if (albumTask) {
-            dropEromeTarget(state, true, target);
-            int added = 0;
-            for (NativeContentItem item : loaded) {
-                if (item == null || item.url == null || item.url.isEmpty()) continue;
-                if (!item.isImage() && !item.isVideo()) continue;
-                if (state.loadedMediaUrls.size() >= MAX_MEDIA_ITEMS) break;
-                if (state.loadedMediaUrls.add(item.url)) {
-                    accepted.add(item);
-                    if (++added >= 60) break;
-                }
-            }
-        } else {
-            dropEromeTarget(state, false, target);
-            int added = 0;
-            for (NativeContentItem item : loaded) {
-                if (item == null || !EromeRepository.isAlbumUrl(item.url)) continue;
-                String album = EromeRepository.canonicalAlbum(item.url);
-                if (!album.isEmpty() && state.eromeSeenAlbums.add(album)) {
-                    state.eromeAlbums.add(album);
-                    if (++added >= 4) break;
-                }
-            }
-        }
-        if (state.eromeTask == null && state.eromeAlbums.isEmpty() && state.eromeProfiles.isEmpty()) {
-            state.eromeFinished = true;
-        }
-        return accepted;
-    }
-
-    private void startEromeIfIdle(Context context, State state) {
-        if (state.eromeTask != null || state.eromeFinished) return;
-        String album = state.eromeAlbums.peekFirst();
-        String profile = album == null ? state.eromeProfiles.peekFirst() : null;
-        if (album == null && (profile == null || profile.isEmpty())) {
-            state.eromeFinished = true;
-            return;
-        }
-        boolean albumTask = album != null;
-        String target = albumTask ? album : profile;
-        Context app = context.getApplicationContext();
-        state.eromeTaskAlbum = albumTask;
-        state.eromeTaskTarget = target;
-        state.eromeTask = ALBUM_IO.submit(() -> albumTask
-                ? new EromeRepository().fetchAlbum(app, target)
-                : new EromeRepository().fetchUserAlbums(app, target));
-    }
-
-    private static void dropEromeTarget(State state, boolean albumTask, String target) {
-        if (albumTask) {
-            if (target != null && target.equals(state.eromeAlbums.peekFirst())) state.eromeAlbums.pollFirst();
-        } else if (target != null && target.equals(state.eromeProfiles.peekFirst())) {
-            state.eromeProfiles.pollFirst();
-        }
-    }
-
     private void seedKnownProfiles(
             State state, String sourceProfileUrl, String creatorName,
             List<String> seedNames, List<String> seedUrls, List<String> seedImages,
@@ -1040,15 +953,6 @@ final class BunkrCreatorGalleryRepository {
     ) {
         if (state == null || profileUrl == null || profileUrl.trim().isEmpty()) return;
         String url = profileUrl.trim();
-        String eromeUser = EromeRepository.canonicalUser(url);
-        if (!eromeUser.isEmpty()) {
-            // A saved profile URL is the identity. The handle is not a search term.
-            if (state.eromeSeenProfiles.add(eromeUser)) {
-                state.eromeProfiles.add(eromeUser);
-                state.eromeFinished = false;
-            }
-            return;
-        }
         if (FapelloRepository.isModelUrl(url)) {
             seedFapelloProfile(state, url, creatorName);
             return;
@@ -1168,9 +1072,6 @@ final class BunkrCreatorGalleryRepository {
                         .put("duplicates", cursor.duplicatePages));
             }
             json.put("pendingOnlyHaven", onlyHaven);
-            json.put("eromeFinished", state.eromeFinished);
-            json.put("eromeProfiles", new org.json.JSONArray(state.eromeProfiles));
-            json.put("eromeAlbums", new org.json.JSONArray(state.eromeAlbums));
             BunkrGallerySessionStore.recordCreatorBatch(context, id, batch.items, batch.endReached, json);
         } catch (Exception ignored) { }
     }
@@ -1248,18 +1149,6 @@ final class BunkrCreatorGalleryRepository {
             cursor.duplicatePages = item.optInt("duplicates");
             state.onlyHavenPending.add(cursor);
         }
-        state.eromeFinished = json.optBoolean("eromeFinished", true);
-        org.json.JSONArray eromeProfiles = json.optJSONArray("eromeProfiles");
-        if (eromeProfiles != null) for (int i = 0; i < Math.min(8, eromeProfiles.length()); i++) {
-            String user = EromeRepository.canonicalUser(eromeProfiles.optString(i));
-            if (!user.isEmpty() && state.eromeSeenProfiles.add(user)) state.eromeProfiles.add(user);
-        }
-        org.json.JSONArray eromeAlbums = json.optJSONArray("eromeAlbums");
-        if (eromeAlbums != null) for (int i = 0; i < Math.min(8, eromeAlbums.length()); i++) {
-            String album = EromeRepository.canonicalAlbum(eromeAlbums.optString(i));
-            if (!album.isEmpty() && state.eromeSeenAlbums.add(album)) state.eromeAlbums.add(album);
-        }
-        if (!state.eromeProfiles.isEmpty() || !state.eromeAlbums.isEmpty()) state.eromeFinished = false;
         return state;
     }
 
@@ -1347,15 +1236,6 @@ final class BunkrCreatorGalleryRepository {
         final Deque<FapelloCursor> fapelloPending = new ConcurrentLinkedDeque<>();
         final Deque<WikiFeetCursor> wikiFeetPending = new ConcurrentLinkedDeque<>();
         final Deque<OnlyHavenCursor> onlyHavenPending = new ConcurrentLinkedDeque<>();
-        final Deque<String> eromeProfiles = new ConcurrentLinkedDeque<>();
-        final Deque<String> eromeAlbums = new ConcurrentLinkedDeque<>();
-        final Set<String> eromeSeenProfiles = new HashSet<>();
-        final Set<String> eromeSeenAlbums = new HashSet<>();
-        boolean eromeFinished = true;
-        int eromeFailures;
-        Future<List<NativeContentItem>> eromeTask;
-        boolean eromeTaskAlbum;
-        String eromeTaskTarget = "";
         final Set<String> albumUrls = new HashSet<>();
         final Set<String> fapelloModelUrls = java.util.concurrent.ConcurrentHashMap.newKeySet();
         final Set<String> wikiFeetProfileUrls = new HashSet<>();
@@ -1386,9 +1266,7 @@ final class BunkrCreatorGalleryRepository {
                     fapelloCatalogLoaded && fapelloPending.isEmpty() &&
                     wikiFeetXCatalogLoaded &&
                     wikiFeetPending.isEmpty() &&
-                    onlyHavenCatalogLoaded && onlyHavenPending.isEmpty() &&
-                    eromeFinished && eromeTask == null &&
-                    eromeProfiles.isEmpty() && eromeAlbums.isEmpty();
+                    onlyHavenCatalogLoaded && onlyHavenPending.isEmpty();
         }
     }
 
