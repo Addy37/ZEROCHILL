@@ -106,7 +106,8 @@ public class ShitTokEromeFeedTest {
                     || (haven && source == ShitTokFilteredInventory.HAVEN);
         }
 
-        @Override public java.util.List<NativeContentItem> media(int source, ShitTokFilteredInventory.Cursor cursor) {
+        @Override public java.util.List<NativeContentItem> media(int source, ShitTokFilteredInventory.Cursor cursor)
+                throws Exception {
             if (!haven) return super.media(source, cursor);
             ArrayList<NativeContentItem> items = new ArrayList<>();
             for (int index = 0; index < 6; index++) {
