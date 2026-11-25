@@ -30,8 +30,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7005050'
-      APP_VERSION_NAME: '7.5.0-library-source.2'
+      APP_VERSION_CODE: '7005051'
+      APP_VERSION_NAME: '7.5.0-library-source.3'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v6
@@ -92,7 +92,8 @@ jobs:
             --tests com.webapp.crazyshit.OnlyFapLibraryPlaybackTest \
             --tests com.webapp.crazyshit.PlaybackHistoryStoreTest \
             --tests com.webapp.crazyshit.EromeRepositoryTest \
-            --tests com.webapp.crazyshit.EromeShitTokTest
+            --tests com.webapp.crazyshit.EromeShitTokTest \
+            --tests com.webapp.crazyshit.ShitTokRefinementsTest
       - name: Assemble and verify side-by-side APK
         run: |
           set -euo pipefail
@@ -104,7 +105,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee candidate/APK-SIGNING.txt
           grep -Fx 'Signer #1 certificate SHA-256 digest: 04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356' candidate/APK-SIGNING.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$apk" > "$RUNNER_TEMP/beta-badging.txt"
-          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005050' versionName='7.5.0-library-source.2-dev'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
+          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005051' versionName='7.5.0-library-source.3-dev'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
       - name: Upload signed library source-playback test APK
         uses: actions/upload-artifact@v4
