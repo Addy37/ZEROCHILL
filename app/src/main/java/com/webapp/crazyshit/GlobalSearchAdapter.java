@@ -9,6 +9,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -46,6 +47,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     private static final int TYPE_SECTION = 0;
     private static final int TYPE_RESULT = 1;
+    private static final int TYPE_CARD = 2;
     private static final String SITE = "https://crazyshit.com/";
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 " +
@@ -76,10 +78,22 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     private final List<Entry> entries = new ArrayList<>();
     private final Listener listener;
     private final SearchResultFades fades = new SearchResultFades();
+    private SearchCardStyle style = SearchCardStyle.LIST;
     private final List<String> sectionOrder = new ArrayList<>();
     private final Map<String, List<String>> itemOrder = new java.util.LinkedHashMap<>();
     void resetOrder() { sectionOrder.clear(); itemOrder.clear(); }
     void resetEntrance() { fades.reset(); resetOrder(); }
+
+    void setStyle(SearchCardStyle next) {
+        SearchCardStyle value = next == null ? SearchCardStyle.LIST : next;
+        if (style == value) return;
+        style = value;
+        notifyDataSetChanged();
+    }
+
+    boolean isFullSpan(int position) {
+        return position >= 0 && position < entries.size() && entries.get(position).section;
+    }
 
     void saveOrder(android.os.Bundle state) {
         state.putStringArrayList("search.sections", new ArrayList<>(sectionOrder));
@@ -204,7 +218,8 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     @Override
     public int getItemViewType(int position) {
-        return entries.get(position).section ? TYPE_SECTION : TYPE_RESULT;
+        if (entries.get(position).section) return TYPE_SECTION;
+        return style == SearchCardStyle.LIST ? TYPE_RESULT : TYPE_CARD;
     }
 
     @NonNull
@@ -223,6 +238,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             SearchTextContrast.apply(title);
             return new SectionHolder(title);
         }
+        if (viewType == TYPE_CARD) return createCard(parent);
 
         MaterialCardView card = new MaterialCardView(parent.getContext());
         card.setCardBackgroundColor(Color.TRANSPARENT);
@@ -297,18 +313,120 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             return;
         }
         if (!payloads.isEmpty() && payloads.contains("thumbnail")) {
-            ResultHolder result = (ResultHolder) holder;
-            result.boundUrl = entry.item.url == null ? "" : entry.item.url;
-            loadImage(result.image, entry.item);
-            return;
+            if (holder instanceof ResultHolder) {
+                ResultHolder result = (ResultHolder) holder;
+                result.boundUrl = entry.item.url == null ? "" : entry.item.url;
+                loadImage(result.image, entry.item);
+                return;
+            }
+            if (holder instanceof CardHolder) {
+                CardHolder card = (CardHolder) holder;
+                card.boundUrl = entry.item.url == null ? "" : entry.item.url;
+                loadImage(card.image, entry.item);
+                return;
+            }
         }
         bind(holder, position);
+    }
+
+    private RecyclerView.ViewHolder createCard(ViewGroup parent) {
+        Context context = parent.getContext();
+        MaterialCardView card = new MaterialCardView(context);
+        card.setCardBackgroundColor(Color.TRANSPARENT);
+        card.setTag(R.id.zerochill_surface_styled, true);
+        card.setCardElevation(0f);
+        card.setRadius(dp(parent, 16));
+        card.setStrokeWidth(0);
+        card.setClickable(true);
+        card.setFocusable(true);
+        RecyclerView.LayoutParams cardParams = new RecyclerView.LayoutParams(-1, -2);
+        card.setLayoutParams(cardParams);
+
+        LinearLayout column = new LinearLayout(context);
+        column.setOrientation(LinearLayout.VERTICAL);
+        card.addView(column, new MaterialCardView.LayoutParams(-1, -2));
+
+        FrameLayout art = new FrameLayout(context);
+        RatioImage image = new RatioImage(context);
+        image.setRatio(style.widthOverHeight());
+        image.setScaleType(style == SearchCardStyle.COVER
+                ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
+        image.setBackgroundColor(Color.rgb(20, 20, 23));
+        art.addView(image, new FrameLayout.LayoutParams(-1, -2));
+        TextView duration = new TextView(context);
+        duration.setTextColor(Color.WHITE);
+        duration.setTextSize(11f);
+        duration.setTypeface(null, android.graphics.Typeface.BOLD);
+        duration.setPadding(dp(parent, 6), dp(parent, 2), dp(parent, 6), dp(parent, 2));
+        duration.setBackground(BrowseUi.rounded(context, 0xCC000000, 8));
+        duration.setVisibility(View.GONE);
+        FrameLayout.LayoutParams durationParams = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END);
+        durationParams.setMargins(dp(parent, 8), dp(parent, 8), dp(parent, 8), dp(parent, 8));
+        art.addView(duration, durationParams);
+        column.addView(art, new LinearLayout.LayoutParams(-1, -2));
+
+        LinearLayout copy = new LinearLayout(context);
+        copy.setOrientation(LinearLayout.HORIZONTAL);
+        copy.setGravity(Gravity.CENTER_VERTICAL);
+        copy.setPadding(dp(parent, 8), dp(parent, 8), dp(parent, 4), dp(parent, 10));
+        TextView title = new TextView(context);
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(14f);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setMaxLines(2);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout words = new LinearLayout(context);
+        words.setOrientation(LinearLayout.VERTICAL);
+        words.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        TextView meta = new TextView(context);
+        meta.setTextColor(Color.rgb(174, 174, 184));
+        meta.setTextSize(12f);
+        meta.setMaxLines(2);
+        meta.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-1, -2);
+        metaParams.topMargin = dp(parent, 2);
+        words.addView(meta, metaParams);
+        copy.addView(words, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView favorite = SearchResultFavorites.create(context);
+        favorite.setVisibility(View.GONE);
+        copy.addView(favorite, new LinearLayout.LayoutParams(dp(parent, 36), dp(parent, 36)));
+        column.addView(copy, new LinearLayout.LayoutParams(-1, -2));
+        SearchTextContrast.apply(card);
+        return new CardHolder(card, image, title, meta, favorite, duration);
+    }
+
+    private void bindCard(CardHolder holder, Entry entry) {
+        NativeContentItem item = entry.item;
+        if (item == null) return;
+        ensureContext(holder.image.getContext());
+        holder.boundUrl = item.url == null ? "" : item.url;
+        holder.entranceKey = itemKey(entry);
+        holder.image.setRatio(style.widthOverHeight());
+        holder.image.setScaleType(style == SearchCardStyle.COVER
+                ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
+        holder.title.setText(item.title);
+        String duration = GalleryDuration.label(item);
+        holder.duration.setText(duration);
+        holder.duration.setVisibility(duration.isEmpty() ? View.GONE : View.VISIBLE);
+        String meta = metaText(item, entry.source);
+        if (!duration.isEmpty() && meta.startsWith(duration)) meta = meta.substring(duration.length()).trim();
+        holder.meta.setText(meta);
+        holder.card.setContentDescription(item.title);
+        holder.card.setOnClickListener(v -> listener.onOpen(item));
+        SearchResultFavorites.bind(holder.favorite, holder.card, item);
+        fades.bind(holder.card, itemKey(entry));
+        loadImage(holder.image, item);
+        requestRenderedThumbnail(item);
     }
 
     private void bind(RecyclerView.ViewHolder holder, int position) {
         Entry entry = entries.get(position);
         if (holder instanceof SectionHolder) {
             ((SectionHolder) holder).title.setText(entry.sectionTitle);
+            return;
+        }
+        if (holder instanceof CardHolder) {
+            bindCard((CardHolder) holder, entry);
             return;
         }
 
@@ -594,12 +712,16 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (holder instanceof ResultHolder) {
             ResultHolder result = (ResultHolder) holder;
             if (!result.entranceKey.isEmpty()) fades.show(result.card, result.entranceKey);
+        } else if (holder instanceof CardHolder) {
+            CardHolder card = (CardHolder) holder;
+            if (!card.entranceKey.isEmpty()) fades.show(card.card, card.entranceKey);
         }
     }
 
     @Override
     public void onViewDetachedFromWindow(@NonNull RecyclerView.ViewHolder holder) {
         if (holder instanceof ResultHolder) SearchResultFades.recycle(((ResultHolder) holder).card);
+        if (holder instanceof CardHolder) SearchResultFades.recycle(((CardHolder) holder).card);
         super.onViewDetachedFromWindow(holder);
     }
 
@@ -614,6 +736,14 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             result.card.setOnClickListener(null);
             result.card.setOnLongClickListener(null);
             result.favorite.setOnClickListener(null);
+        } else if (holder instanceof CardHolder) {
+            CardHolder card = (CardHolder) holder;
+            card.boundUrl = "";
+            card.entranceKey = "";
+            SearchResultFades.recycle(card.card);
+            Glide.with(card.image).clear(card.image);
+            card.card.setOnClickListener(null);
+            card.favorite.setOnClickListener(null);
         }
         super.onViewRecycled(holder);
     }
@@ -652,6 +782,45 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             this.title = title;
             this.meta = meta;
             this.favorite = favorite;
+        }
+    }
+
+    static final class CardHolder extends RecyclerView.ViewHolder {
+        final MaterialCardView card;
+        final RatioImage image;
+        final TextView title;
+        final TextView meta;
+        final TextView favorite;
+        final TextView duration;
+        String boundUrl = "";
+        String entranceKey = "";
+
+        CardHolder(MaterialCardView card, RatioImage image, TextView title, TextView meta,
+                   TextView favorite, TextView duration) {
+            super(card);
+            this.card = card;
+            this.image = image;
+            this.title = title;
+            this.meta = meta;
+            this.favorite = favorite;
+            this.duration = duration;
+        }
+    }
+
+    static final class RatioImage extends ImageView {
+        private float ratio = 16f / 9f;
+
+        RatioImage(Context context) { super(context); }
+
+        void setRatio(float widthOverHeight) {
+            ratio = widthOverHeight > 0f ? widthOverHeight : 1f;
+            requestLayout();
+        }
+
+        @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            int width = MeasureSpec.getSize(widthMeasureSpec);
+            int height = Math.max(1, Math.round(width / ratio));
+            setMeasuredDimension(width, height);
         }
     }
 }

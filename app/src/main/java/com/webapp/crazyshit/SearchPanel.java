@@ -21,6 +21,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -124,6 +125,8 @@ final class SearchPanel {
     private int eromePage = 1;
     private boolean eromeHasNext;
     private boolean eromeNeedsVerification;
+    private int bunkrPage = 1;
+    private boolean bunkrHasNext;
     private List<NativeContentItem> baddieResults = new ArrayList<>();
     private List<NativeContentItem> library = new ArrayList<>();
     private Scope scope = Scope.SHOWS;
@@ -139,6 +142,10 @@ final class SearchPanel {
     private View searchFooter;
     private List<NativeContentItem> creatorResults = new ArrayList<>();
     private TextView searchState;
+    private HorizontalScrollView controlsRow;
+    private LinearLayout controls;
+    private TextView gridToggle;
+    private TextView listToggle;
     private final List<Future<?>> requests = new ArrayList<>();
     private final Map<Integer, String> errors = new LinkedHashMap<>();
     private final Map<String, Long> searchSourceTimings = new LinkedHashMap<>();
@@ -253,6 +260,7 @@ final class SearchPanel {
         resultsControls.setOnClickListener(v -> {});
         shell.install(header, favoriteSurface, resultSurface, resultsControls, scopeSurface);
 
+        resultsControls.addView(buildControls(), new LinearLayout.LayoutParams(-1, -2));
         content = new FrameLayout(activity);
         content.setClipChildren(true);
         content.setClipToPadding(false);
@@ -268,6 +276,11 @@ final class SearchPanel {
         recycler.setClipToPadding(false);
         recycler.setPadding(0, dp(68), 0, dp(4));
         recycler.setItemAnimator(null);
+        recycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override public void onScrolled(@androidx.annotation.NonNull RecyclerView view, int dx, int dy) {
+                if (dy > 0) loadMore();
+            }
+        });
         onlyFapAdapter = new OnlyFapCreatorSearchAdapter(this::openCreator);
         adapter = new GlobalSearchAdapter(this::openResult);
         RecyclerView.AdapterDataObserver sizeObserver = new RecyclerView.AdapterDataObserver() {
@@ -299,6 +312,10 @@ final class SearchPanel {
             if (activeQuery.isEmpty() || destroyed) return;
             if (scope == Scope.EROME && eromeHasNext && pendingSources == 0 && errors.isEmpty()) {
                 fetchEromePage(generation, activeQuery, eromePage + 1, true);
+                return;
+            }
+            if (scope == Scope.BUNKR_ALBUMS && bunkrHasNext && pendingSources == 0 && errors.isEmpty()) {
+                fetchBunkrPage(generation, activeQuery, bunkrPage + 1, true);
                 return;
             }
             startScopedSearch(activeQuery);
@@ -467,6 +484,8 @@ final class SearchPanel {
         eromePage = 1;
         eromeHasNext = false;
         eromeNeedsVerification = false;
+        bunkrPage = 1;
+        bunkrHasNext = false;
         baddieResults = new ArrayList<>();
         library = new ArrayList<>();
         creatorResults = new ArrayList<>();
@@ -478,10 +497,15 @@ final class SearchPanel {
         if (shell == null || recycler == null || recycler.getAdapter() == null) return;
         boolean recent = showingRecent();
         resultSurface.setRecentSurface(recent);
-        if (recent) shell.setRecentContent(recentPanel);
-        else {
+        boolean submitted = input.getText().toString().trim().length() >= 2;
+        if (controlsRow != null) controlsRow.setVisibility(!recent && submitted ? View.VISIBLE : View.GONE);
+        if (recent) {
+            shell.setBrowsing(false);
+            shell.setRecentContent(recentPanel);
+        } else {
+            shell.setBrowsing(submitted);
             int count = recycler.getAdapter().getItemCount();
-            boolean shortQuery = input.getText().toString().trim().length() < 2;
+            boolean shortQuery = !submitted;
             int rowHeight = scope == Scope.ONLYFAP ? 76
                     : scope == Scope.EROME ? GlobalSearchAdapter.ALBUM_ROW_HEIGHT_DP : 104;
             shell.setResultCount(shortQuery ? 0 : Math.max(1, count), rowHeight);
@@ -653,6 +677,123 @@ final class SearchPanel {
         if (recycler == null) return;
         RecyclerView.Adapter<?> next = scope == Scope.ONLYFAP ? onlyFapAdapter : adapter;
         if (recycler.getAdapter() != next) recycler.setAdapter(next);
+        applyLayout();
+    }
+
+    private void applyLayout() {
+        if (recycler == null) return;
+        SearchLayoutPreference.Mode mode = SearchLayoutPreference.get(activity, scope);
+        boolean grid = mode == SearchLayoutPreference.Mode.GRID;
+        if (adapter != null) adapter.setStyle(SearchCardStyle.forScope(scope, mode));
+        if (onlyFapAdapter != null) onlyFapAdapter.setPortraitGrid(scope == Scope.ONLYFAP && grid);
+        boolean usingGrid = recycler.getLayoutManager() instanceof GridLayoutManager;
+        if (grid != usingGrid) {
+            if (grid) {
+                GridLayoutManager manager = new GridLayoutManager(activity, 2);
+                manager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+                    @Override public int getSpanSize(int position) {
+                        RecyclerView.Adapter<?> current = recycler.getAdapter();
+                        if (current instanceof GlobalSearchAdapter
+                                && ((GlobalSearchAdapter) current).isFullSpan(position)) return 2;
+                        return 1;
+                    }
+                });
+                recycler.setLayoutManager(manager);
+            } else {
+                recycler.setLayoutManager(new LinearLayoutManager(activity));
+            }
+        }
+        if (grid && !gridGapInstalled) {
+            recycler.addItemDecoration(gridGap);
+            gridGapInstalled = true;
+        } else if (!grid && gridGapInstalled) {
+            recycler.removeItemDecoration(gridGap);
+            gridGapInstalled = false;
+        }
+        refreshControls();
+    }
+
+    private boolean gridGapInstalled;
+    private final RecyclerView.ItemDecoration gridGap = new RecyclerView.ItemDecoration() {
+        @Override public void getItemOffsets(android.graphics.Rect outRect, View view,
+                RecyclerView parent, RecyclerView.State state) {
+            int pad = dp(4);
+            outRect.set(pad, pad, pad, pad);
+        }
+    };
+
+    private View buildControls() {
+        controlsRow = new HorizontalScrollView(activity);
+        controlsRow.setHorizontalScrollBarEnabled(false);
+        controlsRow.setContentDescription("Search controls");
+        controlsRow.setVisibility(View.GONE);
+        controls = new LinearLayout(activity);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setGravity(Gravity.CENTER_VERTICAL);
+        controls.setPadding(dp(8), dp(6), dp(8), 0);
+        controlsRow.addView(controls, new HorizontalScrollView.LayoutParams(-2, -2));
+        gridToggle = layoutToggle("Grid", "Show results as a grid", SearchLayoutPreference.Mode.GRID);
+        listToggle = layoutToggle("List", "Show results as a list", SearchLayoutPreference.Mode.LIST);
+        controls.addView(gridToggle);
+        controls.addView(listToggle);
+        return controlsRow;
+    }
+
+    private TextView layoutToggle(String label, String description, SearchLayoutPreference.Mode mode) {
+        TextView chip = new TextView(activity);
+        chip.setText(label);
+        chip.setTextSize(13f);
+        chip.setGravity(Gravity.CENTER);
+        chip.setMinHeight(dp(32));
+        chip.setPadding(dp(12), 0, dp(12), 0);
+        chip.setContentDescription(description);
+        chip.setOnClickListener(v -> chooseLayout(mode, v));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(32));
+        params.setMargins(dp(3), 0, dp(3), 0);
+        chip.setLayoutParams(params);
+        return chip;
+    }
+
+    private void chooseLayout(SearchLayoutPreference.Mode mode, View source) {
+        if (destroyed || mode == null) return;
+        if (SearchLayoutPreference.get(activity, scope) == mode) return;
+        haptic(source);
+        SearchLayoutPreference.set(activity, scope, mode);
+        applyLayout();
+    }
+
+    private void refreshControls() {
+        if (controls == null || gridToggle == null || listToggle == null) return;
+        SearchLayoutPreference.Mode mode = SearchLayoutPreference.get(activity, scope);
+        ZeroChillUi.styleSourceRailChip(gridToggle, mode == SearchLayoutPreference.Mode.GRID);
+        ZeroChillUi.styleSourceRailChip(listToggle, mode == SearchLayoutPreference.Mode.LIST);
+        while (controls.getChildCount() > 2) controls.removeViewAt(2);
+        for (SearchProviderControls.Option option : SearchProviderControls.supported(scope)) {
+            TextView chip = new TextView(activity);
+            chip.setText(option.label);
+            chip.setContentDescription(option.label);
+            chip.setTextSize(13f);
+            chip.setGravity(Gravity.CENTER);
+            chip.setMinHeight(dp(32));
+            chip.setPadding(dp(12), 0, dp(12), 0);
+            ZeroChillUi.styleSourceRailChip(chip, false);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(32));
+            params.setMargins(dp(3), 0, dp(3), 0);
+            controls.addView(chip, params);
+        }
+    }
+
+    private void loadMore() {
+        if (destroyed || pendingSources != 0 || activeQuery.length() < 2 || recycler == null) return;
+        if (!(recycler.getLayoutManager() instanceof LinearLayoutManager)) return;
+        int last = ((LinearLayoutManager) recycler.getLayoutManager()).findLastVisibleItemPosition();
+        int count = recycler.getAdapter() == null ? 0 : recycler.getAdapter().getItemCount();
+        if (count == 0 || last < count - 4) return;
+        if (scope == Scope.EROME && eromeHasNext && errors.isEmpty()) {
+            fetchEromePage(generation, activeQuery, eromePage + 1, true);
+        } else if (scope == Scope.BUNKR_ALBUMS && bunkrHasNext && bunkrPage < 4 && errors.isEmpty()) {
+            fetchBunkrPage(generation, activeQuery, bunkrPage + 1, true);
+        }
     }
 
     private void updateHints() {
@@ -906,8 +1047,61 @@ final class SearchPanel {
         errors.clear();
         pendingSources = 1;
         renderResults();
-        source(bunkrIo, token, Scope.BUNKR_ALBUMS, requested, 0, "Bunkr", () ->
-                bunkrRepository.searchAlbums(activity, requested, 1));
+        fetchBunkrPage(token, requested, 1, false);
+    }
+
+    private void fetchBunkrPage(int token, String requested, int page, boolean append) {
+        if (page < 1 || destroyed || !requested.equals(activeQuery) || scope != Scope.BUNKR_ALBUMS) return;
+        pendingSources = 1;
+        if (append) renderResults();
+        long started = android.os.SystemClock.elapsedRealtime();
+        requests.add(bunkrIo.submit(() -> {
+            BunkrRepository.AlbumSearch result = null;
+            Exception failure = null;
+            try {
+                if (!Thread.currentThread().isInterrupted()) {
+                    result = bunkrRepository.searchAlbumPage(activity, requested, page);
+                }
+            } catch (Exception error) {
+                failure = error;
+            }
+            BunkrRepository.AlbumSearch pageResult = result;
+            Exception error = failure;
+            long elapsed = android.os.SystemClock.elapsedRealtime() - started;
+            activity.runOnUiThread(() -> {
+                if (!delivers(token, Scope.BUNKR_ALBUMS, requested)) return;
+                searchSourceTimings.put("Bunkr", elapsed);
+                pendingSources = 0;
+                if (error != null || pageResult == null) {
+                    if (!append) bunkrResults = new ArrayList<>();
+                    bunkrHasNext = false;
+                    errors.put(0, "Bunkr");
+                } else {
+                    errors.remove(0);
+                    LinkedHashMap<String, NativeContentItem> merged = new LinkedHashMap<>();
+                    if (append) {
+                        for (NativeContentItem existing : bunkrResults) {
+                            if (existing != null && existing.url != null && !existing.url.isEmpty()) {
+                                merged.put(existing.url, existing);
+                            }
+                        }
+                    }
+                    int before = merged.size();
+                    for (NativeContentItem item : pageResult.albums) {
+                        if (item != null && item.url != null && !item.url.isEmpty()) merged.putIfAbsent(item.url, item);
+                    }
+                    bunkrResults = new ArrayList<>(merged.values());
+                    bunkrPage = page;
+                    bunkrHasNext = pageResult.hasNext && merged.size() > before
+                            && bunkrResults.size() < 120 && page < 4;
+                    if (page == 1 && !bunkrResults.isEmpty()) {
+                        resultCache.put("BUNKR_ALBUMS:0:Bunkr", requested, bunkrResults);
+                    }
+                }
+                renderResults();
+                if (pendingSources == 0) saveSnapshot();
+            });
+        }));
     }
 
     private void startEromeSearch(String query) {
@@ -1104,9 +1298,12 @@ final class SearchPanel {
             data.put("efuktVideos", ContentItemCodec.encodeList(efuktVideos, 80));
             data.put("kaoticVideos", ContentItemCodec.encodeList(kaoticVideos, 80));
             data.put("xmega", ContentItemCodec.encodeList(xmegaResults, 40));
-            data.put("bunkrAlbums", ContentItemCodec.encodeList(bunkrResults, 48));
+            data.put("bunkrAlbums", ContentItemCodec.encodeList(bunkrResults, 120));
             data.put("eromeAlbums", ContentItemCodec.encodeList(eromeResults, 180));
             data.put("eromeHasNext", eromeHasNext);
+            data.put("eromePage", eromePage);
+            data.put("bunkrPage", bunkrPage);
+            data.put("bunkrHasNext", bunkrHasNext);
             data.put("baddie", ContentItemCodec.encodeList(baddieResults, 48));
             data.put("library", ContentItemCodec.encodeList(library, 80));
             ScreenSnapshotStore.save(activity, snapshotId, data);
@@ -1123,10 +1320,12 @@ final class SearchPanel {
         efuktVideos = ContentItemCodec.decodeList(data.optJSONArray("efuktVideos"), 80);
         kaoticVideos = ContentItemCodec.decodeList(data.optJSONArray("kaoticVideos"), 80);
         xmegaResults = ContentItemCodec.decodeList(data.optJSONArray("xmega"), 40);
-        bunkrResults = ContentItemCodec.decodeList(data.optJSONArray("bunkrAlbums"), 48);
+        bunkrResults = ContentItemCodec.decodeList(data.optJSONArray("bunkrAlbums"), 120);
         eromeResults = ContentItemCodec.decodeList(data.optJSONArray("eromeAlbums"), 180);
         eromeHasNext = data.optBoolean("eromeHasNext", false);
-        eromePage = 1;
+        eromePage = Math.max(1, data.optInt("eromePage", 1));
+        bunkrPage = Math.max(1, data.optInt("bunkrPage", 1));
+        bunkrHasNext = data.optBoolean("bunkrHasNext", false);
         baddieResults = ContentItemCodec.decodeList(data.optJSONArray("baddie"), 48);
         library = ContentItemCodec.decodeList(data.optJSONArray("library"), 80);
         pendingSources = data.optBoolean("complete", false) ? 0 : pendingSources;
@@ -1211,17 +1410,20 @@ final class SearchPanel {
             rankedShows = showsQuery.rank(3 * ShowsSearch.SOURCE_LIMIT, crazyVideos, efuktVideos, kaoticVideos);
             appendSection(output, "Shows", rankedShows, GlobalSearchAdapter.SOURCE_REMOTE, rankedShows.size());
         } else if (scope == Scope.XMEGADRIVE) {
-            appendKind(output, "Videos", xmegaResults, false);
+            appendKind(output, "Videos", SearchRelevance.prefer(activeQuery, xmegaResults), false);
             appendKind(output, "Categories", xmegaResults, true);
         } else if (scope == Scope.BUNKR_ALBUMS) {
-            appendSection(output, "Albums", bunkrResults, GlobalSearchAdapter.SOURCE_REMOTE, 48);
+            appendSection(output, "Albums", SearchRelevance.prefer(activeQuery, bunkrResults),
+                    GlobalSearchAdapter.SOURCE_REMOTE, 120);
         } else if (scope == Scope.EROME) {
-            appendSection(output, "Albums", eromeResults, GlobalSearchAdapter.SOURCE_ALBUM, 180);
+            appendSection(output, "Albums", SearchRelevance.prefer(activeQuery, eromeResults),
+                    GlobalSearchAdapter.SOURCE_ALBUM, 180);
         } else if (scope == Scope.BADDIEHUB) {
-            appendKind(output, "Videos", baddieResults, false);
+            appendKind(output, "Videos", SearchRelevance.prefer(activeQuery, baddieResults), false);
             appendKind(output, "Categories", baddieResults, true);
         } else if (scope == Scope.LIBRARY) {
-            appendSection(output, "Library", library, GlobalSearchAdapter.SOURCE_LIBRARY, 80);
+            appendSection(output, "Library", SearchRelevance.prefer(activeQuery, library),
+                    GlobalSearchAdapter.SOURCE_LIBRARY, 80);
         }
         if (!output.isEmpty() && !firstResultsRecorded && searchStarted > 0) {
             firstResultsRecorded = true;
@@ -1237,12 +1439,18 @@ final class SearchPanel {
         String unavailable = unavailableNow();
         searchState.setVisibility(View.VISIBLE);
         searchState.setText(pendingSources > 0
-                ? "Searching " + scopeLabel(scope) + " · " + pendingSources + " remaining"
+                ? ((scope == Scope.EROME && eromePage > 1) || (scope == Scope.BUNKR_ALBUMS && bunkrPage > 1)
+                    ? "Loading more…"
+                    : "Searching " + scopeLabel(scope) + " · " + pendingSources + " remaining")
                 : unavailable.isEmpty() ? scopeLabel(scope) + " search complete"
                 : "Unavailable: " + unavailable + " · Tap to retry");
         if (scope == Scope.EROME && pendingSources == 0 && unavailable.isEmpty() && eromeHasNext) {
             searchState.setText("Erome · " + eromeResults.size()
-                    + (eromeResults.size() == 1 ? " album · Tap for more" : " albums · Tap for more"));
+                    + (eromeResults.size() == 1 ? " album" : " albums"));
+        }
+        if (scope == Scope.BUNKR_ALBUMS && pendingSources == 0 && unavailable.isEmpty() && bunkrHasNext) {
+            searchState.setText("Bunkr · " + bunkrResults.size()
+                    + (bunkrResults.size() == 1 ? " album" : " albums"));
         }
         searchState.setContentDescription(searchState.getText());
         if (output.isEmpty()) {

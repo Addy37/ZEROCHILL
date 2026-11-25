@@ -27,7 +27,16 @@ final class SearchGlassLayout extends FrameLayout {
     private android.animation.ValueAnimator heightAnimator;
     private int animatedHeight;
     private View recentContent;
+    private boolean browsing;
     private int lastDesiredHeight = -1;
+
+    /** Submitted searches open the full browsing area. Clearing them animates back down. */
+    void setBrowsing(boolean value) {
+        if (browsing == value) return;
+        browsing = value;
+        dirty = true;
+        requestLayout();
+    }
     private int lastAvailableHeight = -1;
     private int lastPanelWidth = -1;
     private final Path rowClip = new Path();
@@ -157,7 +166,8 @@ final class SearchGlassLayout extends FrameLayout {
                     && ZeroChillMotion.animationsEnabled(getContext())) {
                 animatedHeight = rows.getHeight();
                 heightAnimator = android.animation.ValueAnimator.ofInt(animatedHeight, target);
-                heightAnimator.setDuration(180L);
+                int distance = Math.abs(target - animatedHeight);
+                heightAnimator.setDuration(Math.min(360L, Math.max(180L, distance / 2L)));
                 heightAnimator.setInterpolator(new android.view.animation.DecelerateInterpolator());
                 heightAnimator.addUpdateListener(a -> { animatedHeight = (int) a.getAnimatedValue(); dirty = true; requestLayout(); });
                 heightAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
@@ -181,6 +191,7 @@ final class SearchGlassLayout extends FrameLayout {
             desired = recentContent.getMeasuredHeight() + rows.getPaddingTop() + rows.getPaddingBottom();
         }
         int available = resultHeight(MeasureSpec.getSize(heightSpec), Integer.MAX_VALUE);
+        if (browsing && recentContent == null) desired = available;
         updateHeight(desired, available, panelWidth);
         int height = Math.min(available, heightAnimator != null ? animatedHeight : desired);
         int resultsTop = resultsTopMargin(MeasureSpec.getSize(heightSpec));
