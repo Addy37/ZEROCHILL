@@ -14,12 +14,18 @@ public class AlbumMediaPresentationTest {
                 AlbumMediaPresentation.pictures(Arrays.asList(video, picture)));
     }
 
-    @Test public void fullWidthHeaderVideosAndFooterOnlyPicturesUseGridCells() {
-        for (int i = 0; i < 6; i++) {
-            assertEquals(i > 0 && i <= 3 ? 1 : 2,
-                    AlbumMediaPresentation.spanSize(i, 3, 2));
-            assertEquals(2, AlbumMediaPresentation.spanSize(i, 0, 2));
-        }
+    @Test public void combinedGridPreservesOrderAndFiltersMedia() {
+        NativeContentItem picture = new NativeContentItem(NativeContentItem.KIND_IMAGE,
+                "Photo", "https://example.invalid/photo.jpg", "", "", "", "");
+        NativeContentItem video = new NativeContentItem(NativeContentItem.KIND_MEDIA,
+                "Video", "https://example.invalid/video.mp4", "", "", "", "");
+        assertEquals(Arrays.asList(video, picture),
+                AlbumMediaPresentation.visible(Arrays.asList(video, picture), AlbumMediaPresentation.ALL));
+        assertEquals(Arrays.asList(video),
+                AlbumMediaPresentation.visible(Arrays.asList(video, picture), AlbumMediaPresentation.VIDEOS));
+        assertEquals(Arrays.asList(picture),
+                AlbumMediaPresentation.visible(Arrays.asList(video, picture), AlbumMediaPresentation.PICTURES));
+        assertEquals("1 picture · 1 video", AlbumMediaPresentation.countLabel(1, 1));
     }
 
     @Test public void singleMediaTypeNeverKeepsAnEmptyFilter() {

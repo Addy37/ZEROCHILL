@@ -26,7 +26,18 @@ final class AlbumMediaPresentation {
         return result;
     }
 
-    static int spanSize(int position, int pictures, int columns) {
-        return position > 0 && position <= pictures ? 1 : columns;
+    static List<NativeContentItem> visible(List<NativeContentItem> items, int filter) {
+        List<NativeContentItem> result = new ArrayList<>();
+        for (NativeContentItem item : items) {
+            if (item == null) continue;
+            if (item.isImage() && filter != VIDEOS || item.isVideo() && filter != PICTURES)
+                result.add(item);
+        }
+        return result;
+    }
+
+    static String countLabel(int pictures, int videos) {
+        return pictures + (pictures == 1 ? " picture" : " pictures")
+                + " · " + videos + (videos == 1 ? " video" : " videos");
     }
 }
