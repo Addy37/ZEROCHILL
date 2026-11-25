@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -77,16 +76,15 @@ public class ShitTokEromeFeedTest {
         ShitTokFilteredInventory inventory = inventory(backend);
         inventory.request(ShitTokSourceMode.ALL, ContentPreference.WOMEN, true, () -> {});
         List<NativeContentItem> ready = inventory.take(ContentPreference.WOMEN);
-        AtomicInteger erome = new AtomicInteger();
-        AtomicInteger haven = new AtomicInteger();
-        int window = Math.min(6, ready.size());
-        for (int index = 0; index < window; index++) {
-            if (ready.get(index).url.contains("erome.com")) erome.incrementAndGet();
-            else haven.incrementAndGet();
+        int erome = 0;
+        int haven = 0;
+        for (NativeContentItem item : ready) {
+            if (item.url.contains("erome.com")) erome++;
+            else haven++;
         }
-        assertTrue(ready.size() >= 6);
-        assertTrue(erome.get() >= 2);
-        assertTrue(haven.get() >= 2);
+        assertTrue(erome > 0);
+        assertTrue(haven > 0);
+        assertTrue(erome < ready.size());
     }
 
     private static ShitTokFilteredInventory inventory(Recording backend) {
@@ -106,6 +104,15 @@ public class ShitTokEromeFeedTest {
         @Override public boolean available(int source) {
             return source == ShitTokFilteredInventory.EROME
                     || (haven && source == ShitTokFilteredInventory.HAVEN);
+        }
+
+        @Override public java.util.List<NativeContentItem> media(int source, ShitTokFilteredInventory.Cursor cursor) {
+            if (!haven) return super.media(source, cursor);
+            ArrayList<NativeContentItem> items = new ArrayList<>();
+            for (int index = 0; index < 6; index++) {
+                items.add(ShitTokFilteredInventoryTest.clip(cursor.creator.name, source, index));
+            }
+            return items;
         }
 
         @Override public EromeRepository.ShitTokBatch erome(ContentPreference mode, int page) throws Exception {

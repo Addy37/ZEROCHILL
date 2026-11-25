@@ -10,20 +10,18 @@ import static org.junit.Assert.assertTrue;
 
 /** Erome's ShitTok lane follows the site versions without touching Spotlight. */
 public class EromeShitTokTest {
-    private static final String ALBUM = ""
+    private static final String ALBUM = "<html><body>"
             + "<h1 class=\"album-title-page\">Studio clip</h1>"
-            + "<a id=\"user_name\">Studio</a>"
-            + "<div class=\"media-group\">"
-            + "<video class=\"player video-js vjs-portrait\" poster=\"https://s1.erome.com/1/VideoYes/clip.jpg\">"
-            + "<source src=\"https://v1.erome.com/1/VideoYes/clip_720p.mp4\" type=\"video/mp4\" res=\"720\">"
-            + "</video></div>"
-            + "<div class=\"media-group\">"
-            + "<img class=\"img-front\" src=\"https://s1.erome.com/1/VideoYes/still.jpg\">"
-            + "</div>"
-            + "<div class=\"media-group\">"
-            + "<video class=\"player\" poster=\"https://s1.erome.com/1/VideoYes/anim.jpg\">"
-            + "<source src=\"https://v1.erome.com/1/VideoYes/anim.gif\" type=\"video/mp4\">"
-            + "</video></div>";
+            + "<a id=\"user_name\" href=\"https://www.erome.com/SampleStudio\">SampleStudio</a>"
+            + "<div class=\"media-group\"><div class=\"video\">"
+            + "<video class=\"player video-js vjs-portrait\" poster=\"https://s1.erome.com/1/Abcd1234/clip.jpg\">"
+            + "<source src=\"https://v1.erome.com/1/Abcd1234/clip_480p.mp4\" type=\"video/mp4\" res=\"480\">"
+            + "<source src=\"https://v1.erome.com/1/Abcd1234/clip_720p.mp4\" type=\"video/mp4\" res=\"720\">"
+            + "</video></div></div>"
+            + "<div class=\"media-group\"><div class=\"img\">"
+            + "<img class=\"img-front\" width=\"800\" height=\"1000\" "
+            + "src=\"https://s1.erome.com/1/Abcd1234/still.jpg\">"
+            + "</div></div></body></html>";
 
     @Test public void mapsOnlyTheThreeShitTokFeeds() {
         assertEquals("straight", EromeRepository.shitTokVersion(ContentPreference.WOMEN));
@@ -52,33 +50,37 @@ public class EromeShitTokTest {
                 NativeContentItem.KIND_SERIES, "photos", "https://www.erome.com/a/PhotoOnly",
                 "", "", "", "", "4 pictures");
         NativeContentItem clips = new NativeContentItem(
-                NativeContentItem.KIND_SERIES, "clips", "https://www.erome.com/a/VideoYes",
+                NativeContentItem.KIND_SERIES, "clips", "https://www.erome.com/a/Abcd1234",
                 "", "", "", "", "1 video · 2 pictures");
         EromePages.SearchPage listing = new EromePages.SearchPage(Arrays.asList(photos, clips), true);
         EromeRepository.ShitTokBatch batch = EromeRepository.collectShitTokVideos(
                 listing, 3, url -> {
-                    assertEquals("https://www.erome.com/a/VideoYes", url);
+                    assertEquals("https://www.erome.com/a/Abcd1234", url);
                     return org.jsoup.Jsoup.parse(ALBUM, EromeRepository.ORIGIN + "/");
                 });
         assertEquals(1, batch.items.size());
         NativeContentItem video = batch.items.get(0);
         assertTrue(video.isVideo());
-        assertEquals("https://www.erome.com/a/VideoYes#clip", video.url);
-        assertEquals("https://v1.erome.com/1/VideoYes/clip_720p.mp4", video.sourceMediaUrl);
+        assertEquals("https://www.erome.com/a/Abcd1234#clip", video.url);
+        assertEquals("https://v1.erome.com/1/Abcd1234/clip_720p.mp4", video.sourceMediaUrl);
+        NativeContentItem photo = EromePages.parseAlbum(ALBUM, "https://www.erome.com/a/Abcd1234").items.get(1);
+        NativeContentItem gif = video.withSourceMedia(
+                "https://v1.erome.com/1/Abcd1234/anim.gif", "https://www.erome.com/a/Abcd1234");
+        assertEquals(Collections.singletonList(video), EromeRepository.shitTokClips(Arrays.asList(video, photo, gif)));
+        assertEquals(4, batch.nextPage);
+        assertTrue(batch.hasMore);
+        assertFalse(video.sourceMediaUrl.contains(".gif"));
         assertEquals("erome.com", ShitTokAspectPriority.sourceKey(video));
         assertTrue(ShitTokFeedSources.allows(ShitTokCategoryStrip.Tab.LADIES, "erome.com"));
         assertFalse(ShitTokFeedSources.allows(ShitTokCategoryStrip.Tab.CHAOS, "erome.com"));
         assertFalse(ShitTokFeedSources.allows(ShitTokCategoryStrip.Tab.GROUPS, "erome.com"));
-        assertEquals(4, batch.nextPage);
-        assertTrue(batch.hasMore);
-        assertFalse(video.sourceMediaUrl.contains(".gif"));
     }
 
     @Test public void playbackUsesTheKnownVideoWithoutTheSpotlightCookie() throws Exception {
-        NativeContentItem video = EromePages.parseAlbum(ALBUM, "https://www.erome.com/a/VideoYes").items.get(0);
+        NativeContentItem video = EromePages.parseAlbum(ALBUM, "https://www.erome.com/a/Abcd1234").items.get(0);
         CrazyShitRepository.StreamInfo stream = PlayableSourceRouter.resolve(null, video);
         assertEquals(video.sourceMediaUrl, stream.mediaUrl);
-        assertEquals("https://www.erome.com/a/VideoYes", stream.requestReferer);
+        assertEquals("https://www.erome.com/a/Abcd1234", stream.requestReferer);
     }
 
     @Test public void cookieHeaderStaysSeparateFromAttributes() {
@@ -92,7 +94,7 @@ public class EromeShitTokTest {
 
     @Test public void stopsAtThePageCap() throws Exception {
         NativeContentItem clips = new NativeContentItem(
-                NativeContentItem.KIND_SERIES, "clips", "https://www.erome.com/a/VideoYes",
+                NativeContentItem.KIND_SERIES, "clips", "https://www.erome.com/a/Abcd1234",
                 "", "", "", "", "1 video");
         EromeRepository.ShitTokBatch batch = EromeRepository.collectShitTokVideos(
                 new EromePages.SearchPage(Collections.singletonList(clips), true),
