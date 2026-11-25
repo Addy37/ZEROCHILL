@@ -36,6 +36,9 @@ final class ShitTokCreatorSwipePreview extends FrameLayout {
     private final TextView more;
     private final FrameLayout albumSlot;
     private boolean albumMode;
+    private String currentCreator = "";
+    private String currentSessionId = "";
+    private int refreshGeneration;
 
     ShitTokCreatorSwipePreview(Activity activity) {
         super(activity);
