@@ -134,11 +134,25 @@ public class LibraryCollectionTest {
         assertNotNull(tile);
         assertEquals(3, tile.getChildCount());
         assertEquals("collection-artwork", tile.getChildAt(0).getTag());
+        assertNull(tile.getBackground());
+        assertNull(tile.getChildAt(0).getBackground());
         assertEquals("Example collection", ((TextView) tile.getChildAt(1)).getText().toString());
         assertEquals("0 items", ((TextView) tile.getChildAt(2)).getText().toString());
-        assertNotNull(view.findViewWithTag("library-new-collection"));
+        ViewGroup header = (ViewGroup) view.getChildAt(0);
+        View create = view.findViewWithTag("library-new-collection");
+        assertSame(header, create.getParent());
+        assertEquals("Create new collection", create.getContentDescription());
+        assertTrue(create.isClickable());
+        assertNull(create.getBackground());
         assertEquals(2, view.getChildCount());
-        assertEquals("My Collections", ((TextView) view.getChildAt(0)).getText().toString());
+        assertEquals("My Collections", ((TextView) header.getChildAt(0)).getText().toString());
+        ViewGroup rows = (ViewGroup) view.getChildAt(1);
+        assertEquals(1, rows.getChildCount());
+        assertNull(rows.findViewWithTag("library-new-collection"));
+        assertEquals(2, ((ViewGroup) rows.getChildAt(0)).getChildCount());
+        view.bind(java.util.Collections.emptyList());
+        assertSame(create, view.findViewWithTag("library-new-collection"));
+        assertEquals("Tap + to create a collection", ((TextView) rows.getChildAt(0)).getText().toString());
         view.release();
     }
 
