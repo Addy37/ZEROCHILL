@@ -12,13 +12,15 @@ import android.widget.ImageView;
 /** A soft descending matte over an already-decoded thumbnail. No layout or bitmap allocations per frame. */
 final class GalleryRevealImageView extends ImageView {
     static final int MATTE = Color.rgb(30, 34, 40);
-    static final long DURATION_MS = 350L;
-    static final long STAGGER_MS = 65L;
+    static final long DURATION_MS = 400L;
+    static final long STAGGER_MS = 50L;
     static final long SETTLE_MS = 110L;
     private final Paint paint = new Paint();
     private final Matrix matrix = new Matrix();
     private final LinearGradient gradient = new LinearGradient(0f, 0f, 0f, 1f,
-            new int[]{MATTE & 0x00ffffff, MATTE}, null, Shader.TileMode.CLAMP);
+            new int[]{MATTE & 0x00ffffff, (MATTE & 0x00ffffff) | 0x28000000,
+                    (MATTE & 0x00ffffff) | 0xd7000000, MATTE},
+            new float[]{0f, .24f, .76f, 1f}, Shader.TileMode.CLAMP);
     private float progress = 1f;
 
     GalleryRevealImageView(Context context) { super(context); }
@@ -47,7 +49,7 @@ final class GalleryRevealImageView extends ImageView {
         }
         super.onDraw(canvas);
         float height = getHeight();
-        float band = Math.max(1f, height * .36f);
+        float band = Math.max(1f, height * .65f);
         float edge = front(progress, height, band);
         matrix.setScale(1f, band);
         matrix.postTranslate(0f, edge);

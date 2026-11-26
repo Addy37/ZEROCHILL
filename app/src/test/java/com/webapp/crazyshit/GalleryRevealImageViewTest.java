@@ -17,7 +17,14 @@ public class GalleryRevealImageViewTest {
         assertTrue(GalleryRevealImageView.canStart(RecyclerView.SCROLL_STATE_IDLE, 110L));
     }
 
+    @Test public void uniformRevealTiming() {
+        assertEquals(400L, GalleryRevealImageView.DURATION_MS);
+        assertEquals(50L, GalleryRevealImageView.STAGGER_MS);
+    }
+
     @Test public void softEdgeTravelsFromAboveTheTileToBelowIt() {
+        assertEquals(-65f, GalleryRevealImageView.front(0f, 100f, 65f), .001f);
+        assertEquals(100f, GalleryRevealImageView.front(1f, 100f, 65f), .001f);
         assertEquals(-36f, GalleryRevealImageView.front(0f, 100f, 36f), .001f);
         assertEquals(32f, GalleryRevealImageView.front(.5f, 100f, 36f), .001f);
         assertEquals(100f, GalleryRevealImageView.front(1f, 100f, 36f), .001f);

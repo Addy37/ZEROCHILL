@@ -73,12 +73,18 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final java.util.LinkedHashSet<String> batchInFlight = new java.util.LinkedHashSet<>();
     private final java.util.LinkedHashMap<String, GalleryThumbnailPipeline.Result> batchResults = new java.util.LinkedHashMap<>();
     private final android.os.Handler batchUi = new android.os.Handler(android.os.Looper.getMainLooper());
-    private boolean batchEnabled, batchActive;
+    private boolean batchEnabled, batchActive = true;
     private int lastVisible;
     private static final int BATCH_LIMIT = 6;
     private static final int SKELETON_TYPE = 1;
     private final Runnable flushBatch = this::publishPreparedBatch;
-    private static final int MAX_REVEALS = 3;
+    private static final int MAX_REVEALS = 4;
+    private final java.util.Set<String> locallyRevealed = new java.util.HashSet<>();
+
+    private boolean hasRevealed(String url) {
+        return thumbnailPipeline != null ? thumbnailPipeline.hasRevealed(url)
+                : locallyRevealed.contains(url);
+    }
     private int activeReveals;
     private long lastFastScroll = -GalleryRevealImageView.SETTLE_MS;
     private long lastRevealStart = -GalleryRevealImageView.STAGGER_MS;
@@ -113,7 +119,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private void scheduleRevealTick(long delay) {
-        if (!batchEnabled || !batchActive || !previewsActive || previewViewport == null
+        if (!batchActive || !previewsActive || previewViewport == null
                 || revealTickPosted) return;
         revealTickPosted = true;
         batchUi.postDelayed(revealTick, Math.max(0L, delay));
@@ -127,7 +133,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private void pumpReveals() {
         revealTickPosted = false;
         RecyclerView list = previewViewport;
-        if (!batchEnabled || !batchActive || !previewsActive || list == null) return;
+        if (!batchActive || !previewsActive || list == null) return;
         ArrayList<Holder> candidates = new ArrayList<>();
         for (Holder holder : previewHolders)
             if (holder.revealPending && holder.revealAnimator == null
@@ -149,7 +155,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         candidates.sort(java.util.Comparator.comparingInt((Holder h) -> h.itemView.getTop())
                 .thenComparingInt(h -> h.itemView.getLeft()));
         Holder holder = candidates.get(0);
-        if (thumbnailPipeline.hasRevealed(holder.boundItem.url)) {
+        if (hasRevealed(holder.boundItem.url)) {
             finishReveal(holder);
             scheduleRevealTick(0L);
             return;
@@ -178,8 +184,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private void finishReveal(Holder holder) {
         holder.revealPending = false;
         holder.image.setRevealProgress(1f);
-        if (holder.boundItem != null && thumbnailPipeline != null)
-            thumbnailPipeline.markRevealed(holder.boundItem.url);
+        if (holder.boundItem != null) {
+            if (thumbnailPipeline != null) thumbnailPipeline.markRevealed(holder.boundItem.url);
+            else locallyRevealed.add(holder.boundItem.url);
+        }
     }
 
     private void cancelReveal(Holder holder, boolean preservePending) {
@@ -194,9 +202,14 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private void queueReveal(Holder holder, NativeContentItem item) {
-        if (!batchEnabled || thumbnailPipeline.hasRevealed(item.url)
-                || !ZeroChillMotion.animationsEnabled(context)) {
+        if (hasRevealed(item.url) || !ZeroChillMotion.animationsEnabled(context)) {
+            cancelReveal(holder, false);
             finishReveal(holder);
+            return;
+        }
+        // Multiple ready callbacks for the same bound tile must not restart a reveal.
+        if (holder.revealPending) {
+            scheduleRevealTick(0L);
             return;
         }
         holder.revealPending = true;
@@ -338,11 +351,14 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 else if (holder.needsRepair) repairArtwork(holder, holder.boundItem, holder.boundItem.imageUrl);
             }
         }
-        if (batchEnabled && batchActive) {
+        if (batchActive && previewsActive) {
             for (Holder holder : previewHolders) {
                 if (holder.revealAnimator != null && !previewVisible(holder))
                     cancelReveal(holder, true);
-                if (holder.revealPending && revealVisible(holder)) scheduleRevealTick(0L);
+                if (holder.revealPending && holder.revealAnimator == null
+                        && activeReveals < MAX_REVEALS && revealVisible(holder)
+                        && viewport.getScrollState() != RecyclerView.SCROLL_STATE_SETTLING)
+                    scheduleRevealTick(0L);
             }
         }
         return true;
@@ -885,6 +901,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.itemView.setOnClickListener(v -> {
             int current = holder.getBindingAdapterPosition();
             if (current == RecyclerView.NO_POSITION || current >= items.size()) return;
+            // A tap during a pending reveal should open the actual artwork, not its matte.
+            if (holder.revealPending) {
+                cancelReveal(holder, false);
+                finishReveal(holder);
+                scheduleRevealTick(0L);
+            }
             listener.onOpen(current, items.get(current), holder.image);
         });
         holder.itemView.setOnLongClickListener(v -> {
@@ -899,8 +921,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         int binding = holder.bindGeneration;
         int generation = galleryGeneration;
         Glide.with(holder.image).clear(holder.image);
-        holder.image.setImageDrawable(new ColorDrawable(batchEnabled
-                ? GalleryRevealImageView.MATTE : Color.rgb(20, 20, 23)));
+        holder.image.setImageDrawable(new ColorDrawable(GalleryRevealImageView.MATTE));
         // The tail skeleton owns loading. A rare cache miss uses a quiet matte, never a spinner.
         holder.preparing.setVisibility(View.GONE);
         requestPreparedThumbnail(item, true, holder, result -> {
@@ -917,10 +938,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             }
             RequestBuilder<Drawable> display =
                     GalleryThumbnailPipeline.request(Glide.with(holder.image), result.model, result.signature);
-            if (batchEnabled) display = display.dontAnimate();
-            else display = display.transition(ThumbnailFades.thumbnail());
-            display.placeholder(new ColorDrawable(batchEnabled
-                    ? GalleryRevealImageView.MATTE : Color.rgb(20, 20, 23)))
+            display.dontAnimate().placeholder(new ColorDrawable(GalleryRevealImageView.MATTE))
                     .listener(new RequestListener<Drawable>() {
                         @Override public boolean onLoadFailed(GlideException error, Object model,
                                 Target<Drawable> target, boolean first) {
@@ -937,7 +955,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                             if (adaptiveAspectRatios) applyAspectRatio(holder, item, resource);
                             holder.preparing.setVisibility(View.GONE);
                             holder.unavailable.setVisibility(View.GONE);
-                            if (batchEnabled) queueReveal(holder, item);
+                            queueReveal(holder, item);
                             return false;
                         }
                     }).into(holder.image);
@@ -965,9 +983,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         RequestBuilder<Drawable> request = Glide.with(holder.image)
                 .load(withHeaders(url, imageReferer(item)))
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .transition(ThumbnailFades.thumbnail())
-                .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
-                .error(new ColorDrawable(Color.rgb(20, 20, 23)))
+                .dontAnimate()
+                .placeholder(new ColorDrawable(GalleryRevealImageView.MATTE))
+                .error(new ColorDrawable(GalleryRevealImageView.MATTE))
                 .listener(new RequestListener<Drawable>() {
                     @Override public boolean onLoadFailed(GlideException error, Object model,
                             Target<Drawable> target, boolean firstResource) {
@@ -975,6 +993,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                             GalleryDiagnostics.imageFailure(finalOriginalAttempt ? "grid_original_retry"
                                     : verifyOriginal ? "grid_original_check" : "grid_artwork",
                                     item, url, imageReferer(item), model, error);
+                        if (binding == holder.bindGeneration && artworkRequest == holder.artworkRequest)
+                            cancelReveal(holder, false);
                         // Glide forbids starting another request synchronously inside its listener.
                         holder.image.post(() -> {
                             if (!currentArtworkRequest(holder, item, binding, generation, artworkRequest)) return;
@@ -1010,6 +1030,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                             applyAspectRatio(holder, item, resource);
                         if (binding == holder.bindGeneration && artworkRequest == holder.artworkRequest) {
                             holder.unavailable.setVisibility(View.GONE);
+                            queueReveal(holder, item);
                             inspectBlackImage(holder, item, resource, binding, generation, artworkRequest, verifyOriginal);
                         }
                         return false;
@@ -1023,8 +1044,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         if (!verifyOriginal && isOnlyHavenImagePreview(item)) {
             RequestBuilder<Drawable> fallback = Glide.with(holder.image)
                     .load(withHeaders(item.url, imageReferer(item)))
-                    .diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate()
-                    .transition(ThumbnailFades.thumbnail());
+                    .diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate();
             fallback = adaptiveAspectRatios ? fallback.dontTransform().override(384, 384)
                     : fallback.centerCrop().override(360, 360);
             if (GalleryBlackImage.eligible(item)) fallback = fallback.disallowHardwareConfig();
@@ -1033,6 +1053,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         Target<Drawable> target, boolean firstResource) {
                     if (binding == holder.bindGeneration)
                         GalleryDiagnostics.imageFailure("grid_original_fallback", item, item.url, imageReferer(item), model, error);
+                    if (binding == holder.bindGeneration && artworkRequest == holder.artworkRequest)
+                        cancelReveal(holder, false);
                     holder.image.post(() -> {
                         if (!currentArtworkRequest(holder, item, binding, generation, artworkRequest)) return;
                         handleOriginalFailure(holder, item, item.url, binding, generation, artworkRequest, false);
@@ -1048,6 +1070,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         applyAspectRatio(holder, item, resource);
                     if (binding == holder.bindGeneration && artworkRequest == holder.artworkRequest) {
                         holder.unavailable.setVisibility(View.GONE);
+                        queueReveal(holder, item);
                         inspectBlackImage(holder, item, resource, binding, generation, artworkRequest, false);
                     }
                     return false;
@@ -1180,11 +1203,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         int binding = holder.bindGeneration;
         RequestBuilder<Drawable> preview = Glide.with(holder.image).load(file).override(384, 384)
                 .diskCacheStrategy(DiskCacheStrategy.NONE)
-                .transition(ThumbnailFades.thumbnail())
+                .dontAnimate()
+                .placeholder(new ColorDrawable(GalleryRevealImageView.MATTE))
                 .listener(new RequestListener<Drawable>() {
                     @Override public boolean onLoadFailed(GlideException error, Object model,
                             Target<Drawable> target, boolean firstResource) {
                         if (binding == holder.bindGeneration) {
+                            cancelReveal(holder, false);
                             file.delete(); // Regenerate an evicted/corrupt entry on the next attachment.
                             holder.unavailable.setVisibility(View.VISIBLE);
                             if (PawchiveRepository.isDirectMedia(item.url))
@@ -1198,6 +1223,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                             PawchiveMediaRequests.trace(item.url, "tile displayed");
                         if (adaptiveAspectRatios && binding == holder.bindGeneration)
                             applyAspectRatio(holder, item, resource);
+                        if (binding == holder.bindGeneration) {
+                            holder.unavailable.setVisibility(View.GONE);
+                            queueReveal(holder, item);
+                        }
                         return false;
                     }
                 });
