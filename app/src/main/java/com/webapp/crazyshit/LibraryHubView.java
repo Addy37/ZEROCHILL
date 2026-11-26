@@ -594,15 +594,11 @@ final class LibraryHubView extends ScrollView {
             View card = compactMediaCard(item.title, retired ? "" : item.url,
                     retired ? "" : content.imageUrl, "♥", false, WikiFeetRepository.imageReferer(content));
             card.setOnClickListener(v -> {
-                LibraryPlayback.Route route = LibraryPlayback.route(content);
-                if (route == LibraryPlayback.Route.EROME_ALBUM) LibraryPlayback.openAlbum(activity, content);
-                else if (route == LibraryPlayback.Route.EROME_MEDIA) {
-                    LibraryPlayback.openMedia(activity, content, LibraryPlayback.resumePosition(activity, content.url));
-                } else if (route == LibraryPlayback.Route.ONLYFAP_VIDEO
-                        || route == LibraryPlayback.Route.SHOWS
-                        || route == LibraryPlayback.Route.STANDALONE) {
-                    if (listener != null) listener.onOpenWatchLater(content);
-                } else SavedGalleryMedia.open(activity, item);
+                if (LibraryPlayback.route(content) == LibraryPlayback.Route.SHOWS && listener != null) {
+                    listener.onOpenWatchLater(content);
+                    return;
+                }
+                LibraryPlayback.openSaved(activity, item);
             });
             rail.addCard(card, item.url, portraitThumbnails.getOrDefault(item.url, false));
         }
@@ -627,9 +623,6 @@ final class LibraryHubView extends ScrollView {
             String poster = hasPoster ? item.content.imageUrl
                     : historyItem == null ? "" : historyItem.posterUrl;
             View card = compactMediaCard(item.title, item.url, poster, "", false);
-            if (item.content != null && PawchiveRepository.isDirectMedia(item.url)) {
-                card.setOnClickListener(v -> SavedGalleryMedia.open(activity, item));
-            }
             rail.addCard(card, item.url, portraitThumbnails.getOrDefault(item.url, false));
         }
     }

@@ -1638,12 +1638,17 @@ final class SearchPanel {
                 playback.putExtra(VideoDetailActivity.EXTRA_MEDIA_REFERER, resolved.requestReferer);
                 putPlaybackSource(playback, item);
                 boolean libraryShows = requestedScope == Scope.LIBRARY && LibraryPlayback.route(item) == LibraryPlayback.Route.SHOWS;
-                boolean libraryStandalone = requestedScope == Scope.LIBRARY && !libraryShows
-                        && !OnlyFapVideoMetadata.applies(item);
                 if (requestedScope == Scope.SHOWS || libraryShows) {
                     ShowsWatchSession.attach(playback, watchItems, false, "Shows");
-                } else if (libraryStandalone) {
-                    playback.putExtra(VideoDetailActivity.EXTRA_SUPPRESS_RELATED, true);
+                } else if (requestedScope == Scope.LIBRARY) {
+                    String album = LibraryPlayback.bunkrAlbum(LibraryPlayback.recover(activity, item));
+                    if (!album.isEmpty()) {
+                        playback.putExtra(VideoDetailActivity.EXTRA_RELATED_FEED_URL, album);
+                        playback.putExtra(VideoDetailActivity.EXTRA_SOURCE, NativeFeedBrowserActivity.SOURCE_BUNKR);
+                        playback.putExtra(VideoDetailActivity.EXTRA_LIBRARY_CONTEXT, true);
+                    } else if (!OnlyFapVideoMetadata.applies(item) || BunkrRepository.isBunkrUrl(item.url)) {
+                        playback.putExtra(VideoDetailActivity.EXTRA_SUPPRESS_RELATED, true);
+                    }
                 }
                 if (libraryResume > 0L) {
                     playback.putExtra(PlayerActivity.EXTRA_START_POSITION, libraryResume);

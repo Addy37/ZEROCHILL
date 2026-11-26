@@ -125,6 +125,51 @@ final class BunkrGalleryPagerAdapter
         return added;
     }
 
+    /**
+     * Insert album siblings around the already-playing item. The playing row is not rebound.
+     * Returns the kept item's new index, or -1 when the list cannot be extended in place.
+     */
+    int spliceContext(List<NativeContentItem> ordered, String keepUrl) {
+        if (ordered == null || ordered.size() <= 1 || keepUrl == null || keepUrl.isEmpty()) return -1;
+        int keep = indexOfUrl(keepUrl);
+        if (keep < 0 || items.size() != 1) return -1;
+        int target = -1;
+        for (int i = 0; i < ordered.size(); i++) {
+            NativeContentItem candidate = ordered.get(i);
+            if (candidate != null && keepUrl.equals(candidate.url)) {
+                target = i;
+                break;
+            }
+        }
+        if (target < 0) return -1;
+        if (target > 0) {
+            ArrayList<NativeContentItem> prefix = new ArrayList<>();
+            for (int i = 0; i < target; i++) {
+                NativeContentItem candidate = ordered.get(i);
+                if (candidate != null && indexOfUrl(candidate.url) < 0) prefix.add(candidate);
+            }
+            if (!prefix.isEmpty()) {
+                items.addAll(0, prefix);
+                notifyItemRangeInserted(0, prefix.size());
+                if (activeVideoPosition == 0) activeVideoPosition = prefix.size();
+                target = prefix.size();
+            }
+        }
+        int before = items.size();
+        for (int i = target + 1; i < ordered.size(); i++) {
+            NativeContentItem candidate = ordered.get(i);
+            if (candidate == null || candidate.url == null || indexOfUrl(candidate.url) >= 0) continue;
+            items.add(candidate);
+        }
+        int added = items.size() - before;
+        if (added > 0) notifyItemRangeInserted(target + 1, added);
+        return target;
+    }
+
+    void noteActiveVideo(int position) {
+        if (position >= 0 && position < items.size()) activeVideoPosition = position;
+    }
+
     void toggleVideoControls(int position) {
         RecyclerView.ViewHolder raw = attachedList == null ? null : attachedList.findViewHolderForAdapterPosition(position);
         if (raw instanceof Holder) ((Holder) raw).controls.onVideoTap();

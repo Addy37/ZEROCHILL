@@ -75,6 +75,8 @@ public class FavoritesActivity extends Activity {
     private EditText input;
     private TextView count;
     private ViewPager2 pager;
+    private final ScrollView[] sectionScroll = new ScrollView[PAGE_COUNT];
+    private final int[] savedScroll = new int[PAGE_COUNT];
     private int tab = TAB_CONTINUE;
 
     private final Map<String, List<ImageView>> thumbnailTargets = new HashMap<>();
@@ -196,6 +198,7 @@ public class FavoritesActivity extends Activity {
         page.setBackgroundColor(Color.BLACK);
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        sectionScroll[index] = scroll;
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         list.setPadding(dp(12), dp(6), dp(12), dp(24));
@@ -213,6 +216,9 @@ public class FavoritesActivity extends Activity {
 
 
     private void renderAllPages() {
+        for (int i = 0; i < PAGE_COUNT; i++) {
+            if (sectionScroll[i] != null) savedScroll[i] = sectionScroll[i].getScrollY();
+        }
         if (activeMixedGrid != null) {
             activeMixedGrid.dispose();
             activeMixedGrid = null;
@@ -229,6 +235,11 @@ public class FavoritesActivity extends Activity {
             renderWatchLater(listContainers[TAB_WATCH_LATER]);
         } else {
             renderHistory(listContainers[TAB_CONTINUE], true);
+        }
+        int restore = tab;
+        int y = savedScroll[restore];
+        if (y > 0 && sectionScroll[restore] != null) {
+            sectionScroll[restore].post(() -> sectionScroll[restore].scrollTo(0, y));
         }
     }
 
@@ -286,7 +297,10 @@ public class FavoritesActivity extends Activity {
         wrapper.setClickable(true);
         wrapper.setFocusable(true);
         wrapper.setContentDescription((continueOnly ? "Continue watching " : "History item ") + item.title);
-        wrapper.setOnClickListener(v -> select(item.pageUrl));
+        wrapper.setOnClickListener(v -> LibraryPlayback.openSaved(this,
+                item.content != null ? item.content
+                        : OnlyFapVideoMetadata.basic(item.title, item.pageUrl, item.posterUrl),
+                item.complete ? 0L : item.positionMs, true));
         ZeroChillMotion.installPressFeedback(wrapper);
 
         LibraryAspectMediaCard card = new LibraryAspectMediaCard(this);
@@ -409,20 +423,14 @@ public class FavoritesActivity extends Activity {
         wrapper.setFocusable(true);
         wrapper.setContentDescription((mediaFavorites ? "Favorite " : "Watch Later ") + item.title);
         wrapper.setOnClickListener(v -> {
+            if (item.content != null && (mediaFavorites || PawchiveRepository.isDirectMedia(item.url)
+                    || LibraryPlayback.route(item.content) == LibraryPlayback.Route.GALLERY)) {
+                LibraryPlayback.openSaved(this, item);
+                return;
+            }
             NativeContentItem content = item.content != null ? item.content
                     : OnlyFapVideoMetadata.basic(item.title, item.url, "");
-            LibraryPlayback.Route route = LibraryPlayback.route(content);
-            if (route == LibraryPlayback.Route.EROME_ALBUM) {
-                LibraryPlayback.openAlbum(this, content);
-                return;
-            }
-            if (route == LibraryPlayback.Route.EROME_MEDIA) {
-                LibraryPlayback.openMedia(this, content, LibraryPlayback.resumePosition(this, content.url));
-                return;
-            }
-            if (item.content != null && (mediaFavorites || PawchiveRepository.isDirectMedia(item.url)))
-                SavedGalleryMedia.open(this, item);
-            else select(item.url, item.title);
+            LibraryPlayback.openSaved(this, content, -1L, false);
         });
         ZeroChillMotion.installPressFeedback(wrapper);
 
