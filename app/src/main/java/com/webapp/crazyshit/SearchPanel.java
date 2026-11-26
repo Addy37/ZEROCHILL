@@ -494,6 +494,28 @@ final class SearchPanel {
         if (recycler != null) recycler.scrollToPosition(0);
     }
 
+    private void refreshPublishedResults(boolean firstBatch) {
+        if (recycler == null || recycler.getAdapter() == null
+                || recycler.getAdapter().getItemCount() == 0) return;
+        // Diff updates can arrive while Spotlight is measuring its empty grid.
+        // Drop stale span assignments on the first populated batch, not on pagination.
+        if (firstBatch && recycler.getLayoutManager() instanceof StaggeredGridLayoutManager) {
+            ((StaggeredGridLayoutManager) recycler.getLayoutManager()).invalidateSpanAssignments();
+        }
+        updateResultSize();
+        recycler.requestLayout();
+        // Run after the adapter's diff and the current glass/IME layout traversal.
+        final int token = generation;
+        final RecyclerView.Adapter<?> shown = recycler.getAdapter();
+        recycler.postOnAnimation(() -> {
+            if (destroyed || closing || token != generation || recycler.getAdapter() != shown
+                    || shown.getItemCount() == 0) return;
+            updateResultSize();
+            recycler.requestLayout();
+            recycler.invalidate();
+        });
+    }
+
     private void updateResultSize() {
         if (shell == null || recycler == null || recycler.getAdapter() == null) return;
         boolean recent = showingRecent();
@@ -921,7 +943,11 @@ final class SearchPanel {
             searchFirstResultMs = android.os.SystemClock.elapsedRealtime() - searchStarted;
             AppPerformance.record("Search first results", searchFirstResultMs);
         }
-        if (scope == Scope.ONLYFAP && onlyFapAdapter != null) onlyFapAdapter.replace(creatorResults);
+        if (scope == Scope.ONLYFAP && onlyFapAdapter != null) {
+            boolean firstBatch = onlyFapAdapter.getItemCount() == 0 && !creatorResults.isEmpty();
+            onlyFapAdapter.replace(creatorResults);
+            refreshPublishedResults(firstBatch);
+        }
         updateResultSize();
     }
 
@@ -1470,7 +1496,9 @@ final class SearchPanel {
             searchCompletedMs = android.os.SystemClock.elapsedRealtime() - searchStarted;
             AppPerformance.record("Search complete", searchCompletedMs);
         }
+        boolean firstBatch = adapter.getItemCount() == 0 && !output.isEmpty();
         adapter.replace(output, scope == Scope.SHOWS);
+        refreshPublishedResults(firstBatch);
         progress.setVisibility(pendingSources > 0 ? View.VISIBLE : View.GONE);
         String unavailable = unavailableNow();
         searchState.setVisibility(View.VISIBLE);
