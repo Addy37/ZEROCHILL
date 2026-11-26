@@ -27,12 +27,24 @@ public class SpotlightSearchTest {
         assertEquals(SearchLayoutPreference.Mode.LIST, SearchLayoutPreference.fallback(SearchPanel.Scope.XMEGADRIVE));
         assertEquals(SearchCardStyle.LANDSCAPE,
                 SearchCardStyle.forScope(SearchPanel.Scope.SHOWS, SearchLayoutPreference.Mode.GRID));
-        assertEquals(SearchCardStyle.PORTRAIT,
+        assertEquals(SearchCardStyle.NATURAL,
                 SearchCardStyle.forScope(SearchPanel.Scope.ONLYFAP, SearchLayoutPreference.Mode.GRID));
-        assertEquals(SearchCardStyle.COVER,
+        assertEquals(SearchCardStyle.NATURAL,
+                SearchCardStyle.forScope(SearchPanel.Scope.BUNKR_ALBUMS, SearchLayoutPreference.Mode.GRID));
+        assertEquals(SearchCardStyle.NATURAL,
                 SearchCardStyle.forScope(SearchPanel.Scope.EROME, SearchLayoutPreference.Mode.GRID));
+        assertEquals(SearchCardStyle.NATURAL,
+                SearchCardStyle.forScope(SearchPanel.Scope.XMEGADRIVE, SearchLayoutPreference.Mode.GRID));
+        assertEquals(SearchCardStyle.NATURAL,
+                SearchCardStyle.forScope(SearchPanel.Scope.BADDIEHUB, SearchLayoutPreference.Mode.GRID));
         assertEquals(SearchCardStyle.LIST,
                 SearchCardStyle.forScope(SearchPanel.Scope.EROME, SearchLayoutPreference.Mode.LIST));
+        assertEquals(SearchCardStyle.LIST,
+                SearchCardStyle.forScope(SearchPanel.Scope.XMEGADRIVE, SearchLayoutPreference.Mode.LIST));
+        assertEquals(android.widget.ImageView.ScaleType.CENTER_CROP,
+                SearchCardStyle.NATURAL.thumbnailScale());
+        assertTrue(SearchCardStyle.NATURAL.naturalAspect());
+        assertFalse(SearchCardStyle.LANDSCAPE.naturalAspect());
         assertTrue(SearchProviderControls.supported(SearchPanel.Scope.BUNKR_ALBUMS).isEmpty());
         SearchLayoutPreference.set(host.get(), SearchPanel.Scope.EROME, SearchLayoutPreference.Mode.LIST);
         SearchLayoutPreference.set(host.get(), SearchPanel.Scope.SHOWS, SearchLayoutPreference.Mode.GRID);

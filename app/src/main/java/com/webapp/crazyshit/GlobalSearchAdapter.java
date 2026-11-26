@@ -16,6 +16,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.StaggeredGridLayoutManager;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.DataSource;
@@ -146,6 +147,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 ? OnlyFapCreatorResults.key(entry.item) : entry.item.url);
     }
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
+    private final Map<String, Float> naturalAspects = new HashMap<>();
     private final Set<String> requestedThumbnails = new HashSet<>();
     private final Set<String> failedDirectThumbnails = new HashSet<>();
     private final Map<String, RenderedThumbnailResolver> thumbnailJobs = new HashMap<>();
@@ -349,8 +351,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         FrameLayout art = new FrameLayout(context);
         RatioImage image = new RatioImage(context);
         image.setRatio(style.widthOverHeight());
-        image.setScaleType(style == SearchCardStyle.COVER
-                ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
+        image.setScaleType(style.thumbnailScale());
         image.setBackgroundColor(Color.rgb(20, 20, 23));
         art.addView(image, new FrameLayout.LayoutParams(-1, -2));
         TextView duration = new TextView(context);
@@ -400,10 +401,20 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         if (item == null) return;
         ensureContext(holder.image.getContext());
         holder.boundUrl = item.url == null ? "" : item.url;
+        holder.image.setTag(R.id.shows_watch_source_page, holder.boundUrl);
         holder.entranceKey = itemKey(entry);
-        holder.image.setRatio(style.widthOverHeight());
-        holder.image.setScaleType(style == SearchCardStyle.COVER
-                ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
+        holder.image.setRatio(style.naturalAspect()
+                ? naturalRatio(item)
+                : style.widthOverHeight());
+        holder.image.setScaleType(style.thumbnailScale());
+        if (style.naturalAspect()) {
+            holder.card.setRadius(0f);
+            SearchCardStyle.clipThumbnail(holder.image, 16);
+        } else {
+            holder.card.setRadius(dp(holder.card, 16));
+            holder.image.setClipToOutline(false);
+            holder.image.setBackgroundColor(Color.rgb(20, 20, 23));
+        }
         holder.title.setText(item.title);
         String duration = GalleryDuration.label(item);
         holder.duration.setText(duration);
@@ -423,8 +434,10 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         Entry entry = entries.get(position);
         if (holder instanceof SectionHolder) {
             ((SectionHolder) holder).title.setText(entry.sectionTitle);
+            markFullSpan(holder.itemView, true);
             return;
         }
+        markFullSpan(holder.itemView, false);
         if (holder instanceof CardHolder) {
             bindCard((CardHolder) holder, entry);
             return;
@@ -465,6 +478,21 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         }
         loadImage(result.image, item);
         requestRenderedThumbnail(item);
+    }
+
+    private float naturalRatio(NativeContentItem item) {
+        if (item == null || item.url == null) return 1f;
+        Float cached = naturalAspects.get(item.url);
+        if (cached != null && cached > 0f) return cached;
+        return BunkrGalleryAdapter.initialTileAspect(
+                item.url, item.aspectRatioHint, 0f, item.imageUrl);
+    }
+
+    private static void markFullSpan(View itemView, boolean full) {
+        ViewGroup.LayoutParams params = itemView.getLayoutParams();
+        if (params instanceof StaggeredGridLayoutManager.LayoutParams) {
+            ((StaggeredGridLayoutManager.LayoutParams) params).setFullSpan(full);
+        }
     }
 
     private String metaText(NativeContentItem item, int source) {
@@ -630,6 +658,24 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                     DataSource dataSource,
                     boolean firstResource
             ) {
+                if (style.naturalAspect() && resource != null && image instanceof RatioImage) {
+                    float ratio = BunkrGalleryAdapter.displayedTileAspect(
+                            item.url,
+                            item.aspectRatioHint,
+                            resource.getIntrinsicWidth(),
+                            resource.getIntrinsicHeight()
+                    );
+                    if (ratio > 0f && Float.isFinite(ratio)) {
+                        naturalAspects.put(item.url, ratio);
+                        image.post(() -> {
+                            if (image instanceof RatioImage
+                                    && item.url != null
+                                    && item.url.equals(((RatioImage) image).getTag(R.id.shows_watch_source_page))) {
+                                ((RatioImage) image).setRatio(ratio);
+                            }
+                        });
+                    }
+                }
                 return false;
             }
         });

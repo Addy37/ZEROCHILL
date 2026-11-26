@@ -120,7 +120,7 @@ final class OnlyFapCreatorSearchAdapter
         card.setCardBackgroundColor(Color.TRANSPARENT);
         card.setTag(R.id.zerochill_surface_styled, true);
         card.setCardElevation(0f);
-        card.setRadius(dp(context, 16));
+        card.setRadius(0f);
         card.setStrokeWidth(0);
         card.setClickable(true);
         card.setFocusable(true);
@@ -131,9 +131,8 @@ final class OnlyFapCreatorSearchAdapter
         card.addView(column, new MaterialCardView.LayoutParams(-1, -2));
 
         GlobalSearchAdapter.RatioImage portrait = new GlobalSearchAdapter.RatioImage(context);
-        portrait.setRatio(3f / 4f);
-        portrait.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        portrait.setBackgroundColor(Color.rgb(20, 20, 23));
+        portrait.setRatio(1f);
+        SearchCardStyle.clipThumbnail(portrait, 16);
         column.addView(portrait, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout copy = new LinearLayout(context);
@@ -291,6 +290,13 @@ final class OnlyFapCreatorSearchAdapter
                         : CreatorGalleryPreloader.PRIORITY_NORMAL
         );
 
+        if (holder.portrait && holder.avatar instanceof GlobalSearchAdapter.RatioImage) {
+            holder.card.setRadius(0f);
+            SearchCardStyle.clipThumbnail(holder.avatar, 16);
+            float hinted = item.aspectRatioHint > 0f ? item.aspectRatioHint : 1f;
+            ((GlobalSearchAdapter.RatioImage) holder.avatar).setRatio(hinted);
+        }
+
         if (!item.imageUrl.equals(holder.imageUrl)) {
             load(holder.avatar, item, !holder.portrait);
             // The source supplies one avatar URL, not a distinct media preview.
@@ -356,7 +362,45 @@ final class OnlyFapCreatorSearchAdapter
                         .placeholder(R.drawable.ic_more_account)
                         .error(R.drawable.ic_more_account);
         if (circle) request.circleCrop();
-        else request.centerCrop();
+        else {
+            request.centerCrop();
+            if (target instanceof GlobalSearchAdapter.RatioImage) {
+                request.listener(new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {
+                    @Override
+                    public boolean onLoadFailed(
+                            com.bumptech.glide.load.engine.GlideException error,
+                            Object model,
+                            com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> ignored,
+                            boolean firstResource
+                    ) {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean onResourceReady(
+                            android.graphics.drawable.Drawable resource,
+                            Object model,
+                            com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> ignored,
+                            com.bumptech.glide.load.DataSource dataSource,
+                            boolean firstResource
+                    ) {
+                        if (resource == null) return false;
+                        float ratio = BunkrGalleryAdapter.displayedTileAspect(
+                                item.url,
+                                item.aspectRatioHint,
+                                resource.getIntrinsicWidth(),
+                                resource.getIntrinsicHeight()
+                        );
+                        target.post(() -> {
+                            if (target instanceof GlobalSearchAdapter.RatioImage && ratio > 0f) {
+                                ((GlobalSearchAdapter.RatioImage) target).setRatio(ratio);
+                            }
+                        });
+                        return false;
+                    }
+                });
+            }
+        }
         request.into(target);
     }
 

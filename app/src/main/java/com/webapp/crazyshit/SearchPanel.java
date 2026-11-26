@@ -24,6 +24,7 @@ import android.widget.TextView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.StaggeredGridLayoutManager;
 
 import org.json.JSONObject;
 
@@ -684,23 +685,35 @@ final class SearchPanel {
         if (recycler == null) return;
         SearchLayoutPreference.Mode mode = SearchLayoutPreference.get(activity, scope);
         boolean grid = mode == SearchLayoutPreference.Mode.GRID;
-        if (adapter != null) adapter.setStyle(SearchCardStyle.forScope(scope, mode));
+        SearchCardStyle cardStyle = SearchCardStyle.forScope(scope, mode);
+        if (adapter != null) adapter.setStyle(cardStyle);
         if (onlyFapAdapter != null) onlyFapAdapter.setPortraitGrid(scope == Scope.ONLYFAP && grid);
-        boolean usingGrid = recycler.getLayoutManager() instanceof GridLayoutManager;
-        if (grid != usingGrid) {
-            if (grid) {
+        boolean natural = grid && cardStyle.naturalAspect();
+        RecyclerView.LayoutManager current = recycler.getLayoutManager();
+        boolean managerMatches = !grid
+                ? current instanceof LinearLayoutManager && !(current instanceof GridLayoutManager)
+                : natural
+                ? current instanceof StaggeredGridLayoutManager
+                : current instanceof GridLayoutManager;
+        if (!managerMatches) {
+            if (!grid) {
+                recycler.setLayoutManager(new LinearLayoutManager(activity));
+            } else if (natural) {
+                StaggeredGridLayoutManager manager = new StaggeredGridLayoutManager(
+                        2, StaggeredGridLayoutManager.VERTICAL);
+                manager.setGapStrategy(StaggeredGridLayoutManager.GAP_HANDLING_MOVE_ITEMS_BETWEEN_SPANS);
+                recycler.setLayoutManager(manager);
+            } else {
                 GridLayoutManager manager = new GridLayoutManager(activity, 2);
                 manager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
                     @Override public int getSpanSize(int position) {
-                        RecyclerView.Adapter<?> current = recycler.getAdapter();
-                        if (current instanceof GlobalSearchAdapter
-                                && ((GlobalSearchAdapter) current).isFullSpan(position)) return 2;
+                        RecyclerView.Adapter<?> shown = recycler.getAdapter();
+                        if (shown instanceof GlobalSearchAdapter
+                                && ((GlobalSearchAdapter) shown).isFullSpan(position)) return 2;
                         return 1;
                     }
                 });
                 recycler.setLayoutManager(manager);
-            } else {
-                recycler.setLayoutManager(new LinearLayoutManager(activity));
             }
         }
         if (grid && !gridGapInstalled) {
