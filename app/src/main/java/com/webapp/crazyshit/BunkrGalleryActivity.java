@@ -127,6 +127,8 @@ public final class BunkrGalleryActivity extends Activity {
     private int pendingVideoPosition = -1;
     private boolean autoplayInitialSelection;
     private long libraryResumeMs = -1L;
+    /** URL that {@link #libraryResumeMs} belongs to. Swipe autoplay must not seek a different clip. */
+    private String libraryResumeUrl = "";
     private boolean libraryHoldPause;
     private boolean enrichEromeAlbum;
     private boolean contextNavigationOpen;
@@ -186,6 +188,7 @@ public final class BunkrGalleryActivity extends Activity {
         }
         autoplayInitialSelection = state == null && !initialUrl.isEmpty();
         libraryResumeMs = getIntent().getLongExtra(PlayerActivity.EXTRA_START_POSITION, -1L);
+        libraryResumeUrl = libraryResumeMs > 0L ? initialUrl : "";
         enrichEromeAlbum = state == null && getIntent().getBooleanExtra(LibraryPlayback.EXTRA_ENRICH_ALBUM, false);
         if (albumTitle.isEmpty()) albumTitle = "OnlyFap gallery";
 
@@ -720,12 +723,10 @@ public final class BunkrGalleryActivity extends Activity {
 
     private void maybeAutoplayInitialSelection(int position) {
         if (returningToGallery || isFinishing()) return;
+        if (pager != null && position != pager.getCurrentItem()) return;
         NativeContentItem item = adapter == null ? null : adapter.itemAt(position);
-        if (!shouldAutoplayInitialSelection(
-                autoplayInitialSelection,
-                initialUrl,
-                item
-        )) return;
+        if (!shouldAutoplayGallerySelection(item)) return;
+        // The opening shared-element still waits; later swipes start immediately.
         if (shouldDelayInitialAutoplay(
                 sharedElementPending,
                 autoplayInitialSelection,
@@ -735,9 +736,16 @@ public final class BunkrGalleryActivity extends Activity {
             pendingTransitionAutoplayPosition = position;
             return;
         }
+        if (player != null && activeVideoPosition == position) return;
+        if (pendingVideoPosition == position) return;
         autoplayInitialSelection = false;
         pendingTransitionAutoplayPosition = -1;
         playVideo(position, item);
+    }
+
+    /** Swiped gallery videos start on their own. Images stay images. */
+    static boolean shouldAutoplayGallerySelection(NativeContentItem item) {
+        return item != null && item.isVideo();
     }
 
     static boolean shouldAutoplayInitialSelection(
@@ -1219,7 +1227,10 @@ public final class BunkrGalleryActivity extends Activity {
         player.setPlayWhenReady(!libraryHoldPause);
         libraryHoldPause = false;
         player.prepare();
-        if (libraryResumeMs > 0L) {
+        if (libraryResumeMs > 0L
+                && libraryResumeUrl != null
+                && !libraryResumeUrl.isEmpty()
+                && libraryResumeUrl.equals(item.url)) {
             player.seekTo(libraryResumeMs);
             libraryResumeMs = -1L;
         }
@@ -1723,6 +1734,7 @@ public final class BunkrGalleryActivity extends Activity {
         if (item == null || !item.isVideo()) return;
         if (!returnPlaying && returnPositionMs <= 0L) return;
         libraryResumeMs = Math.max(0L, returnPositionMs);
+        libraryResumeUrl = item.url == null ? "" : item.url;
         libraryHoldPause = !returnPlaying;
         playVideo(position, item);
     }
