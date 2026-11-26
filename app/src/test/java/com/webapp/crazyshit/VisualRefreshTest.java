@@ -467,7 +467,7 @@ public class VisualRefreshTest {
             int fittedHeight = Math.min(viewportHeight, Math.round(player.getWidth() / 2f));
             int videoBottom = media.getTop() + player.getTop() + (viewportHeight + fittedHeight) / 2;
             assertTrue(promptParams.topMargin >= videoBottom + BrowseUi.dp(host.get(), 8));
-            View progress = root.findViewWithTag("shittok_progress_row");
+            progress = root.findViewWithTag("shittok_progress_row");
             android.widget.SeekBar bar = ReflectionHelpers.getField(holder, "seekBar");
             int content = progress.getHeight() - bar.getPaddingTop() - bar.getPaddingBottom();
             int track = Math.min(BrowseUi.dp(host.get(), 2), Math.max(1, content));
