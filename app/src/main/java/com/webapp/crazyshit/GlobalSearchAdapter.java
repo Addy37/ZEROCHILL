@@ -607,7 +607,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .skipMemoryCache(false)
                     .dontAnimate()
-                    .transition(ThumbnailFades.thumbnail())
+                    .transition(SharedArtworkReveal.artwork("spotlight", item.url, false))
                     .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
                     .error(new ColorDrawable(Color.rgb(31, 31, 36)));
             applyCoverFit(embeddedRequest, image).into(image);
@@ -628,7 +628,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 .load(source)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
-                .transition(ThumbnailFades.thumbnail())
+                .transition(SharedArtworkReveal.artwork("spotlight", item.url, false))
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 36)))
                 .error(new ColorDrawable(Color.rgb(31, 31, 36)));
         final String attemptedUrl = imageUrl;

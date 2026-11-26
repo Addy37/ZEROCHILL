@@ -38,6 +38,7 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
     private ImageView hero;
     private final BooleanSupplier loaded;
     private final BooleanSupplier usable;
+    private final boolean quickShows;
     private final File file;
     private ImageView cover;
     private Bitmap pixels;
@@ -56,12 +57,22 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
     /** Reveal usable live content early; keep the stronger gate for saving a new snapshot. */
     static ColdTabSnapshot install(FrameLayout root, ScrollView live, ImageView hero,
             String tab, BooleanSupplier loaded, BooleanSupplier usable) {
-        return STARTED.add(tab) ? new ColdTabSnapshot(root, live, hero, tab, loaded, usable) : null;
+        return STARTED.add(tab) ? new ColdTabSnapshot(root, live, hero, tab, loaded, usable, false) : null;
+    }
+
+    static ColdTabSnapshot installShows(FrameLayout root, ScrollView live, ImageView hero,
+            BooleanSupplier loaded, BooleanSupplier usable) {
+        return STARTED.add("shows") ? new ColdTabSnapshot(root, live, hero, "shows", loaded, usable, true) : null;
+    }
+
+    static boolean releaseShowsCover(boolean usable, boolean artworkReady, long elapsed) {
+        return (usable && artworkReady) || elapsed >= 1500L;
     }
 
     private ColdTabSnapshot(FrameLayout root, ScrollView live, ImageView hero,
-            String tab, BooleanSupplier loaded, BooleanSupplier usable) {
+            String tab, BooleanSupplier loaded, BooleanSupplier usable, boolean quickShows) {
         this.root = root;
+        this.quickShows = quickShows;
         this.live = live;
         this.hero = hero;
         this.loaded = loaded;
@@ -107,18 +118,21 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
         }
         long now = SystemClock.uptimeMillis();
         if (now < nextCheck) return true;
-        nextCheck = now + 100;
+        nextCheck = now + (quickShows ? 50L : 100L);
         if (started == 0) started = now;
         // A failure must expose the normal loader/error UI rather than cover it forever.
-        if (now - started >= MAX_WAIT_MS) removeCover();
+        if (now - started >= MAX_WAIT_MS) { released = true; removeCover(); }
         if (live.getScrollY() != 0) {
             fadeCoverForInteraction();
             readySince = 0;
             return true;
         }
         Request heroRequest = new DrawableImageViewTarget(hero).getRequest();
-        if (!released && usable != null && usable.getAsBoolean()
-                && heroRequest != null && heroRequest.isComplete()) {
+        boolean heroReady = heroRequest != null && heroRequest.isComplete();
+        if (!released && (quickShows
+                ? releaseShowsCover(usable != null && usable.getAsBoolean(),
+                        heroReady || visibleArtworkReady(live), now - started)
+                : usable != null && usable.getAsBoolean() && heroReady)) {
             released = true;
             fadeCoverForInteraction();
         }
@@ -129,13 +143,28 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
         // Let existing image transitions finish and the first visible rails bind.
         if (readySince != 0 && now - readySince >= 500 && !coverFading) {
             finish(true);
-        } else if (cover != null || readySince != 0) root.postInvalidateDelayed(100);
+        } else if (cover != null || readySince != 0) root.postInvalidateDelayed(quickShows ? 50L : 100L);
         return true;
     }
 
     void setHero(ImageView hero) { this.hero = hero; }
 
     boolean isCoverVisible() { return cover != null; }
+
+    private boolean visibleArtworkReady(View view) {
+        if (!view.isShown() || !view.getGlobalVisibleRect(new Rect())) return false;
+        if (view instanceof ImageView) {
+            ImageView image = (ImageView) view;
+            Request request = new DrawableImageViewTarget(image).getRequest();
+            return request != null && request.isComplete() && image.getDrawable() != null;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++)
+                if (visibleArtworkReady(group.getChildAt(i))) return true;
+        }
+        return false;
+    }
 
     private boolean visibleImagesSettled(View view) {
         Rect bounds = new Rect();
@@ -145,6 +174,7 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
         if (view instanceof ImageView) {
             Request request = new DrawableImageViewTarget((ImageView) view).getRequest();
             if (request != null && request.isRunning()) return false;
+            if (SharedArtworkReveal.pending((ImageView) view)) return false;
         }
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
@@ -232,7 +262,8 @@ final class ColdTabSnapshot implements ViewTreeObserver.OnPreDrawListener,
     private void fadeCoverForInteraction() {
         if (cover == null || coverFading) return;
         coverFading = true;
-        cover.animate().alpha(0f).setDuration(180).withEndAction(this::removeCover).start();
+        cover.animate().alpha(0f).setDuration(quickShows ? 120L : 180L)
+                .withEndAction(this::removeCover).start();
     }
 
     private void removeCover() {

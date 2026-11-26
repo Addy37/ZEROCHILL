@@ -358,7 +358,8 @@ final class OnlyFapCreatorSearchAdapter
                 Glide.with(target)
                         .load(source)
                         .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                        .transition(circle ? ThumbnailFades.avatar() : ThumbnailFades.thumbnail())
+                        .transition(SharedArtworkReveal.artwork(circle ? "creator-search-avatar" : "creator-search-preview",
+                                item.url, circle))
                         .placeholder(R.drawable.ic_more_account)
                         .error(R.drawable.ic_more_account);
         if (circle) request.circleCrop();

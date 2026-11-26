@@ -136,6 +136,7 @@ final class LibraryCollectionView extends LinearLayout {
                     .load(LibraryHubView.remoteImage(url, url))
                     .dontTransform()
                     .override(dp(192), dp(192))
+                    .transition(SharedArtworkReveal.artwork("library-collection-" + tag, url, false))
                     .into(image);
         }
         updateStackGeometry(stack, label);

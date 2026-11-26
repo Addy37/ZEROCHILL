@@ -47,6 +47,14 @@ public class ColdTabSnapshotTest {
         assertNull(ColdTabSnapshot.read(file));
     }
 
+    @Test public void showsCoverReleasesOnFirstArtworkOrShortSafetyDeadline() {
+        assertFalse(ColdTabSnapshot.releaseShowsCover(false, true, 100L));
+        assertFalse(ColdTabSnapshot.releaseShowsCover(true, false, 100L));
+        assertTrue(ColdTabSnapshot.releaseShowsCover(true, true, 100L));
+        assertFalse(ColdTabSnapshot.releaseShowsCover(false, false, 1499L));
+        assertTrue(ColdTabSnapshot.releaseShowsCover(false, false, 1500L));
+    }
+
     @Test public void compressedSnapshotSurvivesNewReaderAndReplacesOldFile() throws Exception {
         File file = new File(Files.createTempDirectory("snapshot").toFile(), "tab.jpg");
         Bitmap bitmap = Bitmap.createBitmap(64, 128, Bitmap.Config.ARGB_8888);

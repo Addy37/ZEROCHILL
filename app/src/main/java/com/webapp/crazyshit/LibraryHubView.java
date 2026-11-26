@@ -1009,7 +1009,7 @@ final class LibraryHubView extends ScrollView {
                             .onlyRetrieveFromCache(true)
                             .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                             .dontAnimate()
-                            .transition(ThumbnailFades.avatar());
+                            .transition(SharedArtworkReveal.artwork("library-avatar", creator.url, true));
             if (avatarOverride == null) request = request.circleCrop();
             request.into(image);
         } catch (Exception ignored) {
@@ -1066,7 +1066,7 @@ final class LibraryHubView extends ScrollView {
                                 new ShowsContinueFrameCrop(),
                                 new com.bumptech.glide.load.resource.bitmap.CenterCrop()))
                         .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                        .transition(ThumbnailFades.thumbnail())
+                        .transition(SharedArtworkReveal.artwork("library-media", pageUrl, false))
                         .placeholder(new ColorDrawable(Color.rgb(22, 25, 29)))
                         .error(new ColorDrawable(Color.rgb(22, 25, 29)))
                         .into(image);
@@ -1095,7 +1095,7 @@ final class LibraryHubView extends ScrollView {
                     })
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .dontAnimate()
-                    .transition(ThumbnailFades.thumbnail())
+                    .transition(SharedArtworkReveal.artwork("library-media", pageUrl, false))
                     .placeholder(new ColorDrawable(Color.rgb(22, 25, 29)))
                     .error(new ColorDrawable(Color.rgb(22, 25, 29)))
                     .into(image);
