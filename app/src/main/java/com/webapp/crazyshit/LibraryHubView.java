@@ -126,10 +126,6 @@ final class LibraryHubView extends ScrollView {
         socialHub = new LibraryProfileHeader(activity, refreshIo);
         content.addView(socialHub, new LinearLayout.LayoutParams(-1, -2));
 
-        mediaContent = new LinearLayout(activity);
-        mediaContent.setOrientation(LinearLayout.VERTICAL);
-        content.addView(mediaContent, new LinearLayout.LayoutParams(-1, -2));
-        addLoadingState();
         collection = new LibraryCollectionView(activity,
                 () -> openSavedVideos(FavoritesActivity.START_WATCH_LATER),
                 () -> activity.startActivity(new Intent(activity, DownloadedActivity.class)),
@@ -137,6 +133,10 @@ final class LibraryHubView extends ScrollView {
         content.addView(collection, new LinearLayout.LayoutParams(-1, -2));
         customCollections = new CustomCollectionsView(activity);
         content.addView(customCollections, new LinearLayout.LayoutParams(-1, -2));
+        mediaContent = new LinearLayout(activity);
+        mediaContent.setOrientation(LinearLayout.VERTICAL);
+        content.addView(mediaContent, new LinearLayout.LayoutParams(-1, -2));
+        addLoadingState();
     }
 
     @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
@@ -218,7 +218,6 @@ final class LibraryHubView extends ScrollView {
     }
 
     private void render(Snapshot snapshot) {
-        bindCollectionPreviews(snapshot);
         if (customCollections != null) customCollections.bind(snapshot.customCollections);
         videoMetadata = snapshot.videoMetadata;
         int scrollY = getScrollY();
@@ -287,25 +286,7 @@ final class LibraryHubView extends ScrollView {
         sectionStates.put(key, new SectionState(state, view));
     }
 
-    private void bindCollectionPreviews(Snapshot snapshot) {
-        if (collection == null || snapshot == null) return;
-        List<String> watchLater = new ArrayList<>();
-        for (FavoriteStore.Item item : snapshot.watchLater) {
-            if (item.content != null) watchLater.add(item.content.imageUrl);
-        }
-        List<String> favorites = new ArrayList<>();
-        for (FavoriteStore.Item item : snapshot.mediaFavorites) {
-            if (item.content != null) favorites.add(item.content.imageUrl);
-        }
-        List<String> history = new ArrayList<>();
-        for (PlaybackHistoryStore.Item item : snapshot.history) history.add(item.posterUrl);
-        List<String> downloads = new ArrayList<>();
-        for (VideoDownloadStore.Entry entry : snapshot.downloads) downloads.add(entry.imageUrl);
-        collection.setPreviews("watch-later", watchLater);
-        collection.setPreviews("downloads", downloads);
-        collection.setPreviews("history", history);
-        collection.setPreviews("favorites", favorites);
-    }
+
 
     private boolean belongsToMediaContent(View view) {
         android.view.ViewParent parent = view.getParent();
@@ -405,7 +386,6 @@ final class LibraryHubView extends ScrollView {
             prefs.unregisterOnSharedPreferenceChangeListener(invalidation);
         }
         if (mediaContent != null) clearImages(mediaContent);
-        if (collection != null) collection.release();
         if (customCollections != null) customCollections.release();
         ShowsContinueFrameStore.removeListener(frameListener);
         if (socialHub != null) socialHub.close();
@@ -437,6 +417,7 @@ final class LibraryHubView extends ScrollView {
     private void recolorSectionActions() {
         if (closed || !active || mediaContent == null) return;
         if (collection != null) collection.applyTheme();
+        if (customCollections != null) customCollections.applyTheme();
         int accent = AppearanceTheme.accent(activity);
         for (int i = 0; i < mediaContent.getChildCount(); i++) {
             View section = mediaContent.getChildAt(i);
@@ -544,17 +525,9 @@ final class LibraryHubView extends ScrollView {
                 () -> activity.startActivity(new Intent(activity, CreatorsActivity.class))
         );
         int count = Math.min(14, creators.size());
-        for (int i = 0; i < count; i += 2) {
-            LinearLayout column = new LinearLayout(activity);
-            column.setOrientation(LinearLayout.VERTICAL);
-            for (int row = i; row < Math.min(i + 2, count); row++) {
-                LinearLayout.LayoutParams params = creatorRailParams(true);
-                params.bottomMargin = row == i && row + 1 < count ? dp(12) : 0;
-                column.addView(creatorCard(creators.get(row), avatarOverrides), params);
-            }
-            LinearLayout.LayoutParams columnParams = new LinearLayout.LayoutParams(-2, -2);
-            columnParams.setMarginEnd(i + 2 < count ? dp(5) : 0);
-            rail.addView(column, columnParams);
+        for (int i = 0; i < count; i++) {
+            LinearLayout.LayoutParams params = creatorRailParams(i == count - 1);
+            rail.addView(creatorCard(creators.get(i), avatarOverrides), params);
         }
     }
 
@@ -839,7 +812,7 @@ final class LibraryHubView extends ScrollView {
         viewAll.setTypeface(null, android.graphics.Typeface.BOLD);
         viewAll.setGravity(Gravity.CENTER);
         viewAll.setPadding(dp(14), dp(10), dp(14), dp(10));
-        viewAll.setBackground(BrowseUi.rounded(activity, AppearanceTheme.surface(activity), 18));
+        viewAll.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         viewAll.setClickable(true);
         viewAll.setFocusable(true);
         viewAll.setContentDescription(actionLabel + " " + title);
@@ -863,11 +836,11 @@ final class LibraryHubView extends ScrollView {
         scroll.addView(rail, new HorizontalScrollView.LayoutParams(-2, -2));
 
         LinearLayout.LayoutParams railParams = new LinearLayout.LayoutParams(-1, -2);
-        railParams.topMargin = dp(12);
+        railParams.topMargin = dp(8);
         section.addView(scroll, railParams);
 
         LinearLayout.LayoutParams sectionParams = new LinearLayout.LayoutParams(-1, -2);
-        sectionParams.setMargins(0, 0, 0, dp(32));
+        sectionParams.setMargins(0, 0, 0, dp(22));
         mediaContent.addView(section, sectionParams);
         return rail;
     }

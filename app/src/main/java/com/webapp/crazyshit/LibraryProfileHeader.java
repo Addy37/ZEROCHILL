@@ -56,13 +56,13 @@ final class LibraryProfileHeader extends LinearLayout {
         this.activity = activity;
         this.reader = reader;
         setOrientation(VERTICAL);
-        setPadding(0, dp(8), 0, dp(24));
+        setPadding(0, dp(4), 0, dp(18));
 
         // V2-inspired identity card. Avatar, profile reads and navigation stay native.
         identityCard = new LinearLayout(activity);
         identityCard.setGravity(Gravity.CENTER_VERTICAL);
-        identityCard.setPadding(dp(17), dp(17), dp(17), dp(17));
-        identityCard.setMinimumHeight(dp(104));
+        identityCard.setPadding(dp(12), dp(10), dp(12), dp(10));
+        identityCard.setMinimumHeight(dp(68));
         identityCard.setClipToOutline(true);
         identityCard.setClickable(true);
         identityCard.setFocusable(true);
@@ -80,12 +80,12 @@ final class LibraryProfileHeader extends LinearLayout {
             }
         });
         avatar.setClipToOutline(true);
-        avatarFrame.addView(avatar, new FrameLayout.LayoutParams(dp(64), dp(64), Gravity.CENTER));
-        identityCard.addView(avatarFrame, new LayoutParams(dp(70), dp(70)));
+        avatarFrame.addView(avatar, new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER));
+        identityCard.addView(avatarFrame, new LayoutParams(dp(48), dp(48)));
 
         LinearLayout copy = new LinearLayout(activity);
         copy.setOrientation(VERTICAL);
-        copy.setPadding(dp(14), 0, dp(6), 0);
+        copy.setPadding(dp(12), 0, dp(6), 0);
         name = label("Your Library", 23, AppearanceTheme.primaryText(activity));
         ZeroChillTypography.apply(name, ZeroChillTypography.Role.SECTION);
         name.setMaxLines(2);
@@ -102,7 +102,7 @@ final class LibraryProfileHeader extends LinearLayout {
         // Independent, lightweight shortcuts; no backdrop capture during Library scrolling.
         LinearLayout actions = new LinearLayout(activity);
         actions.setGravity(Gravity.CENTER_VERTICAL);
-        actions.setPadding(0, dp(12), 0, 0);
+        actions.setPadding(0, dp(8), 0, 0);
         messages = action(actions, "Messages", R.drawable.ic_action_message, ZeroChillInboxActivity.class);
         notifications = action(actions, "Notifications", R.drawable.ic_more_update, UpdateInboxActivity.class);
         ((View) messages.getParent()).setContentDescription("Messages. Open your inbox");
@@ -126,8 +126,8 @@ final class LibraryProfileHeader extends LinearLayout {
         LinearLayout tile = new LinearLayout(activity);
         tile.setOrientation(VERTICAL);
         tile.setGravity(Gravity.CENTER);
-        tile.setPadding(dp(4), dp(10), dp(4), dp(10));
-        tile.setMinimumHeight(dp(82));
+        tile.setPadding(dp(4), dp(6), dp(4), dp(6));
+        tile.setMinimumHeight(dp(56));
         tile.setClickable(true);
         tile.setFocusable(true);
         tile.setContentDescription(title);
@@ -136,15 +136,15 @@ final class LibraryProfileHeader extends LinearLayout {
         ImageView icon = new ImageView(activity);
         icon.setImageResource(drawable);
         icon.setColorFilter(AppearanceTheme.accent(activity));
-        tile.addView(icon, new LayoutParams(dp(23), dp(23)));
+        tile.addView(icon, new LayoutParams(dp(20), dp(20)));
         TextView caption = label(title, 11, AppearanceTheme.secondaryText(activity));
         caption.setGravity(Gravity.CENTER);
         caption.setMaxLines(2);
         LayoutParams captionParams = new LayoutParams(-1, -2);
-        captionParams.topMargin = dp(7);
+        captionParams.topMargin = dp(4);
         tile.addView(caption, captionParams);
-        LayoutParams tileParams = new LayoutParams(0, dp(84), 1);
-        if (row.getChildCount() > 0) tileParams.leftMargin = dp(10);
+        LayoutParams tileParams = new LayoutParams(0, -1, 1);
+        if (row.getChildCount() > 0) tileParams.leftMargin = dp(8);
         row.addView(tile, tileParams);
         actionTiles.add(tile);
         actionIcons.add(icon);
@@ -159,7 +159,7 @@ final class LibraryProfileHeader extends LinearLayout {
                         tinted(Color.rgb(14, 20, 27), accent, .08f),
                         Color.rgb(9, 12, 17)
                 });
-        profile.setCornerRadius(dp(23));
+        profile.setCornerRadius(dp(18));
         profile.setStroke(dp(1), translucent(accent, 65));
         identityCard.setBackground(profile);
 
@@ -176,7 +176,7 @@ final class LibraryProfileHeader extends LinearLayout {
                             tinted(Color.rgb(20, 28, 36), accent, .09f),
                             Color.rgb(12, 17, 23)
                     });
-            surface.setCornerRadius(dp(19));
+            surface.setCornerRadius(dp(15));
             surface.setStroke(dp(1), translucent(accent, 44));
             tile.setBackground(surface);
         }
@@ -208,7 +208,7 @@ final class LibraryProfileHeader extends LinearLayout {
             AccountAvatarImages.track(avatar, owner);
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setColorFilter(AppearanceTheme.accent(activity));
-            avatar.setPadding(dp(14), dp(14), dp(14), dp(14));
+            avatar.setPadding(dp(9), dp(9), dp(9), dp(9));
         }
         final int token = ++readRevision;
         if (pendingRead != null) pendingRead.cancel(false);
@@ -246,7 +246,7 @@ final class LibraryProfileHeader extends LinearLayout {
             AccountAvatarImages.track(avatar, owner);
             avatar.setImageResource(R.drawable.ic_more_account);
             avatar.setColorFilter(AppearanceTheme.accent(activity));
-            avatar.setPadding(dp(14), dp(14), dp(14), dp(14));
+            avatar.setPadding(dp(9), dp(9), dp(9), dp(9));
             if (!owner.isEmpty() && !path.isEmpty()) {
                 avatar.clearColorFilter();
                 avatar.setPadding(0, 0, 0, 0);

@@ -52,7 +52,7 @@ public class LibraryCollectionTest {
         } finally { hub.close(); }
     }
 
-    @Test public void collectionStaysAfterPreviewsAndAccentChangeKeepsSnapshotAndTiles() throws Exception {
+    @Test public void collectionsComeBeforeShelvesAndAccentChangeKeepsSnapshotAndTiles() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         LibraryHubView hub = new LibraryHubView(activity, null);
         activity.setContentView(hub);
@@ -66,7 +66,9 @@ public class LibraryCollectionTest {
             shadowOf(Looper.getMainLooper()).idle();
             View grid = hub.findViewWithTag("library-collection");
             LinearLayout content = ReflectionHelpers.getField(hub, "content");
-            assertSame(grid, content.getChildAt(content.getChildCount() - 1));
+            assertSame(grid, content.getChildAt(1));
+            assertSame(hub.findViewWithTag("library-custom-collections"), content.getChildAt(2));
+            assertSame(ReflectionHelpers.getField(hub, "mediaContent"), content.getChildAt(3));
             Object snapshot = ReflectionHelpers.getField(hub, "displayed");
             work.clear();
             AppearanceTheme.setAccent(activity, AppearanceTheme.Accent.PURPLE);
@@ -102,8 +104,8 @@ public class LibraryCollectionTest {
         grid.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         grid.layout(0, 0, width, grid.getMeasuredHeight());
-        assertEquals(3, grid.getChildCount());
-        for (int row = 1; row <= 2; row++) {
+        assertEquals(2, grid.getChildCount());
+        for (int row = 0; row < 2; row++) {
             ViewGroup pair = (ViewGroup) grid.getChildAt(row);
             assertEquals(2, pair.getChildCount());
             assertEquals(pair.getChildAt(0).getWidth(), pair.getChildAt(1).getWidth());
@@ -123,31 +125,21 @@ public class LibraryCollectionTest {
         assertEquals(4, clicks[0]);
     }
 
-    @Test public void populatedCollectionsUseLargePreviewsAndKeepLabelsReadable() {
+    @Test public void customCollectionsHaveSeparateArtworkAndOneCreateAction() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        LibraryCollectionView grid = new LibraryCollectionView(activity, () -> {}, () -> {}, () -> {}, () -> {});
-        int width = BrowseUi.dp(activity, 400);
-        for (String tag : new String[]{"watch-later", "downloads", "history", "favorites"}) {
-            grid.setPreviews(tag, java.util.Arrays.asList("file:///preview-a", "file:///preview-b", "file:///preview-c"));
-        }
-        grid.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        grid.layout(0, 0, width, grid.getMeasuredHeight());
-        grid.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        grid.layout(0, 0, width, grid.getMeasuredHeight());
-        for (String tag : new String[]{"watch-later", "downloads", "history", "favorites"}) {
-            ViewGroup stack = grid.findViewWithTag("library-collection-stack-" + tag);
-            assertEquals(View.VISIBLE, stack.getVisibility());
-            assertEquals(3, stack.getChildCount());
-            assertTrue(stack.getChildAt(2).getLayoutParams().width > BrowseUi.dp(activity, 40));
-            grid.setPreviews(tag, java.util.Collections.singletonList("file:///preview-a"));
-            assertEquals(1, stack.getChildCount());
-            assertTrue(stack.getChildAt(0).getLayoutParams().width >= BrowseUi.dp(activity, 48));
-            grid.setPreviews(tag, java.util.Collections.emptyList());
-            assertEquals(View.GONE, stack.getVisibility());
-        }
-        grid.release();
+        String id = MediaCollectionStore.create(activity, "Example collection");
+        CustomCollectionsView view = new CustomCollectionsView(activity);
+        view.bind(MediaCollectionStore.previews(activity));
+        ViewGroup tile = view.findViewWithTag("library-custom-collection-" + id);
+        assertNotNull(tile);
+        assertEquals(3, tile.getChildCount());
+        assertEquals("collection-artwork", tile.getChildAt(0).getTag());
+        assertEquals("Example collection", ((TextView) tile.getChildAt(1)).getText().toString());
+        assertEquals("0 items", ((TextView) tile.getChildAt(2)).getText().toString());
+        assertNotNull(view.findViewWithTag("library-new-collection"));
+        assertEquals(2, view.getChildCount());
+        assertEquals("My Collections", ((TextView) view.getChildAt(0)).getText().toString());
+        view.release();
     }
 
     private Intent open(Activity activity, LibraryHubView hub, String tag) {

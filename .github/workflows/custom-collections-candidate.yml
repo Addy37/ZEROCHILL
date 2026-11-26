@@ -26,8 +26,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7005067'
-      APP_VERSION_NAME: '7.5.0-custom-collections.1'
+      APP_VERSION_CODE: '7005068'
+      APP_VERSION_NAME: '7.5.0-custom-collections.2'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v6
@@ -81,7 +81,7 @@ jobs:
                   out.write(key + "=" + value + "\n")
           PY
       - name: Focused collection and gallery regressions
-        run: gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest --tests com.webapp.crazyshit.MediaCollectionStoreTest --tests com.webapp.crazyshit.CreatorBackupTest --tests com.webapp.crazyshit.SharedArtworkRevealTest --tests com.webapp.crazyshit.ColdTabSnapshotTest --tests com.webapp.crazyshit.ShowsHubStateTest --tests com.webapp.crazyshit.GalleryRevealImageViewTest --tests com.webapp.crazyshit.GalleryThumbnailPipelineTest --tests com.webapp.crazyshit.GalleryBlackImageTest --tests com.webapp.crazyshit.GalleryDiagnosticsTest --tests com.webapp.crazyshit.FavoriteImageNavigationTest
+        run: gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest --tests com.webapp.crazyshit.LibraryCollectionTest --tests com.webapp.crazyshit.LibraryProfileTest --tests com.webapp.crazyshit.PrimaryTabLibraryTest --tests com.webapp.crazyshit.MediaCollectionStoreTest --tests com.webapp.crazyshit.CreatorBackupTest --tests com.webapp.crazyshit.SharedArtworkRevealTest --tests com.webapp.crazyshit.ColdTabSnapshotTest --tests com.webapp.crazyshit.ShowsHubStateTest --tests com.webapp.crazyshit.GalleryRevealImageViewTest --tests com.webapp.crazyshit.GalleryThumbnailPipelineTest --tests com.webapp.crazyshit.GalleryBlackImageTest --tests com.webapp.crazyshit.GalleryDiagnosticsTest --tests com.webapp.crazyshit.FavoriteImageNavigationTest
       - name: Assemble and verify side-by-side APK
         run: |
           set -euo pipefail
@@ -93,7 +93,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee candidate/APK-SIGNING.txt
           grep -Fx 'Signer #1 certificate SHA-256 digest: 04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356' candidate/APK-SIGNING.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$apk" > "$RUNNER_TEMP/beta-badging.txt"
-          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005067' versionName='7.5.0-custom-collections.1-dev'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
+          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005068' versionName='7.5.0-custom-collections.2-dev'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
       - name: Upload signed library search test APK
         uses: actions/upload-artifact@v4

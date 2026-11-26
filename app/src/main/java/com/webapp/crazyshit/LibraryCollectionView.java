@@ -1,52 +1,35 @@
 package com.webapp.crazyshit;
 
 import android.content.Context;
-import android.graphics.Outline;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewOutlineProvider;
-import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.core.graphics.ColorUtils;
-import com.bumptech.glide.Glide;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
-/** Lightweight collection shortcuts. Opening a destination owns all data loading. */
+/** Compact saved-content shortcuts; custom collections own the artwork previews. */
 final class LibraryCollectionView extends LinearLayout {
-    private final TextView heading;
-    private final List<FrameLayout> tiles = new ArrayList<>();
+    private final List<LinearLayout> tiles = new ArrayList<>();
     private final List<ImageView> icons = new ArrayList<>();
     private final List<TextView> labels = new ArrayList<>();
-    private final Map<String, FrameLayout> stacks = new LinkedHashMap<>();
-    private final Map<String, TextView> labelByTag = new LinkedHashMap<>();
 
     LibraryCollectionView(Context context, Runnable watchLater, Runnable downloads,
             Runnable history, Runnable favorites) {
         super(context);
         setOrientation(VERTICAL);
         setTag("library-collection");
-        setPadding(0, dp(8), 0, dp(24));
-        heading = new TextView(context);
-        heading.setText("Your Collection");
-        ZeroChillTypography.apply(heading, ZeroChillTypography.Role.SECTION);
-        androidx.core.view.ViewCompat.setAccessibilityHeading(heading, true);
-        LayoutParams titleParams = new LayoutParams(-1, -2);
-        titleParams.bottomMargin = dp(12);
-        addView(heading, titleParams);
-
+        setPadding(0, 0, 0, dp(22));
         LinearLayout top = row();
         tile(top, "Watch Later", "watch-later", R.drawable.ic_nav_saved, watchLater);
-        tile(top, "Downloads", "downloads", R.drawable.ic_action_download, downloads);
+        tile(top, "Favorites", "favorites", R.drawable.ic_action_heart_filled, favorites);
         LinearLayout bottom = row();
-        ((LayoutParams) bottom.getLayoutParams()).topMargin = dp(10);
+        ((LayoutParams) bottom.getLayoutParams()).topMargin = dp(8);
         tile(bottom, "History", "history", R.drawable.ic_library_history, history);
-        tile(bottom, "Favorites", "favorites", R.drawable.ic_action_heart_filled, favorites);
+        tile(bottom, "Downloads", "downloads", R.drawable.ic_action_download, downloads);
         applyTheme();
     }
 
@@ -58,150 +41,41 @@ final class LibraryCollectionView extends LinearLayout {
     }
 
     private void tile(LinearLayout row, String title, String tag, int drawable, Runnable open) {
-        FrameLayout tile = new FrameLayout(getContext());
-        tile.setPadding(dp(16), dp(16), dp(16), dp(16));
-        tile.setMinimumHeight(dp(92));
+        LinearLayout tile = new LinearLayout(getContext());
+        tile.setOrientation(HORIZONTAL);
+        tile.setGravity(Gravity.CENTER_VERTICAL);
+        tile.setPadding(dp(12), dp(10), dp(12), dp(10));
+        tile.setMinimumHeight(dp(52));
         tile.setTag("library-collection-" + tag);
         tile.setContentDescription("Open " + title);
         tile.setClickable(true);
         tile.setFocusable(true);
         tile.setOnClickListener(v -> open.run());
         ZeroChillMotion.installPressFeedback(tile);
-
         ImageView icon = new ImageView(getContext());
         icon.setImageResource(drawable);
         icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(dp(25), dp(25), Gravity.START | Gravity.TOP);
-        tile.addView(icon, iconParams);
+        tile.addView(icon, new LayoutParams(dp(20), dp(20)));
         TextView label = new TextView(getContext());
         label.setText(title);
-        label.setTextSize(13);
+        label.setTextSize(14);
         label.setTypeface(null, android.graphics.Typeface.BOLD);
         label.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        FrameLayout.LayoutParams labelParams = new FrameLayout.LayoutParams(-1, -2, Gravity.START | Gravity.TOP);
-        labelParams.topMargin = dp(37);
-        tile.addView(label, labelParams);
-
-        FrameLayout stack = new FrameLayout(getContext());
-        stack.setTag("library-collection-stack-" + tag);
-        stack.setVisibility(View.GONE);
-        stack.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        FrameLayout.LayoutParams stackParams = new FrameLayout.LayoutParams(dp(86), dp(76),
-                Gravity.END | Gravity.CENTER_VERTICAL);
-        stackParams.setMarginEnd(-dp(7));
-        stack.setClipChildren(false);
-        stack.setClipToPadding(false);
-        tile.addView(stack, stackParams);
-        tile.addOnLayoutChangeListener((v, l, t, right, b, ol, ot, or, ob) -> {
-            if (right - l != or - ol && stack.getChildCount() > 0)
-                updateStackGeometry(stack, label);
-        });
-
-        LayoutParams params = new LayoutParams(0, -1, 1);
-        if (row.getChildCount() > 0) params.setMarginStart(dp(10));
-        row.addView(tile, params);
-        tiles.add(tile);
-        icons.add(icon);
-        labels.add(label);
-        stacks.put(tag, stack);
-        labelByTag.put(tag, label);
-    }
-
-    void setPreviews(String tag, List<String> urls) {
-        FrameLayout stack = stacks.get(tag);
-        TextView label = labelByTag.get(tag);
-        if (stack == null) return;
-        clearStack(stack);
-        List<String> chosen = LibraryBrowseGroups.firstUrls(urls, 3);
-        if (chosen.isEmpty()) {
-            updateStackGeometry(stack, label);
-            return;
-        }
-        int size = dp(64);
-        for (int i = chosen.size() - 1; i >= 0; i--) {
-            ImageView image = new ImageView(getContext());
-            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            image.setBackgroundColor(0xFF10161D);
-            image.setClipToOutline(true);
-            image.setOutlineProvider(new ViewOutlineProvider() {
-                @Override public void getOutline(View view, Outline outline) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(8));
-                }
-            });
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(size, size, Gravity.END | Gravity.CENTER_VERTICAL);
-            image.setRotation(i == 0 ? 0f : i == 1 ? -7f : 7f);
-            stack.addView(image, params);
-            String url = chosen.get(i);
-            Glide.with(image)
-                    .load(LibraryHubView.remoteImage(url, url))
-                    .dontTransform()
-                    .override(dp(192), dp(192))
-                    .transition(SharedArtworkReveal.artwork("library-collection-" + tag, url, false))
-                    .into(image);
-        }
-        updateStackGeometry(stack, label);
-    }
-
-    private void updateStackGeometry(FrameLayout stack, TextView label) {
-        if (label == null) return;
-        FrameLayout tile = (FrameLayout) stack.getParent();
-        int count = stack.getChildCount();
-        int width = dp(86);
-        if (tile.getWidth() > 0) {
-            int labelWidth = (int) Math.ceil(label.getPaint().measureText(label.getText().toString()));
-            width = Math.min(width, tile.getWidth() - tile.getPaddingLeft()
-                    - tile.getPaddingRight() - labelWidth + dp(3));
-        }
-        // On unusually narrow or large-font screens, prioritize the full label.
-        boolean visible = count > 0 && width >= dp(42);
-        FrameLayout.LayoutParams labelParams = (FrameLayout.LayoutParams) label.getLayoutParams();
-        int reserve = visible ? width - dp(3) : 0;
-        if (labelParams.getMarginEnd() != reserve) {
-            labelParams.setMarginEnd(reserve);
-            label.setLayoutParams(labelParams);
-        }
-        stack.setVisibility(visible ? View.VISIBLE : View.GONE);
-        if (!visible) return;
-        FrameLayout.LayoutParams stackParams = (FrameLayout.LayoutParams) stack.getLayoutParams();
-        int height = Math.min(dp(76), width + dp(2));
-        if (stackParams.width != width || stackParams.height != height) {
-            stackParams.width = width;
-            stackParams.height = height;
-            stack.setLayoutParams(stackParams);
-        }
-        int step = count == 1 ? 0 : Math.min(dp(9), Math.max(dp(4), width / 9));
-        int size = Math.min(dp(64), width - dp(6) - (count - 1) * step);
-        size = Math.min(size, height - dp(8));
-        for (int child = 0; child < count; child++) {
-            View image = stack.getChildAt(child);
-            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) image.getLayoutParams();
-            params.width = size;
-            params.height = size;
-            params.setMarginEnd(dp(3) + (count - 1 - child) * step);
-            image.setLayoutParams(params);
-        }
-    }
-
-    void release() {
-        for (FrameLayout stack : stacks.values()) clearStack(stack);
-    }
-
-    private void clearStack(FrameLayout stack) {
-        for (int i = 0; i < stack.getChildCount(); i++) {
-            View child = stack.getChildAt(i);
-            if (child instanceof ImageView) Glide.with(child).clear(child);
-        }
-        stack.removeAllViews();
+        LayoutParams text = new LayoutParams(0, -2, 1);
+        text.setMarginStart(dp(9));
+        tile.addView(label, text);
+        LayoutParams cell = new LayoutParams(0, -1, 1);
+        if (row.getChildCount() > 0) cell.setMarginStart(dp(8));
+        row.addView(tile, cell);
+        tiles.add(tile); icons.add(icon); labels.add(label);
     }
 
     void applyTheme() {
         int accent = AppearanceTheme.accent(getContext());
-        heading.setTextColor(AppearanceTheme.primaryText(getContext()));
         for (int i = 0; i < tiles.size(); i++) {
             GradientDrawable surface = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                     new int[] {ColorUtils.blendARGB(0xFF1B2630, accent, .04f), 0xFF151E27});
-            surface.setCornerRadius(dp(19));
-            surface.setStroke(dp(1), ColorUtils.blendARGB(0xFF303943, accent, .12f));
+            surface.setCornerRadius(dp(15));
             tiles.get(i).setBackground(surface);
             icons.get(i).setColorFilter(accent);
             labels.get(i).setTextColor(AppearanceTheme.primaryText(getContext()));
