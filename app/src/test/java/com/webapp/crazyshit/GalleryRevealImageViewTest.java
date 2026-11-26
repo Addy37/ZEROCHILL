@@ -28,6 +28,18 @@ public class GalleryRevealImageViewTest {
         assertEquals(3, GalleryWorkload.preparationConcurrency(5, true));
     }
 
+    @Test public void continuousPreparationRefillsWithoutScrollAndStaysBounded() {
+        assertEquals(12, GalleryWorkload.continuousPreparationSlots(2, 8, 0, false));
+        assertEquals(2, GalleryWorkload.continuousPreparationSlots(2, 8, 10, false));
+        assertEquals(0, GalleryWorkload.continuousPreparationSlots(2, 8, 12, false));
+        assertEquals(24, GalleryWorkload.continuousPreparationSlots(5, 32, 0, false));
+        assertEquals(8, GalleryWorkload.continuousPreparationSlots(5, 32, 0, true));
+        assertEquals(0, GalleryWorkload.continuousPreparationSlots(5, 32, 20, true));
+        assertFalse(GalleryWorkload.shouldPrefetchNextPage(80, 10, 5, false));
+        assertFalse(GalleryWorkload.shouldPrefetchNextPage(80, 70, 5, true));
+        assertTrue(GalleryWorkload.shouldPrefetchNextPage(80, 70, 5, false));
+    }
+
     @Test public void sustainedFramePressureTemporarilyReducesWork() {
         GalleryWorkload.FramePressure pressure = new GalleryWorkload.FramePressure();
         pressure.sample(10_000_000L, 10L);

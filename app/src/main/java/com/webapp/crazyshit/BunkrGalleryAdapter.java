@@ -74,6 +74,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final java.util.LinkedHashMap<String, GalleryThumbnailPipeline.Result> batchResults = new java.util.LinkedHashMap<>();
     private final android.os.Handler batchUi = new android.os.Handler(android.os.Looper.getMainLooper());
     private boolean batchEnabled, batchActive = true;
+    private boolean usedContinuousPreparation;
     private int firstVisible, lastVisible;
     private boolean batchFlushPosted;
     private static final long BATCH_PUBLISH_MS = 45L;
@@ -288,6 +289,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         }
     }
     boolean hasPendingThumbnails() { return !pendingTiles.isEmpty(); }
+    boolean shouldPrefetchNextPage() {
+        return usedContinuousPreparation && batchActive && previewsActive
+                && previewViewport != null
+                && GalleryWorkload.shouldPrefetchNextPage(items.size(), lastVisible, gridColumns,
+                        hasPendingThumbnails());
+    }
     static int skeletonCount(int pending, int columns) {
         return Math.min(Math.max(0, pending), 2 * GalleryWorkload.columns(columns));
     }
@@ -298,23 +305,30 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         if (thumbnailPipeline != null) thumbnailPipeline.unsubscribe(this);
         pendingTiles.clear(); batchInFlight.clear(); batchResults.clear();
         firstVisible = lastVisible = 0;
+        usedContinuousPreparation = false;
     }
     private void scheduleBatch() {
         if (!batchEnabled || !batchActive || !previewsActive || thumbnailPipeline == null
                 || pendingTiles.isEmpty()) return;
         updatePreparationBudget();
-        int window = GalleryWorkload.preparationWindow(gridColumns, estimatedVisibleTiles());
-        int target = Math.max(firstVisible + window, lastVisible + 1 + gridColumns * 2);
-        int remaining = Math.min(window, Math.max(0, target - items.size()))
-                - batchInFlight.size() - batchResults.size();
+        usedContinuousPreparation = true;
+        int remaining = GalleryWorkload.continuousPreparationSlots(gridColumns,
+                estimatedVisibleTiles(), batchInFlight.size() + batchResults.size(), constrained());
+        int priorityEnd = Math.max(firstVisible + estimatedVisibleTiles(),
+                lastVisible + 1 + gridColumns * 2);
+        int queuedPosition = items.size();
         if (remaining <= 0) return;
         int generation = galleryGeneration;
         for (NativeContentItem item : pendingTiles.values()) {
             if (remaining <= 0) break;
-            if (batchInFlight.contains(item.url) || batchResults.containsKey(item.url)) continue;
+            if (batchInFlight.contains(item.url) || batchResults.containsKey(item.url)) {
+                queuedPosition++;
+                continue;
+            }
             remaining--;
             batchInFlight.add(item.url);
-            requestPreparedThumbnail(item, true, this, result -> {
+            // Visible and near-visible work takes priority; prepare the rest continuously.
+            requestPreparedThumbnail(item, queuedPosition++ < priorityEnd, this, result -> {
                 if (generation != galleryGeneration || !batchInFlight.remove(item.url)) return;
                 if (pendingTiles.containsKey(item.url)) batchResults.put(item.url, result);
                 // A rolling window: publish ready items promptly, even if earlier requests stall.
@@ -1047,7 +1061,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         GlideUrl original = GalleryBlackImage.eligible(item) ? withHeaders(item.url, referer) : null;
         GlideUrl preview = item.imageUrl.isEmpty() || item.imageUrl.equals(item.url)
                 ? null : withHeaders(item.imageUrl, referer);
-        thumbnailPipeline.prepare(item, preview, original, visible, subscriber, callback);
+        thumbnailPipeline.prepare(item, preview, original, visible,
+                batchEnabled && subscriber == this, subscriber, callback);
     }
 
     private void loadArtwork(Holder holder, NativeContentItem item, String url, boolean repair) {
@@ -1460,7 +1475,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             if (!existing.add(candidate.url)) continue;
             if (batchEnabled && thumbnailPipeline != null && GalleryThumbnailPipeline.supports(candidate)) {
                 GalleryThumbnailPipeline.Result cached = thumbnailPipeline.cached(candidate.url);
-                if (cached == null) pendingTiles.put(candidate.url, candidate);
+                if (cached == null) {
+                    pendingTiles.put(candidate.url, candidate);
+                    usedContinuousPreparation = true;
+                }
                 else if (cached.state != GalleryThumbnailPipeline.State.OMIT) items.add(candidate);
                 else omittedBlackImages.add(candidate.url);
             } else items.add(candidate);

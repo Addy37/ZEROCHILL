@@ -45,7 +45,13 @@ final class GalleryThumbnailPipeline {
     boolean hasRevealed(String url) { return revealed.contains(url); }
     void markRevealed(String url) { revealed.add(url); }
     private int active;
-    private boolean closed;
+    private boolean closed, paused;
+
+    void setPaused(boolean value) {
+        if (closed || paused == value) return;
+        paused = value;
+        if (!paused) pump();
+    }
     private String retrySignature = java.util.UUID.randomUUID().toString();
 
     enum State { READY, OMIT, UNAVAILABLE }
@@ -96,6 +102,11 @@ final class GalleryThumbnailPipeline {
 
     void prepare(NativeContentItem item, GlideUrl preview, GlideUrl original, boolean visible,
             Object subscriber, Consumer<Result> callback) {
+        prepare(item, preview, original, visible, false, subscriber, callback);
+    }
+
+    void prepare(NativeContentItem item, GlideUrl preview, GlideUrl original, boolean visible,
+            boolean reservedBatchSlot, Object subscriber, Consumer<Result> callback) {
         if (closed) return;
         Result cached = results.get(item.url);
         if (cached != null) {
@@ -106,7 +117,7 @@ final class GalleryThumbnailPipeline {
         }
         Job job = jobs.get(item.url);
         if (job == null) {
-            if (!visible && jobs.size() >= MAX_PREFETCH_QUEUE) return;
+            if (!visible && !reservedBatchSlot && jobs.size() >= MAX_PREFETCH_QUEUE) return;
             job = new Job(item, preview, original);
             jobs.put(item.url, job);
         }
@@ -125,7 +136,7 @@ final class GalleryThumbnailPipeline {
     }
 
     private void pump() {
-        if (closed) return;
+        if (closed || paused) return;
         while (active < GalleryWorkload.preparationConcurrency(preparationColumns,
                 preparationConstrained || cooldown.skip(SystemClock.elapsedRealtime()))) {
             Job next = null;

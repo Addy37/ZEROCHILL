@@ -27,6 +27,20 @@ final class GalleryWorkload {
         return Math.min(48, Math.max(6, estimatedVisible + 2 * columns(columns)));
     }
 
+    // Bound outstanding work rather than the number of prepared items.
+    static int continuousPreparationSlots(int columns, int visible, int outstanding,
+            boolean constrained) {
+        int window = Math.min(24, preparationWindow(columns, visible));
+        if (constrained) window = Math.min(window, 8);
+        return Math.max(0, window - Math.max(0, outstanding));
+    }
+
+    static boolean shouldPrefetchNextPage(int readyCount, int lastVisible, int columns,
+            boolean hasPending) {
+        return !hasPending && readyCount > 0
+                && readyCount - Math.max(0, lastVisible) - 1 <= Math.max(5, columns(columns) * 2);
+    }
+
     static int preparationConcurrency(int columns, boolean constrained) {
         return constrained ? 3 : Math.min(6, Math.max(3, columns(columns) + 1));
     }
