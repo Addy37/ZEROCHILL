@@ -78,12 +78,143 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private static final int BATCH_LIMIT = 6;
     private static final int SKELETON_TYPE = 1;
     private final Runnable flushBatch = this::publishPreparedBatch;
+    private static final int MAX_REVEALS = 3;
+    private int activeReveals;
+    private long lastFastScroll = -GalleryRevealImageView.SETTLE_MS;
+    private long lastRevealStart = -GalleryRevealImageView.STAGGER_MS;
+    private long lastScrollEvent;
+    private final Rect revealBounds = new Rect();
+    private final Runnable revealTick = this::pumpReveals;
+    private boolean revealTickPosted;
+    private final RecyclerView.OnScrollListener revealScroll = new RecyclerView.OnScrollListener() {
+        @Override public void onScrolled(@NonNull RecyclerView list, int dx, int dy) {
+            if (dx == 0 && dy == 0) return;
+            long now = android.os.SystemClock.uptimeMillis();
+            long elapsed = lastScrollEvent == 0 ? 16L : Math.max(8L, Math.min(50L, now - lastScrollEvent));
+            lastScrollEvent = now;
+            float density = list.getResources().getDisplayMetrics().density;
+            if (list.getScrollState() == RecyclerView.SCROLL_STATE_SETTLING
+                    || Math.hypot(dx, dy) / Math.max(1f, density) > elapsed * .7f)
+                lastFastScroll = now;
+            scheduleRevealTick(0L);
+        }
+        @Override public void onScrollStateChanged(@NonNull RecyclerView list, int state) {
+            if (state == RecyclerView.SCROLL_STATE_SETTLING)
+                lastFastScroll = android.os.SystemClock.uptimeMillis();
+            scheduleRevealTick(0L);
+        }
+    };
+
+    private boolean revealVisible(Holder holder) {
+        return previewVisible(holder) && holder.image.getHeight() > 0
+                && holder.image.getGlobalVisibleRect(revealBounds)
+                && revealBounds.height() >= holder.image.getHeight() * .55f
+                && revealBounds.width() >= holder.image.getWidth() * .55f;
+    }
+
+    private void scheduleRevealTick(long delay) {
+        if (!batchEnabled || !batchActive || !previewsActive || previewViewport == null
+                || revealTickPosted) return;
+        revealTickPosted = true;
+        batchUi.postDelayed(revealTick, Math.max(0L, delay));
+    }
+
+    private void stopRevealTick() {
+        batchUi.removeCallbacks(revealTick);
+        revealTickPosted = false;
+    }
+
+    private void pumpReveals() {
+        revealTickPosted = false;
+        RecyclerView list = previewViewport;
+        if (!batchEnabled || !batchActive || !previewsActive || list == null) return;
+        ArrayList<Holder> candidates = new ArrayList<>();
+        for (Holder holder : previewHolders)
+            if (holder.revealPending && holder.revealAnimator == null
+                    && holder.boundItem != null && revealVisible(holder)) candidates.add(holder);
+        if (candidates.isEmpty()) return;
+        if (!ZeroChillMotion.animationsEnabled(context)) {
+            for (Holder holder : candidates) finishReveal(holder);
+            return;
+        }
+        long now = android.os.SystemClock.uptimeMillis();
+        if (!GalleryRevealImageView.canStart(list.getScrollState(), now - lastFastScroll)) {
+            if (list.getScrollState() != RecyclerView.SCROLL_STATE_SETTLING)
+                scheduleRevealTick(GalleryRevealImageView.SETTLE_MS);
+            return;
+        }
+        if (activeReveals >= MAX_REVEALS) return;
+        long wait = GalleryRevealImageView.STAGGER_MS - (now - lastRevealStart);
+        if (wait > 0L) { scheduleRevealTick(wait); return; }
+        candidates.sort(java.util.Comparator.comparingInt((Holder h) -> h.itemView.getTop())
+                .thenComparingInt(h -> h.itemView.getLeft()));
+        Holder holder = candidates.get(0);
+        if (thumbnailPipeline.hasRevealed(holder.boundItem.url)) {
+            finishReveal(holder);
+            scheduleRevealTick(0L);
+            return;
+        }
+        lastRevealStart = now;
+        activeReveals++;
+        android.animation.ValueAnimator animation = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        holder.revealAnimator = animation;
+        animation.setDuration(GalleryRevealImageView.DURATION_MS);
+        animation.setInterpolator(new android.view.animation.PathInterpolator(.25f, .1f, .25f, 1f));
+        animation.addUpdateListener(value ->
+                holder.image.setRevealProgress((float) value.getAnimatedValue()));
+        animation.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator ignored) {
+                if (holder.revealAnimator != animation) return;
+                holder.revealAnimator = null;
+                activeReveals--;
+                finishReveal(holder);
+                scheduleRevealTick(0L);
+            }
+        });
+        animation.start();
+        scheduleRevealTick(GalleryRevealImageView.STAGGER_MS);
+    }
+
+    private void finishReveal(Holder holder) {
+        holder.revealPending = false;
+        holder.image.setRevealProgress(1f);
+        if (holder.boundItem != null && thumbnailPipeline != null)
+            thumbnailPipeline.markRevealed(holder.boundItem.url);
+    }
+
+    private void cancelReveal(Holder holder, boolean preservePending) {
+        android.animation.ValueAnimator animation = holder.revealAnimator;
+        if (animation != null) {
+            holder.revealAnimator = null;
+            activeReveals--;
+            animation.cancel();
+        }
+        holder.revealPending &= preservePending;
+        holder.image.setRevealProgress(holder.revealPending ? 0f : 1f);
+    }
+
+    private void queueReveal(Holder holder, NativeContentItem item) {
+        if (!batchEnabled || thumbnailPipeline.hasRevealed(item.url)
+                || !ZeroChillMotion.animationsEnabled(context)) {
+            finishReveal(holder);
+            return;
+        }
+        holder.revealPending = true;
+        holder.image.setRevealProgress(0f);
+        scheduleRevealTick(0L);
+    }
 
     void setThumbnailPipeline(GalleryThumbnailPipeline pipeline) { thumbnailPipeline = pipeline; }
     void setBatchEnabled(boolean enabled) { batchEnabled = enabled; }
     void setBatchActive(boolean active) {
         batchActive = active;
-        if (active) scheduleBatch();
+        if (active) {
+            scheduleBatch();
+            scheduleRevealTick(0L);
+        } else {
+            stopRevealTick();
+            for (Holder holder : previewHolders) cancelReveal(holder, true);
+        }
     }
     boolean hasPendingThumbnails() { return !pendingTiles.isEmpty(); }
     static int skeletonCount(int pending, int columns) {
@@ -205,6 +336,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             } else if (holder.boundItem != null) {
                 if (holder.wantsMediaPreview) requestMediaPreview(holder, holder.boundItem);
                 else if (holder.needsRepair) repairArtwork(holder, holder.boundItem, holder.boundItem.imageUrl);
+            }
+        }
+        if (batchEnabled && batchActive) {
+            for (Holder holder : previewHolders) {
+                if (holder.revealAnimator != null && !previewVisible(holder))
+                    cancelReveal(holder, true);
+                if (holder.revealPending && revealVisible(holder)) scheduleRevealTick(0L);
             }
         }
         return true;
@@ -473,7 +611,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         tileParams.setMargins(gap, gap, gap, gap);
         tile.setLayoutParams(tileParams);
 
-        ImageView image = new ImageView(parent.getContext());
+        GalleryRevealImageView image = new GalleryRevealImageView(parent.getContext());
         image.setBackgroundColor(Color.rgb(20, 20, 23));
         tile.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
@@ -657,6 +795,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
+        cancelReveal(holder, false);
         resetTileTransform(holder.itemView);
         holder.morphPulse.animate().cancel();
         holder.morphPulse.setAlpha(0f);
@@ -760,7 +899,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         int binding = holder.bindGeneration;
         int generation = galleryGeneration;
         Glide.with(holder.image).clear(holder.image);
-        holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
+        holder.image.setImageDrawable(new ColorDrawable(batchEnabled
+                ? GalleryRevealImageView.MATTE : Color.rgb(20, 20, 23)));
         // The tail skeleton owns loading. A rare cache miss uses a quiet matte, never a spinner.
         holder.preparing.setVisibility(View.GONE);
         requestPreparedThumbnail(item, true, holder, result -> {
@@ -775,14 +915,18 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 holder.unavailable.setVisibility(item.isVideo() ? View.GONE : View.VISIBLE);
                 return;
             }
-            GalleryThumbnailPipeline.request(Glide.with(holder.image), result.model, result.signature)
-                    .transition(ThumbnailFades.thumbnail())
-                    .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
+            RequestBuilder<Drawable> display =
+                    GalleryThumbnailPipeline.request(Glide.with(holder.image), result.model, result.signature);
+            if (batchEnabled) display = display.dontAnimate();
+            else display = display.transition(ThumbnailFades.thumbnail());
+            display.placeholder(new ColorDrawable(batchEnabled
+                    ? GalleryRevealImageView.MATTE : Color.rgb(20, 20, 23)))
                     .listener(new RequestListener<Drawable>() {
                         @Override public boolean onLoadFailed(GlideException error, Object model,
                                 Target<Drawable> target, boolean first) {
                             if (binding != holder.bindGeneration || generation != galleryGeneration) return true;
                             thumbnailPipeline.invalidateReady(item.url);
+                            cancelReveal(holder, false);
                             holder.preparing.setVisibility(View.GONE);
                             holder.unavailable.setVisibility(View.VISIBLE);
                             return false;
@@ -793,6 +937,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                             if (adaptiveAspectRatios) applyAspectRatio(holder, item, resource);
                             holder.preparing.setVisibility(View.GONE);
                             holder.unavailable.setVisibility(View.GONE);
+                            if (batchEnabled) queueReveal(holder, item);
                             return false;
                         }
                     }).into(holder.image);
@@ -1074,8 +1219,14 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     void setPreviewsActive(boolean active) {
         if (previewsActive == active) return;
         previewsActive = active;
-        if (!active) stopFavoriteMoves();
-        else scheduleBatch();
+        if (!active) {
+            stopFavoriteMoves();
+            stopRevealTick();
+            for (Holder holder : previewHolders) cancelReveal(holder, true);
+        } else {
+            scheduleBatch();
+            scheduleRevealTick(0L);
+        }
         for (Holder holder : previewHolders) {
             if (!active) {
                 cancelPreview(holder);
@@ -1093,12 +1244,16 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         previewViewport = recycler;
         BunkrMediaPreview.addPlaybackPreviewListener(playbackPreviewListener);
         recycler.getViewTreeObserver().addOnPreDrawListener(previewVisibility);
+        recycler.addOnScrollListener(revealScroll);
     }
 
     @Override public void onDetachedFromRecyclerView(@NonNull RecyclerView recycler) {
         stopFavoriteMoves();
         BunkrMediaPreview.removePlaybackPreviewListener(playbackPreviewListener);
         recycler.getViewTreeObserver().removeOnPreDrawListener(previewVisibility);
+        recycler.removeOnScrollListener(revealScroll);
+        stopRevealTick();
+        for (Holder holder : previewHolders) cancelReveal(holder, true);
         for (int i = 0; i < recycler.getChildCount(); i++) {
             RecyclerView.ViewHolder raw = recycler.getChildViewHolder(recycler.getChildAt(i));
             if (raw instanceof Holder) cancelPreview((Holder) raw);
@@ -1111,6 +1266,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         super.onViewAttachedToWindow(holder);
         previewHolders.add(holder);
         holder.attached = true;
+        if (holder.revealPending) scheduleRevealTick(0L);
         NativeContentItem item = holder.boundItem;
         if (item == null) return;
         if (holder.wantsMediaPreview) requestMediaPreview(holder, item);
@@ -1121,6 +1277,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         resetTileTransform(holder.itemView);
         previewHolders.remove(holder);
         holder.attached = false;
+        cancelReveal(holder, true);
         cancelPreview(holder);
         holder.previewAttempted = false;
         super.onViewDetachedFromWindow(holder);
@@ -1159,6 +1316,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
+        cancelReveal(holder, false);
         resetTileTransform(holder.itemView);
         previewHolders.remove(holder);
         holder.bindGeneration++;
@@ -1429,12 +1587,14 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     static final class Holder extends RecyclerView.ViewHolder {
         int bindGeneration;
         int artworkRequest;
+        boolean revealPending;
+        android.animation.ValueAnimator revealAnimator;
         boolean attached, needsRepair, repairPending, wantsMediaPreview, previewAttempted;
         NativeContentItem boundItem;
         final ArrayList<String> failedArtwork = new ArrayList<>();
         BunkrMediaPreview.Task preview;
         final AspectRatioFrameLayout tile;
-        final ImageView image;
+        final GalleryRevealImageView image;
         final FrameLayout source;
         final ImageView sourceIcon;
         final TextView sourceVariant;
@@ -1451,7 +1611,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
         Holder(
                 AspectRatioFrameLayout itemView,
-                ImageView image,
+                GalleryRevealImageView image,
                 FrameLayout source,
                 ImageView sourceIcon,
                 TextView sourceVariant,

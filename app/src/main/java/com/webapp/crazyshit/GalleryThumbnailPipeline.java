@@ -32,6 +32,10 @@ final class GalleryThumbnailPipeline {
     private final LinkedHashMap<String, Job> jobs = new LinkedHashMap<>();
     private final LinkedHashMap<String, Result> results = new LinkedHashMap<>(16, .75f, true);
     private final Cooldown cooldown = new Cooldown();
+    // Presentation state is shared across tabs, but never written to disk.
+    private final java.util.Set<String> revealed = new java.util.HashSet<>();
+    boolean hasRevealed(String url) { return revealed.contains(url); }
+    void markRevealed(String url) { revealed.add(url); }
     private int active;
     private boolean closed;
     private String retrySignature = java.util.UUID.randomUUID().toString();
@@ -227,5 +231,5 @@ final class GalleryThumbnailPipeline {
         for (Job job : previous) clearTarget(job);
     }
 
-    void close() { closed = true; reset(); }
+    void close() { closed = true; reset(); revealed.clear(); }
 }
