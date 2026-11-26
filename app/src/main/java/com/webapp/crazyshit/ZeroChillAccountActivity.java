@@ -737,7 +737,9 @@ public final class ZeroChillAccountActivity extends Activity {
         settingsRow("Change password", android.R.drawable.ic_lock_lock, () -> openSecurity("password"));
         settingsRow("Delete account", android.R.drawable.ic_menu_delete, () -> openSecurity("delete"));
 
-        settingsRow("Notification preferences", android.R.drawable.ic_dialog_info, () -> openSocial("notifications"));
+        settingsRow("Notification preferences", android.R.drawable.ic_dialog_info, () ->
+                startActivity(new Intent(this, SettingsActivity.class)
+                        .putExtra(SettingsActivity.EXTRA_SECTION, "Notifications")));
         settingsRow("Blocked users", android.R.drawable.ic_menu_close_clear_cancel, () -> openSocial("blocked"));
 
         TextView signOut = secondaryButton("SIGN OUT");

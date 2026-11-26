@@ -58,8 +58,8 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
     }
 
     private void buildShell() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
+        LibraryDestinationChrome.prepareWindow(this);
+        LinearLayout root = BrowseUi.screen(this);
         root.setBackgroundColor(AppearanceTheme.background(this));
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -72,7 +72,7 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
         back.setOnClickListener(v -> finish());
         ZeroChillMotion.installPressFeedback(back);
         header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        TextView title = label(MODE_BLOCKED.equals(mode) ? "Blocked users" : "Notification preferences",
+        TextView title = label(MODE_BLOCKED.equals(mode) ? "Blocked users" : "Account notifications",
                 19, AppearanceTheme.primaryText(this), true);
         title.setPadding(dp(6), dp(12), 0, dp(12));
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
@@ -85,13 +85,14 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
         body.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(20), dp(20), dp(20), dp(32));
+        content.setPadding(dp(16), dp(12), dp(16), dp(24));
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
         progress = new ZeroChillProgressBar(this);
         ZeroChillUi.styleProgress(progress);
         FrameLayout.LayoutParams loading = new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER);
         body.addView(progress, loading);
         setContentView(root);
+        androidx.core.view.ViewCompat.requestApplyInsets(root);
     }
 
     private void refresh() {
@@ -314,15 +315,16 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
     private void toggle(String title, boolean checked, ToggleAction action) {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(15), dp(8), dp(9), dp(8));
-        row.setBackground(panel());
-        row.setMinimumHeight(dp(60));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.bottomMargin = dp(8);
-        content.addView(row, params);
+        row.setPadding(dp(8), dp(4), dp(8), dp(4));
+        row.setMinimumHeight(dp(52));
+        content.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        View divider = new View(this);
+        divider.setBackgroundColor(AppearanceTheme.outline(this));
+        divider.setAlpha(.45f);
+        content.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
         TextView name = label(title, 14, AppearanceTheme.primaryText(this), false);
         row.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
-        Switch toggle = new ZeroChillSwitch(this);
+        Switch toggle = new ZeroChillSwitch(this, true);
         toggle.setChecked(checked);
         toggle.setContentDescription(title);
         row.addView(toggle);
@@ -337,15 +339,16 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
     private void localToggle(String title, String key, boolean checked, boolean requestPermission) {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(15), dp(8), dp(9), dp(8));
-        row.setBackground(panel());
-        row.setMinimumHeight(dp(60));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.bottomMargin = dp(8);
-        content.addView(row, params);
+        row.setPadding(dp(8), dp(4), dp(8), dp(4));
+        row.setMinimumHeight(dp(52));
+        content.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        View divider = new View(this);
+        divider.setBackgroundColor(AppearanceTheme.outline(this));
+        divider.setAlpha(.45f);
+        content.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
         TextView name = label(title, 14, AppearanceTheme.primaryText(this), false);
         row.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
-        Switch toggle = new ZeroChillSwitch(this);
+        Switch toggle = new ZeroChillSwitch(this, true);
         toggle.setChecked(checked);
         toggle.setContentDescription(title);
         row.addView(toggle);

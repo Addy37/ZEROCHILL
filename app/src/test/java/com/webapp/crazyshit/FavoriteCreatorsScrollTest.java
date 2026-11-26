@@ -104,6 +104,21 @@ public class FavoriteCreatorsScrollTest {
         }
     }
 
+    @Test public void updatesFilterUsesExistingUnreadCountsAndKeepsFavorites() throws Exception {
+        seedFavorites(3);
+        writeUnread("Testcreator001", 2);
+        try (ActivityController<CreatorsActivity> controller = Robolectric.buildActivity(CreatorsActivity.class).setup()) {
+            CreatorsActivity activity = controller.get();
+            TextView updates = ReflectionHelpers.getField(activity, "updatesFilter");
+            assertTrue(updates.performClick());
+            assertEquals(1, grid(activity).getAdapter().getItemCount());
+            assertEquals(3, CreatorFavoriteStore.names(context).size());
+            TextView all = ReflectionHelpers.getField(activity, "allFilter");
+            assertTrue(all.performClick());
+            assertEquals(3, grid(activity).getAdapter().getItemCount());
+        }
+    }
+
     @Test public void prefetchIsTwoRowsAndFollowsReversalsAndListEdges() {
         assertArrayEquals(new int[]{12, 13, 14, 15, 16, 17},
                 CreatorsActivity.avatarPrefetchPositions(3, 11, 48, 3, 1));

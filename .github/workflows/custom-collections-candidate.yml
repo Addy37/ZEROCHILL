@@ -1,4 +1,4 @@
-name: Spotlight list signed phone-test candidate
+name: Settings hub signed phone-test candidate
 on:
   pull_request:
     branches: [main]
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   signed-beta:
-    if: github.head_ref == 'feature/spotlight-list-only' || github.ref_name == 'feature/spotlight-list-only'
+    if: github.head_ref == 'feature/settings-hub-beta8' || github.ref_name == 'feature/settings-hub-beta8'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -26,8 +26,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7005073'
-      APP_VERSION_NAME: '7.5.0-spotlight-list.7'
+      APP_VERSION_CODE: '7005074'
+      APP_VERSION_NAME: '7.5.0-settings.8'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v6
@@ -81,24 +81,24 @@ jobs:
                   out.write(key + "=" + value + "\n")
           PY
       - name: Focused collection and gallery regressions
-        run: gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest --tests com.webapp.crazyshit.SpotlightSearchTest --tests com.webapp.crazyshit.VisualRefreshTest --tests com.webapp.crazyshit.SearchResultsPolishTest --tests com.webapp.crazyshit.AlbumSearchCardTest --tests com.webapp.crazyshit.SearchScopeTest --tests com.webapp.crazyshit.SearchPaneGeometryTest --tests com.webapp.crazyshit.SearchFloatingPresentationTest --tests com.webapp.crazyshit.SecondaryScreenChromeTest --tests com.webapp.crazyshit.NotificationCenterUiTest --tests com.webapp.crazyshit.ZeroChillMessageThreadUiTest --tests com.webapp.crazyshit.ZeroChillAccountUiTest --tests com.webapp.crazyshit.ZeroChillPublicProfileUiTest --tests com.webapp.crazyshit.ZeroChillSocialSettingsUiTest --tests com.webapp.crazyshit.ZeroChillAccountSecurityFlowTest --tests com.webapp.crazyshit.FeedbackConversationTest --tests com.webapp.crazyshit.LibraryDestinationChromeTest --tests com.webapp.crazyshit.LibraryDestinationInsetsTest --tests com.webapp.crazyshit.LibraryOverlayActionCardTest --tests com.webapp.crazyshit.LibrarySearchTest --tests com.webapp.crazyshit.LibraryMixedMediaGridTest --tests com.webapp.crazyshit.LibraryCollectionTest --tests com.webapp.crazyshit.LibraryProfileTest --tests com.webapp.crazyshit.PrimaryTabLibraryTest --tests com.webapp.crazyshit.MediaCollectionStoreTest --tests com.webapp.crazyshit.CreatorBackupTest --tests com.webapp.crazyshit.SharedArtworkRevealTest --tests com.webapp.crazyshit.ColdTabSnapshotTest --tests com.webapp.crazyshit.ShowsHubStateTest --tests com.webapp.crazyshit.GalleryRevealImageViewTest --tests com.webapp.crazyshit.GalleryThumbnailPipelineTest --tests com.webapp.crazyshit.GalleryBlackImageTest --tests com.webapp.crazyshit.GalleryDiagnosticsTest --tests com.webapp.crazyshit.FavoriteImageNavigationTest
+        run: gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest --tests com.webapp.crazyshit.SettingsComposeScreenModelTest --tests com.webapp.crazyshit.SettingsCompactSwitchTest --tests com.webapp.crazyshit.FavoriteCreatorsScrollTest --tests com.webapp.crazyshit.SpotlightSearchTest --tests com.webapp.crazyshit.VisualRefreshTest --tests com.webapp.crazyshit.SearchResultsPolishTest --tests com.webapp.crazyshit.AlbumSearchCardTest --tests com.webapp.crazyshit.SearchScopeTest --tests com.webapp.crazyshit.SearchPaneGeometryTest --tests com.webapp.crazyshit.SearchFloatingPresentationTest --tests com.webapp.crazyshit.SecondaryScreenChromeTest --tests com.webapp.crazyshit.NotificationCenterUiTest --tests com.webapp.crazyshit.ZeroChillMessageThreadUiTest --tests com.webapp.crazyshit.ZeroChillAccountUiTest --tests com.webapp.crazyshit.ZeroChillPublicProfileUiTest --tests com.webapp.crazyshit.ZeroChillSocialSettingsUiTest --tests com.webapp.crazyshit.ZeroChillAccountSecurityFlowTest --tests com.webapp.crazyshit.FeedbackConversationTest --tests com.webapp.crazyshit.LibraryDestinationChromeTest --tests com.webapp.crazyshit.LibraryDestinationInsetsTest --tests com.webapp.crazyshit.LibraryOverlayActionCardTest --tests com.webapp.crazyshit.LibrarySearchTest --tests com.webapp.crazyshit.LibraryMixedMediaGridTest --tests com.webapp.crazyshit.LibraryCollectionTest --tests com.webapp.crazyshit.LibraryProfileTest --tests com.webapp.crazyshit.PrimaryTabLibraryTest --tests com.webapp.crazyshit.MediaCollectionStoreTest --tests com.webapp.crazyshit.CreatorBackupTest --tests com.webapp.crazyshit.SharedArtworkRevealTest --tests com.webapp.crazyshit.ColdTabSnapshotTest --tests com.webapp.crazyshit.ShowsHubStateTest --tests com.webapp.crazyshit.GalleryRevealImageViewTest --tests com.webapp.crazyshit.GalleryThumbnailPipelineTest --tests com.webapp.crazyshit.GalleryBlackImageTest --tests com.webapp.crazyshit.GalleryDiagnosticsTest --tests com.webapp.crazyshit.FavoriteImageNavigationTest
       - name: Assemble and verify side-by-side APK
         run: |
           set -euo pipefail
           gradle --no-daemon --console=plain --max-workers=3 :app:assembleDebug
           mkdir -p candidate
           bash tools/verify-android-build-lineage.sh candidate/APK-LINEAGE.txt
-          apk="candidate/ZeroChill-Spotlight-List-$(git rev-parse --short=8 HEAD).apk"
+          apk="candidate/ZeroChill-Settings-$(git rev-parse --short=8 HEAD).apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee candidate/APK-SIGNING.txt
           grep -Fx 'Signer #1 certificate SHA-256 digest: 04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356' candidate/APK-SIGNING.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$apk" > "$RUNNER_TEMP/beta-badging.txt"
-          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005073' versionName='7.5.0-spotlight-list.7-dev'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
+          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005074' versionName='7.5.0-settings.8-dev'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
       - name: Upload signed library search test APK
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Spotlight-List-signed-test
+          name: ZeroChill-Settings-signed-test
           path: candidate/
           retention-days: 14
           if-no-files-found: error

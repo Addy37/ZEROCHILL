@@ -56,7 +56,8 @@ public final class CreatorsActivity extends Activity {
     private int artworkRun;
     private EditText input;
     private LibraryDestinationChrome.SearchController inlineSearch;
-    private TextView empty, count;
+    private TextView empty, count, recentLabel, allFilter, updatesFilter;
+    private boolean updatesOnly, mergeMode;
     private RecyclerView recycler;
     private HorizontalScrollView recentScroll;
     private LinearLayout recentRow;
@@ -104,7 +105,7 @@ public final class CreatorsActivity extends Activity {
             return;
         }
         badgesDirty = false;
-        adapter.refreshBadges();
+        if (updatesOnly) render(); else adapter.refreshBadges();
     };
     private final SharedPreferences.OnSharedPreferenceChangeListener inboxListener = (prefs, key) -> {
         badgesDirty = true;
@@ -133,8 +134,15 @@ public final class CreatorsActivity extends Activity {
                 new LinearLayout.LayoutParams(dp(48), dp(48)));
         header.addView(BrowseUi.action(this, "⋮", "Favorite creators menu", v -> {
             ZeroChillMenu menu = new ZeroChillMenu(this, v);
-            menu.getMenu().add("Fetch missing artwork");
-            menu.setOnMenuItemClickListener(item -> { fetchMissingArtwork(); return true; });
+            menu.getMenu().add("Fetch missing artwork").setOnMenuItemClickListener(item -> {
+                fetchMissingArtwork(); return true;
+            });
+            menu.getMenu().add(mergeMode ? "Exit merge mode" : "Merge creators").setOnMenuItemClickListener(item -> {
+                mergeMode = !mergeMode;
+                if (mergeMode) ZeroChillToast.makeText(this, "Hold a creator and drag onto another to merge.", ZeroChillToast.LENGTH_LONG).show();
+                render();
+                return true;
+            });
             menu.show();
         }), new LinearLayout.LayoutParams(dp(48), dp(48)));
         LibraryDestinationChrome.attachHeader(root, header, title);
@@ -151,6 +159,14 @@ public final class CreatorsActivity extends Activity {
         count.setPadding(dp(16), dp(4), dp(16), dp(8));
         LibraryDestinationChrome.styleSummary(this, count);
         root.addView(count);
+        LinearLayout filters = new LinearLayout(this);
+        filters.setPadding(dp(12), 0, dp(12), dp(8));
+        filters.setGravity(Gravity.CENTER_VERTICAL);
+        allFilter = creatorFilter("All creators", false);
+        updatesFilter = creatorFilter("New updates", true);
+        filters.addView(allFilter);
+        filters.addView(updatesFilter);
+        root.addView(filters, new LinearLayout.LayoutParams(-1, -2));
         empty = BrowseUi.text(this, "", 15, BrowseUi.MUTED);
         empty.setGravity(Gravity.CENTER);
         empty.setPadding(dp(24), dp(32), dp(24), dp(24));
@@ -185,7 +201,7 @@ public final class CreatorsActivity extends Activity {
         });
         dragHelper = new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(
                 ItemTouchHelper.UP | ItemTouchHelper.DOWN | ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT, 0) {
-            @Override public boolean isLongPressDragEnabled() { return true; }
+            @Override public boolean isLongPressDragEnabled() { return mergeMode; }
             @Override public boolean onMove(RecyclerView list, RecyclerView.ViewHolder source,
                                             RecyclerView.ViewHolder target) { return false; }
             @Override public void onSwiped(RecyclerView.ViewHolder holder, int direction) { }
@@ -235,6 +251,10 @@ public final class CreatorsActivity extends Activity {
         });
         dragHelper.attachToRecyclerView(recycler);
 
+        recentLabel = BrowseUi.text(this, "Recently visited", 12, AppearanceTheme.secondaryText(this));
+        recentLabel.setPadding(dp(16), dp(2), dp(16), dp(6));
+        recentLabel.setVisibility(View.GONE);
+        root.addView(recentLabel);
         recentScroll = new HorizontalScrollView(this);
         recentScroll.setHorizontalScrollBarEnabled(false);
         recentScroll.setVisibility(View.GONE);
@@ -262,6 +282,8 @@ public final class CreatorsActivity extends Activity {
         setContentView(root);
         input.addTextChangedListener(BrowseUi.onText(value -> render()));
         if (state != null) {
+            updatesOnly = state.getBoolean("updates_only", false);
+            mergeMode = state.getBoolean("merge_mode", false);
             input.setText(state.getString("query", ""));
             inlineSearch.restore(state);
             pendingScroll = state.getParcelable("scroll");
@@ -311,19 +333,54 @@ public final class CreatorsActivity extends Activity {
         artworkDialog = null;
     }
 
+    private TextView creatorFilter(String title, boolean updates) {
+        TextView chip = BrowseUi.text(this, title, 13, AppearanceTheme.primaryText(this));
+        chip.setGravity(Gravity.CENTER);
+        chip.setPadding(dp(12), 0, dp(12), 0);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(44));
+        params.setMarginEnd(dp(6));
+        chip.setLayoutParams(params);
+        chip.setOnClickListener(v -> {
+            if (updatesOnly == updates) return;
+            updatesOnly = updates;
+            render();
+            recycler.scrollToPosition(0);
+        });
+        ZeroChillMotion.installPressFeedback(chip);
+        return chip;
+    }
+
+    static String creatorLetter(String title) {
+        String normalized = CreatorNameMatcher.normalized(title == null ? "" : title);
+        return LibraryBrowseGroups.letter(normalized);
+    }
+
     private void render() {
         List<CreatorCatalog.FavoriteGroup> creators = CreatorCatalog.favoriteGroups(this);
         String query = input.getText().toString();
         creators.removeIf(group -> CreatorNameMatcher.rank(group.item.title, query) == Integer.MAX_VALUE
                 && group.members.values().stream().noneMatch(member ->
                 CreatorNameMatcher.rank(member.title, query) != Integer.MAX_VALUE));
-        adapter.replace(creators);
+        // Keep each letter contiguous; symbols belong at the end of the index.
+        creators.sort(java.util.Comparator.comparingInt((CreatorCatalog.FavoriteGroup group) ->
+                LETTERS.indexOf(creatorLetter(group.item.title)))
+                .thenComparing(group -> CreatorNameMatcher.normalized(group.item.title)));
         bindRecent(creators);
+        if (updatesOnly) {
+            Map<String, Integer> counts = UpdateInboxStore.unreadCreatorContentCounts(this);
+            creators.removeIf(group -> UpdateInboxStore.unreadCreatorContentCount(counts, creatorAliases(group)) == 0);
+        }
+        ZeroChillUi.styleSourceRailChip(allFilter, !updatesOnly);
+        ZeroChillUi.styleSourceRailChip(updatesFilter, updatesOnly);
+        allFilter.setSelected(!updatesOnly);
+        updatesFilter.setSelected(updatesOnly);
+        adapter.replace(creators);
         bindLetterIndex();
         updateStickyLetter();
-        count.setText(creators.size() + (creators.size() == 1 ? " creator · A–Z" : " creators · A–Z"));
+        count.setText(creators.size() + (creators.size() == 1 ? " creator" : " creators")
+                + (mergeMode ? " · Merge mode" : updatesOnly ? " · New updates" : " · A–Z"));
         empty.setVisibility(creators.isEmpty() ? View.VISIBLE : View.GONE);
-        empty.setText(input.length() == 0 ? "No favorite creators yet\n\nTap + to find creators, then tap ☆ to save them here."
+        empty.setText(updatesOnly ? "No creators with new updates." : input.length() == 0 ? "No favorite creators yet\n\nTap + to find creators, then tap ☆ to save them here."
                 : "No favorite creators match your search.");
         if (pendingScroll != null) {
             recycler.getLayoutManager().onRestoreInstanceState(pendingScroll);
@@ -332,7 +389,9 @@ public final class CreatorsActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
-        if (inlineSearch == null || !inlineSearch.close()) super.onBackPressed();
+        if (inlineSearch != null && inlineSearch.close()) return;
+        if (mergeMode) { mergeMode = false; render(); return; }
+        super.onBackPressed();
     }
 
     @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
@@ -432,8 +491,9 @@ public final class CreatorsActivity extends Activity {
         if (recentScroll == null || recentRow == null) return;
         recentRow.removeAllViews();
         boolean searching = input != null && input.length() > 0;
-        if (searching || creators == null || creators.isEmpty()) {
+        if (updatesOnly || searching || creators == null || creators.isEmpty()) {
             recentScroll.setVisibility(View.GONE);
+            recentLabel.setVisibility(View.GONE);
             return;
         }
         Map<String, CreatorCatalog.FavoriteGroup> byUrl = new HashMap<>();
@@ -449,6 +509,7 @@ public final class CreatorsActivity extends Activity {
             if (++shown == 8) break;
         }
         recentScroll.setVisibility(shown == 0 ? View.GONE : View.VISIBLE);
+        recentLabel.setVisibility(shown == 0 ? View.GONE : View.VISIBLE);
     }
 
     private View recentChip(CreatorCatalog.FavoriteGroup group) {
@@ -721,7 +782,7 @@ public final class CreatorsActivity extends Activity {
 
         String letterAt(int position) {
             if (position < 0 || position >= cards.size() || cards.get(position).group.item == null) return "#";
-            return LibraryBrowseGroups.letter(cards.get(position).group.item.title);
+            return creatorLetter(cards.get(position).group.item.title);
         }
 
         boolean startsLetter(int position) {
@@ -789,9 +850,9 @@ public final class CreatorsActivity extends Activity {
 
             TextView more = BrowseUi.text(CreatorsActivity.this, "⋮", 23, Color.WHITE);
             more.setGravity(Gravity.CENTER);
-            more.setBackground(BrowseUi.rounded(CreatorsActivity.this, Color.argb(190, 0, 0, 0), 14));
-            FrameLayout.LayoutParams moreParams = new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.TOP | Gravity.START);
-            avatarFrame.addView(more, moreParams);
+            more.setTextSize(18);
+            more.setTextColor(AppearanceTheme.secondaryText(CreatorsActivity.this));
+            more.setBackgroundColor(Color.TRANSPARENT);
 
             TextView name = BrowseUi.text(CreatorsActivity.this, "", 13, Color.WHITE);
             name.setGravity(Gravity.CENTER);
@@ -799,8 +860,12 @@ public final class CreatorsActivity extends Activity {
             name.setEllipsize(TextUtils.TruncateAt.END);
             LinearLayout.LayoutParams nameParams =
                     new LinearLayout.LayoutParams(-1, -2);
-            nameParams.setMargins(dp(2), dp(7), dp(2), 0);
-            wrapper.addView(name, nameParams);
+            nameParams.setMargins(dp(2), dp(3), dp(2), 0);
+            LinearLayout captionRow = new LinearLayout(CreatorsActivity.this);
+            captionRow.setGravity(Gravity.CENTER_VERTICAL);
+            captionRow.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
+            captionRow.addView(more, new LinearLayout.LayoutParams(dp(32), dp(48)));
+            wrapper.addView(captionRow, nameParams);
 
             return new Holder(wrapper, avatar, name, updateBadge, mergeBadge, more);
         }
@@ -822,6 +887,11 @@ public final class CreatorsActivity extends Activity {
             holder.itemView.setOnClickListener(v -> openCreator(group, holder.avatar));
             holder.more.setContentDescription("Creator options for " + item.title);
             holder.more.setOnClickListener(v -> showMenu(v, group));
+            holder.itemView.setOnLongClickListener(v -> {
+                if (mergeMode) return false;
+                showMenu(v, group);
+                return true;
+            });
 
             Glide.with(holder.avatar).clear(holder.avatar);
             CreatorAvatarOverrideStore.Override avatarOverride = card.avatarOverride;
@@ -988,6 +1058,8 @@ public final class CreatorsActivity extends Activity {
     };
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putString("query", input.getText().toString());
+        state.putBoolean("updates_only", updatesOnly);
+        state.putBoolean("merge_mode", mergeMode);
         inlineSearch.save(state);
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
         if (pendingAvatarKeys != null) {
