@@ -551,6 +551,44 @@ public class VisualRefreshTest {
         screen.pause().stop().destroy();
     }
 
+    @Test public void spotlightPopulatesInitiallyEmptyNaturalGridWithoutChangingLayout() {
+        ActivityController<SearchActivity> screen = Robolectric.buildActivity(SearchActivity.class)
+                .create().start().resume().visible();
+        SearchPanel panel = screen.get().panel;
+        EditText input = ReflectionHelpers.getField(panel, "input");
+        input.setText("Coast");
+        ReflectionHelpers.callInstanceMethod(panel, "cancelSearchWork");
+        ReflectionHelpers.setField(panel, "scope", SearchPanel.Scope.EROME);
+        ReflectionHelpers.setField(panel, "activeQuery", "Coast");
+        SearchLayoutPreference.set(screen.get(), SearchPanel.Scope.EROME, SearchLayoutPreference.Mode.GRID);
+        ReflectionHelpers.callInstanceMethod(panel, "applyScopeAdapter");
+        RecyclerView recycler = ReflectionHelpers.getField(panel, "recycler");
+        RecyclerView.LayoutManager manager = recycler.getLayoutManager();
+        assertTrue(manager instanceof androidx.recyclerview.widget.StaggeredGridLayoutManager);
+        View root = ((ViewGroup) screen.get().findViewById(android.R.id.content)).getChildAt(0);
+        int w = BrowseUi.dp(screen.get(), 411), h = BrowseUi.dp(screen.get(), 891);
+        int ws = View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY);
+        int hs = View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY);
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(220));
+        root.measure(ws, hs);
+        root.layout(0, 0, w, h);
+        assertEquals(0, recycler.getAdapter().getItemCount());
+        NativeContentItem album = new NativeContentItem(NativeContentItem.KIND_SERIES,
+                "Coast", "https://example.invalid/a/coast", "", "", "", "");
+        ReflectionHelpers.setField(panel, "eromeResults", Collections.singletonList(album));
+        ReflectionHelpers.callInstanceMethod(panel, "renderResults");
+        assertTrue(recycler.isLayoutRequested());
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(220));
+        root.measure(ws, hs);
+        root.layout(0, 0, w, h);
+        assertEquals(2, recycler.getAdapter().getItemCount());
+        assertSame(manager, recycler.getLayoutManager());
+        assertNotNull(recycler.findViewHolderForAdapterPosition(1));
+        assertEquals(SearchLayoutPreference.Mode.GRID,
+                SearchLayoutPreference.get(screen.get(), SearchPanel.Scope.EROME));
+        screen.pause().stop().destroy();
+    }
+
     @Test public void searchResultsLeaveRoomForTheKeyboardAndOpenTheCreator() throws Exception {
         ActivityController<SearchActivity> screen = Robolectric.buildActivity(SearchActivity.class).create().start().resume().visible();
         CreatorCatalog.remember(screen.get(), Collections.singletonList(creator()));
@@ -571,6 +609,7 @@ public class VisualRefreshTest {
         capture(root, "creator-search-keyboard-space", 360, 380);
         RecyclerView suggestionList = ReflectionHelpers.getField(panel, "recycler");
         assertTrue(suggestionList.getHeight() - suggestionList.getPaddingTop() >= BrowseUi.dp(screen.get(), 104));
+        assertNotNull(suggestionList.findViewHolderForAdapterPosition(0));
         GlassHeaderView scopes = ReflectionHelpers.getField(panel, "scopeSurface");
         GlassHeaderView header = ReflectionHelpers.getField(panel, "header");
         assertEquals(View.VISIBLE, scopes.getVisibility());
