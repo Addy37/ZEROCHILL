@@ -114,11 +114,44 @@ public class LibraryDestinationChromeTest {
         assertEquals("Favorite creators", title.getText().toString());
         assertEquals(2, title.getMaxLines());
         assertEquals(AppearanceTheme.accent(activity), back.getCurrentTextColor());
+        assertNotNull(back.getCompoundDrawables()[0]);
+        assertEquals(android.graphics.Color.TRANSPARENT,
+                ((android.graphics.drawable.ColorDrawable) header.getBackground()).getColor());
         assertTrue(back.performClick());
         assertTrue(menu.performClick());
         assertEquals(1, backCalls.get());
         assertEquals(1, menuCalls.get());
         assertTrue(back.getMinimumHeight() >= BrowseUi.dp(activity, 48));
+    }
+
+    @Test public void inlineSearchExpandsClosesAndRestoresWithoutReplacingInput() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        LinearLayout header = new LinearLayout(activity);
+        TextView back = BrowseUi.action(activity, "‹", "Back", v -> {});
+        TextView title = new TextView(activity); title.setText("Favorites");
+        TextView menu = new TextView(activity);
+        header.addView(back); header.addView(title); header.addView(menu);
+        EditText field = new EditText(activity); field.setHint("Search Favorites");
+        LibraryDestinationChrome.SearchController search =
+                LibraryDestinationChrome.attachInlineSearch(activity, header, title, field);
+        assertEquals(View.GONE, field.getVisibility());
+        search.show(false);
+        assertEquals(View.VISIBLE, field.getVisibility());
+        assertEquals(View.GONE, title.getVisibility());
+        assertEquals(View.GONE, menu.getVisibility());
+        field.setText("sample");
+        android.os.Bundle state = new android.os.Bundle(); search.save(state);
+        assertTrue(state.getBoolean("inline_search"));
+        assertTrue(search.close());
+        assertEquals("", field.getText().toString());
+        assertEquals(View.VISIBLE, title.getVisibility());
+        assertEquals(View.VISIBLE, menu.getVisibility());
+        field.setText("sample");
+        search.restore(state);
+        assertTrue(search.isOpen());
+        assertEquals("sample", field.getText().toString());
+        assertEquals(5, LibraryGridGesture.clamp(8));
+        assertEquals(2, LibraryGridGesture.next(5));
     }
 
     @Test public void searchAndSummaryKeepTheirExistingTextAndInput() {
@@ -140,7 +173,7 @@ public class LibraryDestinationChromeTest {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         MaterialCardView card = new MaterialCardView(activity);
         LibraryDestinationChrome.styleMediaCard(activity, card);
-        assertTrue(card.getStrokeWidth() >= 1);
+        assertEquals(0, card.getStrokeWidth());
         assertEquals(0f, card.getCardElevation(), 0.01f);
         AtomicInteger clicks = new AtomicInteger();
         LinearLayout row = new LinearLayout(activity);

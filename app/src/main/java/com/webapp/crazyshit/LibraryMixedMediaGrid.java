@@ -29,6 +29,10 @@ final class LibraryMixedMediaGrid extends LinearLayout {
 
     private final List<Entry> entries = new ArrayList<>();
     private boolean reflowPending;
+    private int columns = 2;
+    void setColumns(int value) {
+        columns = LibraryGridGesture.clamp(value);
+    }
     private final Runnable reflowTask = () -> {
         reflowPending = false;
         reflow();
@@ -77,6 +81,22 @@ final class LibraryMixedMediaGrid extends LinearLayout {
         }
         removeAllViews();
         LinearLayout pendingPortrait = null;
+        if (columns > 2) {
+            LinearLayout current = null;
+            for (Entry entry : entries) {
+                if (current == null || current.getChildCount() == columns) {
+                    current = row(); addView(current, rowParams());
+                }
+                LibraryAspectMediaCard card = findAspectCard(entry.view);
+                if (card != null) card.setUniform(true);
+                LayoutParams cell = new LayoutParams(0, -2, 1f);
+                cell.setMargins(dp(4), 0, dp(4), 0);
+                current.addView(entry.view, cell);
+            }
+            if (current != null) while (current.getChildCount() < columns)
+                current.addView(new View(getContext()), new LayoutParams(0, 1, 1f));
+            return;
+        }
         for (Entry entry : entries) {
             LibraryAspectMediaCard mediaCard = findAspectCard(entry.view);
             if (mediaCard != null) mediaCard.setPortrait(entry.portrait);

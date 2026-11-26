@@ -55,6 +55,7 @@ public final class CreatorsActivity extends Activity {
     private java.util.concurrent.atomic.AtomicBoolean artworkCancelled = new java.util.concurrent.atomic.AtomicBoolean();
     private int artworkRun;
     private EditText input;
+    private LibraryDestinationChrome.SearchController inlineSearch;
     private TextView empty, count;
     private RecyclerView recycler;
     private HorizontalScrollView recentScroll;
@@ -145,9 +146,7 @@ public final class CreatorsActivity extends Activity {
         input.setSingleLine(true);
         input.setPadding(dp(14), 0, dp(14), 0);
         LibraryDestinationChrome.styleSearch(this, input);
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
-        inputParams.setMargins(dp(12), 0, dp(12), dp(8));
-        root.addView(input, inputParams);
+        inlineSearch = LibraryDestinationChrome.attachInlineSearch(this, header, title, input);
         count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
         count.setPadding(dp(16), dp(4), dp(16), dp(8));
         LibraryDestinationChrome.styleSummary(this, count);
@@ -264,6 +263,7 @@ public final class CreatorsActivity extends Activity {
         input.addTextChangedListener(BrowseUi.onText(value -> render()));
         if (state != null) {
             input.setText(state.getString("query", ""));
+            inlineSearch.restore(state);
             pendingScroll = state.getParcelable("scroll");
             pendingAvatarKeys = state.getStringArrayList("pending_avatar_keys");
         }
@@ -329,6 +329,10 @@ public final class CreatorsActivity extends Activity {
             recycler.getLayoutManager().onRestoreInstanceState(pendingScroll);
             pendingScroll = null;
         }
+    }
+
+    @Override public void onBackPressed() {
+        if (inlineSearch == null || !inlineSearch.close()) super.onBackPressed();
     }
 
     @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
@@ -834,7 +838,7 @@ public final class CreatorsActivity extends Activity {
                             () -> !stopped && holder.bound == group, card.decodeSide));
                 }
                 request.priority(Priority.HIGH)
-                        .transition(ThumbnailFades.avatar())
+                        .transition(SharedArtworkReveal.artwork("favorite-creators", item.url, true))
                         .placeholder(holder.placeholder)
                         .error(R.drawable.ic_more_account)
                         .into(holder.avatar);
@@ -984,6 +988,7 @@ public final class CreatorsActivity extends Activity {
     };
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putString("query", input.getText().toString());
+        inlineSearch.save(state);
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
         if (pendingAvatarKeys != null) {
             state.putStringArrayList("pending_avatar_keys", pendingAvatarKeys);

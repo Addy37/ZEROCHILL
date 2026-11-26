@@ -61,6 +61,8 @@ public class FavoritesActivity extends Activity {
     public static final String EXTRA_COLLECTION_ID = "collection_id";
     private String collectionId = "";
     private int collectionColumns = 2;
+    private boolean oldestFirst;
+    private LibraryDestinationChrome.SearchController inlineSearch;
     private TextView sectionHeading;
     private android.view.ScaleGestureDetector collectionScale;
     private boolean collectionGesture;
@@ -114,6 +116,9 @@ public class FavoritesActivity extends Activity {
         if (!collectionId.isEmpty()) {
             mediaFavorites = true;
             tab = TAB_WATCH_LATER;
+        }
+        {
+            if (state != null) oldestFirst = state.getBoolean("oldest_first");
             if (state != null) collectionColumns = Math.max(2, Math.min(5, state.getInt("collection_columns", 2)));
             collectionScale = new android.view.ScaleGestureDetector(this,
                     new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -145,6 +150,7 @@ public class FavoritesActivity extends Activity {
             input.setText(state.getString("query", ""));
             input.setSelection(input.length());
             sourceFilter = state.getString("source_filter", "All");
+            inlineSearch.restore(state);
         }
     }
 
@@ -173,6 +179,8 @@ public class FavoritesActivity extends Activity {
     protected void onSaveInstanceState(Bundle state) {
         state.putString("query", searchQuery());
         state.putInt("collection_columns", collectionColumns);
+        state.putBoolean("oldest_first", oldestFirst);
+        inlineSearch.save(state);
         state.putString("source_filter", sourceFilter);
         super.onSaveInstanceState(state);
     }
@@ -208,14 +216,14 @@ public class FavoritesActivity extends Activity {
         input.setPadding(dp(14), 0, dp(14), 0);
         LibraryDestinationChrome.styleSearch(this, input);
         input.setContentDescription("Search " + sectionTitle());
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
-        inputParams.setMargins(dp(12), 0, dp(12), dp(8));
-        root.addView(input, inputParams);
+        inlineSearch = LibraryDestinationChrome.attachInlineSearch(this, header, title, input);
 
         count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
         count.setPadding(dp(16), dp(4), dp(16), dp(8));
-        LibraryDestinationChrome.styleSummary(this, count);
-        root.addView(count);
+        LibraryDestinationChrome.attachSummary(root, count, () -> {
+            oldestFirst = !oldestFirst; renderAllPages();
+            ZeroChillToast.makeText(this, oldestFirst ? "Oldest first" : "Recent first", ZeroChillToast.LENGTH_SHORT).show();
+        }, () -> { collectionColumns = LibraryGridGesture.next(collectionColumns); renderAllPages(); });
 
         HorizontalScrollView chips = new HorizontalScrollView(this);
         chips.setHorizontalScrollBarEnabled(false);
@@ -258,6 +266,10 @@ public class FavoritesActivity extends Activity {
         scroll.addView(list, new ScrollView.LayoutParams(-1, -2));
         page.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         return page;
+    }
+
+    @Override public void onBackPressed() {
+        if (inlineSearch == null || !inlineSearch.close()) super.onBackPressed();
     }
 
     @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
@@ -345,10 +357,12 @@ public class FavoritesActivity extends Activity {
                 items.removeIf(item -> !sourceFilter.equals(LibraryBrowseGroups.sourceLabel(item.pageUrl)));
             }
         }
-        updateCount(items.size(), allItems.size(), continueOnly ? "In progress" : "Recent first");
+        items.sort((a, b) -> oldestFirst ? Long.compare(a.lastWatched, b.lastWatched)
+                : Long.compare(b.lastWatched, a.lastWatched));
+        updateCount(items.size(), allItems.size(), continueOnly ? "In progress" : oldestFirst ? "Oldest first" : "Recent first");
         if (!continueOnly && count != null && !"All".equals(sourceFilter)
                 && LibrarySearch.normalize(query).isEmpty()) {
-            String noun = items.size() == 1 ? "video" : "videos";
+            String noun = items.size() == 1 ? "item" : "items";
             count.setText(items.size() + " " + noun + " · " + sourceFilter);
         }
 
@@ -386,7 +400,7 @@ public class FavoritesActivity extends Activity {
             rememberPoster(item);
             groups.get(LibraryBrowseGroups.dateBucket(item.lastWatched, now)).add(item);
         }
-        for (String bucket : LibraryBrowseGroups.DATE_ORDER) {
+        for (String bucket : dateOrder()) {
             List<View> cards = new ArrayList<>();
             for (PlaybackHistoryStore.Item item : groups.get(bucket)) cards.add(makeUniformHistoryCard(item));
             addUniformSection(target, bucket, cards);
@@ -517,8 +531,7 @@ public class FavoritesActivity extends Activity {
         wrapper.addView(title, titleParams);
 
         String meta = item.lastWatched > 0L
-                ? (item.complete ? "Watched " : "Resume · ") + DateFormat.getDateTimeInstance(
-                        DateFormat.SHORT, DateFormat.SHORT).format(new Date(item.lastWatched))
+                ? (item.complete ? "Watched " : "Resume · ") + LibraryDestinationChrome.compactDate(item.lastWatched, System.currentTimeMillis())
                 : "Watched";
         TextView detail = text(meta, 12, UiPalette.TEXT_MUTED);
         detail.setMaxLines(1);
@@ -567,9 +580,10 @@ public class FavoritesActivity extends Activity {
         if (!"All".equals(sourceFilter)) {
             items.removeIf(item -> !sourceFilter.equals(LibraryBrowseGroups.sourceLabel(item.url)));
         }
+        items.sort((a, b) -> oldestFirst ? Long.compare(a.savedAt, b.savedAt) : Long.compare(b.savedAt, a.savedAt));
         updateCount(items.size(), allItems.size(), "Saved");
         if (count != null && !"All".equals(sourceFilter) && LibrarySearch.normalize(query).isEmpty()) {
-            String noun = items.size() == 1 ? "video" : "videos";
+            String noun = items.size() == 1 ? "item" : "items";
             count.setText(items.size() + " " + noun + " · " + sourceFilter);
         }
 
@@ -590,7 +604,7 @@ public class FavoritesActivity extends Activity {
         for (FavoriteStore.Item item : items) {
             groups.get(LibraryBrowseGroups.dateBucket(item.savedAt, now)).add(item);
         }
-        for (String bucket : LibraryBrowseGroups.DATE_ORDER) {
+        for (String bucket : dateOrder()) {
             List<View> cards = new ArrayList<>();
             for (FavoriteStore.Item item : groups.get(bucket)) cards.add(makeWatchLaterCard(item));
             addUniformSection(target, bucket, cards);
@@ -644,8 +658,7 @@ public class FavoritesActivity extends Activity {
         wrapper.addView(title, titleParams);
 
         String date = item.savedAt > 0L
-                ? "Saved " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-                .format(new Date(item.savedAt))
+                ? "Saved " + LibraryDestinationChrome.compactDate(item.savedAt, System.currentTimeMillis())
                 : "Saved";
         TextView saved = text(date, 12, UiPalette.TEXT_MUTED);
         saved.setMaxLines(1);
@@ -735,12 +748,18 @@ public class FavoritesActivity extends Activity {
         }
     }
 
+    private String[] dateOrder() {
+        String[] order = LibraryBrowseGroups.DATE_ORDER.clone();
+        if (oldestFirst) java.util.Collections.reverse(java.util.Arrays.asList(order));
+        return order;
+    }
+
     private void addUniformSection(LinearLayout target, String heading, List<View> cards) {
         if (cards == null || cards.isEmpty()) return;
         TextView label = LibraryDestinationChrome.sectionHeading(this, heading);
         label.setTag("library-date-heading");
         target.addView(label);
-        int columns = collectionId.isEmpty() ? 2 : collectionColumns;
+        int columns = collectionColumns;
         for (int i = 0; i < cards.size(); i += columns) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
@@ -777,6 +796,7 @@ public class FavoritesActivity extends Activity {
 
     private void addMixedGallery(LinearLayout target, List<View> cards, List<String> keys) {
         activeMixedGrid = new LibraryMixedMediaGrid(this);
+        activeMixedGrid.setColumns(collectionColumns);
         activeMixedGrid.setItems(cards, keys, portraitThumbnails);
         target.addView(activeMixedGrid, new LinearLayout.LayoutParams(-1, -2));
     }
@@ -787,7 +807,7 @@ public class FavoritesActivity extends Activity {
         view.setContentDescription(description);
         view.setClickable(true);
         view.setFocusable(true);
-        view.setBackground(rounded(Color.argb(150, 0, 0, 0), dp(17)));
+        view.setBackground(rounded(Color.argb(110, 0, 0, 0), dp(15)));
         return view;
     }
 
@@ -834,7 +854,7 @@ public class FavoritesActivity extends Activity {
 
         TextView play = text("▶", 20, Color.WHITE);
         play.setGravity(Gravity.CENTER);
-        play.setBackground(new ColorDrawable(Color.argb(115, 0, 0, 0)));
+        play.setShadowLayer(dp(4), 0, dp(1), Color.BLACK);
         FrameLayout.LayoutParams playParams = new FrameLayout.LayoutParams(dp(38), dp(38));
         playParams.gravity = Gravity.CENTER;
         media.addView(play, playParams);
@@ -898,8 +918,7 @@ public class FavoritesActivity extends Activity {
                     })
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .dontAnimate()
-                    .transition(collectionId.isEmpty() ? ThumbnailFades.thumbnail()
-                            : SharedArtworkReveal.artwork("collection-" + collectionId, pageUrl, false))
+                    .transition(SharedArtworkReveal.artwork("library-" + sectionTitle(), pageUrl, false))
                     .placeholder(new ColorDrawable(UiPalette.SURFACE))
                     .error(new ColorDrawable(UiPalette.SURFACE))
                     .into(image);
@@ -959,6 +978,11 @@ public class FavoritesActivity extends Activity {
         TextView body = text(bodyValue, 14, UiPalette.TEXT_SECONDARY);
         body.setGravity(Gravity.CENTER);
         body.setPadding(0, dp(8), 0, 0);
+        ImageView symbol = new ImageView(this);
+        symbol.setImageResource(R.drawable.ic_more_library);
+        symbol.setColorFilter(AppearanceTheme.mutedText(this));
+        empty.addView(symbol, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        title.setPadding(0, dp(12), 0, 0);
         empty.addView(title);
         empty.addView(body);
         target.addView(empty);
@@ -984,7 +1008,7 @@ public class FavoritesActivity extends Activity {
 
     private void updateCount(int visible, int total, String label) {
         if (count == null) return;
-        String noun = total == 1 ? "video" : "videos";
+        String noun = total == 1 ? "item" : "items";
         if (LibrarySearch.normalize(searchQuery()).isEmpty()) {
             count.setText(total + " " + noun + " · " + label);
         } else {
