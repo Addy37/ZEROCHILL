@@ -74,6 +74,32 @@ public class StartupWizardUiTest {
         assertNull(find(root, "I confirm that I am 18 or older."));
     }
 
+    @Test public void tourExplainsCurrentFeaturesAndUsesStaticPreviewsWithMotionOff() throws Exception {
+        Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("immersive_motion_enabled", false).commit();
+        try {
+            StartupWizardActivity activity = create();
+            Method showPage = StartupWizardActivity.class.getDeclaredMethod("showPage", int.class, boolean.class);
+            showPage.setAccessible(true);
+            showPage.invoke(activity, 2, true);
+            View root = activity.getWindow().getDecorView();
+            assertNotNull(find(root, "Spotlight search"));
+            assertNotNull(find(root, "Switch between Chaos, Straight, Gay, Trans and Groups. Each feed remembers its own place."));
+            View preview = findDescription(root, "Illustration of independent feeds and custom collections");
+            assertNotNull(preview);
+            assertNull(org.robolectric.util.ReflectionHelpers.getField(preview, "animator"));
+            showPage.invoke(activity, 3, true);
+            assertNotNull(find(root, "Made for your fingertips"));
+            assertNotNull(find(root, "Find a favorite creator"));
+            assertNotNull(find(root, "Save and organize"));
+            assertNotNull(findDescription(root, "Illustration of video swiping and favorite creator alphabet scrolling"));
+            activity.finish();
+        } finally {
+            context.getSharedPreferences("app_prefs", 0).edit().remove("immersive_motion_enabled").commit();
+        }
+    }
+
     @Test public void finalPageOffersOptionalCreateAndSignInEntries() throws Exception {
         StartupWizardActivity activity = create();
         showSettings(activity);

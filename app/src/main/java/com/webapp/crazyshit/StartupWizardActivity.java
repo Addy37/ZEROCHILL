@@ -274,7 +274,9 @@ public final class StartupWizardActivity extends Activity {
         mascotParams.bottomMargin = dp(14);
         column.addView(mascot, mascotParams);
 
-        column.addView(wordmark(40f));
+        LinearLayout branding = wordmark(40f);
+        branding.setTag("wizard_wordmark");
+        column.addView(branding);
 
         TextView tagline = text("NO LIMITS. ALL CONTENT.", 11f,
                 color(R.color.zc_text_secondary), true);
@@ -291,7 +293,7 @@ public final class StartupWizardActivity extends Activity {
         column.addView(shortline, shortParams);
 
         TextView sub = text(
-                "A faster way to move through the content you want, without getting in your way.",
+                "Browse at your own pace, find what you like, and keep your favorites together.",
                 13.5f,
                 color(R.color.zc_text_secondary),
                 false
@@ -395,27 +397,33 @@ public final class StartupWizardActivity extends Activity {
         LinearLayout column = pageColumn(scroll);
         addEyebrow(column, "THE EXPERIENCE");
         addTitle(column, "Meet ZEROCHILL");
-        addSubtitle(column, "Four spaces. One app. Everything stays close.");
+        addSubtitle(column, "Five independent feeds, browsing, search and your personal Library. Here is how it all fits together.");
+        addTourPreview(column, false);
 
         column.addView(experienceCard(
                 R.drawable.ic_nav_chaos,
                 "ShitTok",
-                "Swipe through a mixed video feed built for fast discovery."
+                "Switch between Chaos, Straight, Gay, Trans and Groups. Each feed remembers its own place."
         ), cardParams());
         column.addView(experienceCard(
                 R.drawable.ic_nav_series,
                 "Shows",
-                "Browse featured content, series, categories, and weekly picks."
+                "Browse videos, series, categories and weekly picks. Search by title or topic."
         ), cardParams());
         column.addView(experienceCard(
                 R.drawable.ic_nav_onlyfap,
                 "OnlyFap",
-                "Explore creators, galleries, favorites, and the randomized Discover shelf."
+                "Browse creators and galleries, including Pawchive, and save favorite creators."
+        ), cardParams());
+        column.addView(experienceCard(
+                R.drawable.ic_nav_search,
+                "Spotlight search",
+                "Search by source, use the available filters, and browse results in one clear list."
         ), cardParams());
         column.addView(experienceCard(
                 R.drawable.ic_more_library,
                 "Library",
-                "Continue watching, revisit history, manage Watch Later, downloads, and favorite creators."
+                "Resume playback, organize custom collections, and manage saved items, favorites and messages."
         ), cardParams());
         return scroll;
     }
@@ -424,25 +432,24 @@ public final class StartupWizardActivity extends Activity {
         ScrollView scroll = pageScroll();
         LinearLayout column = pageColumn(scroll);
         addEyebrow(column, "FLUID CONTROLS");
-        addTitle(column, "Built around gestures");
-        addSubtitle(column, "The important controls stay close. Everything else stays out of the way.");
-
-        GridMorphPreviewView previewView = new GridMorphPreviewView(this);
-        previewView.setBackground(panelBackground(18));
-        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, dp(150));
-        previewParams.bottomMargin = dp(12);
-        column.addView(previewView, previewParams);
+        addTitle(column, "Made for your fingertips");
+        addSubtitle(column, "Learn the everyday gestures before you enter the app.");
+        addTourPreview(column, true);
 
         column.addView(controlCard("↑ ↓", "Swipe ShitTok",
                 "Move to the next or previous clip."), cardParams());
         column.addView(controlCard("TAP", "Pause or resume",
                 "Tap the current ShitTok clip to pause or keep watching."), cardParams());
         column.addView(controlCard("↔", "Open creator flow",
-                "Swipe sideways from supported ShitTok clips to move into the creator gallery."), cardParams());
+                "On supported clips, swipe sideways or tap the gallery indicator to open the associated creator or album."), cardParams());
         column.addView(controlCard("PINCH", "Resize OnlyFap",
-                "Pinch a creator gallery and the holographic grid morphs smoothly around your fingers."), cardParams());
-        column.addView(controlCard("HOLD", "More actions",
-                "Long press supported media for downloads and additional actions."), cardParams());
+                "Pinch supported galleries to change the number of columns."), cardParams());
+        column.addView(controlCard("2×", "Jump ten seconds",
+                "Double-tap the left or right side of a supported video to seek backward or forward."), cardParams());
+        column.addView(controlCard("HOLD", "Save and organize",
+                "Long press supported media for collection, download and other available actions."), cardParams());
+        column.addView(controlCard("A–Z", "Find a favorite creator",
+                "Drag your finger along the alphabet at the side of Favorite creators to jump between letters."), cardParams());
         return scroll;
     }
 
@@ -451,7 +458,7 @@ public final class StartupWizardActivity extends Activity {
         LinearLayout column = pageColumn(scroll);
         addEyebrow(column, "YOUR DEFAULTS");
         addTitle(column, "Make it yours");
-        addSubtitle(column, "Choose your starting preferences. You can change them later in Settings.");
+        addSubtitle(column, "Pick an accent, set your device alerts and connect an optional account. You can change these later in Settings.");
 
         column.addView(buildAccentCard(), cardParams());
 
@@ -491,7 +498,17 @@ public final class StartupWizardActivity extends Activity {
         LinearLayout.LayoutParams noteParams = new LinearLayout.LayoutParams(-1, -2);
         noteParams.topMargin = dp(8);
         column.addView(note, noteParams);
+        column.addView(infoCard("FIND IT LATER",
+                "Settings groups Appearance, Notifications, Content & playback, Account & privacy, Library & storage, App updates, Advanced and About. Search for a setting or replay this tour from About ZEROCHILL."), cardParams());
         return scroll;
+    }
+
+    private void addTourPreview(LinearLayout column, boolean gestures) {
+        TourPreviewView previewView = new TourPreviewView(this, gestures, previewAccentColor);
+        previewView.setBackground(panelBackground(18));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(172));
+        params.bottomMargin = dp(12);
+        column.addView(previewView, params);
     }
 
     private View buildAccentCard() {
@@ -945,6 +962,13 @@ public final class StartupWizardActivity extends Activity {
 
     private void onPageVisible(View view) {
         if (page == PAGE_WELCOME && ZeroChillMotion.animationsEnabled(this)) {
+            View branding = view.findViewWithTag("wizard_wordmark");
+            if (branding != null) {
+                branding.setAlpha(0f);
+                branding.setTranslationY(dp(7));
+                branding.animate().alpha(1f).translationY(0f).setDuration(420L)
+                        .setInterpolator(new DecelerateInterpolator()).start();
+            }
             View outline = view.findViewWithTag("wizard_mascot_outline");
             if (outline != null) {
                 ambientPulse = ObjectAnimator.ofFloat(outline, View.ALPHA, 1f, 0.58f, 1f);
@@ -1241,102 +1265,168 @@ public final class StartupWizardActivity extends Activity {
         void onChanged(boolean checked);
     }
 
-    /** Tiny looping visualization of the new holographic creator-gallery density morph. */
-    private static final class GridMorphPreviewView extends View {
-        private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** Offline, illustrative UI previews. No provider media, requests, or user data. */
+    static final class TourPreviewView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF rect = new RectF();
+        private final boolean gestures;
+        private final int accent;
         private ValueAnimator animator;
-        private float fraction;
+        private float phase = .5f;
 
-        GridMorphPreviewView(Activity context) {
+        TourPreviewView(Activity context, boolean gestures, int accent) {
             super(context);
-            fill.setStyle(Paint.Style.FILL);
-            fill.setColor(Color.argb(26, 8, 146, 208));
-            stroke.setStyle(Paint.Style.STROKE);
-            stroke.setStrokeWidth(dp(context, 1.25f));
-            stroke.setColor(Color.argb(210, 8, 146, 208));
-            setContentDescription("Animated creator gallery grid resizing preview");
+            this.gestures = gestures;
+            this.accent = accent;
+            setContentDescription(gestures
+                    ? "Illustration of video swiping and favorite creator alphabet scrolling"
+                    : "Illustration of independent feeds and custom collections");
+            setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
         }
 
-        @Override
-        protected void onAttachedToWindow() {
+        @Override protected void onAttachedToWindow() {
             super.onAttachedToWindow();
-            if (!ValueAnimator.areAnimatorsEnabled()) {
-                fraction = 1f;
-                invalidate();
-                return;
-            }
+            startPreview();
+        }
+
+        @Override protected void onWindowVisibilityChanged(int visibility) {
+            super.onWindowVisibilityChanged(visibility);
+            if (visibility == View.VISIBLE && isAttachedToWindow()) startPreview();
+            else stopPreview();
+        }
+
+        private void startPreview() {
+            if (animator != null || !ZeroChillMotion.animationsEnabled(getContext())) return;
             animator = ValueAnimator.ofFloat(0f, 1f);
-            animator.setDuration(1350L);
-            animator.setRepeatCount(ValueAnimator.INFINITE);
+            animator.setDuration(2400L);
+            animator.setRepeatCount(3);
             animator.setRepeatMode(ValueAnimator.REVERSE);
             animator.setInterpolator(new AccelerateDecelerateInterpolator());
             animator.addUpdateListener(value -> {
-                fraction = (float) value.getAnimatedValue();
+                phase = (float) value.getAnimatedValue();
                 invalidate();
             });
             animator.start();
         }
 
-        @Override
-        protected void onDetachedFromWindow() {
+        private void stopPreview() {
             if (animator != null) animator.cancel();
             animator = null;
+            phase = .5f;
+            invalidate();
+        }
+
+        @Override protected void onDetachedFromWindow() {
+            stopPreview();
             super.onDetachedFromWindow();
         }
 
-        @Override
-        protected void onDraw(Canvas canvas) {
+        @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            float pad = dp(getContextActivity(), 14f);
-            float gap = dp(getContextActivity(), 7f);
-            float usableWidth = Math.max(1f, getWidth() - (pad * 2f));
-            float usableHeight = Math.max(1f, getHeight() - (pad * 2f));
+            float scale = Math.min(getWidth() / 300f, getHeight() / 172f);
+            if (scale <= 0f) return;
+            canvas.save();
+            canvas.translate((getWidth() - 300f * scale) / 2f, (getHeight() - 172f * scale) / 2f);
+            canvas.scale(scale, scale);
+            phone(canvas, 16, gestures ? "SWIPE" : "FIVE FEEDS");
+            phone(canvas, 160, gestures ? "FAST SCROLL" : "COLLECTIONS");
 
-            for (int index = 0; index < 8; index++) {
-                RectF start = cell(index, 2, 4, usableWidth, usableHeight, pad, gap);
-                RectF end = cell(index, 4, 2, usableWidth, usableHeight, pad, gap);
-                rect.set(
-                        lerp(start.left, end.left, fraction),
-                        lerp(start.top, end.top, fraction),
-                        lerp(start.right, end.right, fraction),
-                        lerp(start.bottom, end.bottom, fraction)
-                );
-                float radius = dp(getContextActivity(), 8f);
-                canvas.drawRoundRect(rect, radius, radius, fill);
-                canvas.drawRoundRect(rect, radius, radius, stroke);
+            // Feed preview: neutral artwork, five compact tabs, one highlighted.
+            for (int i = 0; i < 5; i++) {
+                int selected = gestures ? 1 : Math.min(4, (int) (phase * 5));
+                round(canvas, 26 + i * 20, 27, 42 + i * 20, 30, 2,
+                        i == selected ? accent : 0xff46515c);
             }
+            canvas.save();
+            canvas.clipRect(25, 36, 131, 126);
+            float shift = gestures ? phase * 28f : 0f;
+            for (int i = 0; i < 2; i++) {
+                float y = 36 + i * 94 - shift;
+                art(canvas, 25, y, 131, y + 90, i);
+            }
+            canvas.restore();
+            round(canvas, 32, 132, 92, 136, 2, 0xff9ba8b4);
+            round(canvas, 32, 141, 66, 144, 2, 0xff46515c);
+            if (gestures) {
+                float y = 99 - phase * 32f;
+                line(canvas, 77, y + 23, 77, y, accent, 2.5f);
+                line(canvas, 70, y + 8, 77, y, accent, 2.5f);
+                line(canvas, 84, y + 8, 77, y, accent, 2.5f);
+            }
+
+            if (gestures) {
+                int index = Math.min(4, (int)(phase * 5));
+                String[] letters = {"A", "F", "M", "S", "Z"};
+                for (int i = 0; i < 6; i++) {
+                    float x = 177 + (i % 3) * 25, y = 48 + (i / 3) * 43;
+                    paint.setColor(0xff273b47);
+                    canvas.drawCircle(x + 8, y + 8, 10, paint);
+                    round(canvas, x - 1, y + 22, x + 17, y + 25, 1.5f, 0xff788995);
+                }
+                for (int i = 0; i < letters.length; i++) {
+                    float y = 46 + i * 19;
+                    if (i == index) round(canvas, 261, y - 10, 277, y + 5, 5, accent);
+                    label(canvas, letters[i], 269, y, 9, i == index ? 0xff000000 : 0xffb4bec6);
+                }
+                float bubbleY = 43 + index * 19;
+                round(canvas, 222, bubbleY - 12, 251, bubbleY + 17, 8, accent);
+                label(canvas, letters[index], 236.5f, bubbleY + 8, 17, 0xff000000);
+            } else {
+                for (int i = 0; i < 4; i++) {
+                    float x = 176 + (i % 2) * 51;
+                    float y = 37 + (i / 2) * 55;
+                    float lift = i == 0 ? phase * 3f : 0;
+                    round(canvas, x + 5, y - 4 - lift, x + 36, y + 30, 5, 0xff324d58);
+                    round(canvas, x - 3, y + 1, x + 29, y + 33, 5, 0xff425d68);
+                    art(canvas, x, y, x + 33, y + 35, i);
+                    round(canvas, x, y + 40, x + 31, y + 43, 2, i == 0 ? accent : 0xff80919d);
+                }
+            }
+            canvas.restore();
         }
 
-        private RectF cell(
-                int index,
-                int columns,
-                int rows,
-                float width,
-                float height,
-                float pad,
-                float gap
-        ) {
-            float cellWidth = (width - (gap * (columns - 1))) / columns;
-            float cellHeight = (height - (gap * (rows - 1))) / rows;
-            int column = index % columns;
-            int row = index / columns;
-            float left = pad + column * (cellWidth + gap);
-            float top = pad + row * (cellHeight + gap);
-            return new RectF(left, top, left + cellWidth, top + cellHeight);
+        private void phone(Canvas c, float x, String title) {
+            round(c, x, 5, x + 124, 165, 12, 0xff35414b);
+            round(c, x + 1, 6, x + 123, 164, 11, 0xff080d12);
+            label(c, title, x + 62, 20, 9, 0xffd5dde3);
+            round(c, x + 48, 155, x + 76, 158, 2, 0xff64727e);
         }
 
-        private float lerp(float start, float end, float value) {
-            return start + ((end - start) * value);
+        private void art(Canvas c, float l, float t, float r, float b, int variant) {
+            round(c, l, t, r, b, 5, variant % 2 == 0 ? 0xff263f4b : 0xff344456);
+            paint.setColor(variant % 2 == 0 ? 0xff587986 : 0xff758196);
+            c.drawCircle(l + (r-l)*.72f, t + (b-t)*.28f, (r-l)*.095f, paint);
+            android.graphics.Path path = new android.graphics.Path();
+            path.moveTo(l+3, b-4);
+            path.lineTo(l+(r-l)*.35f, t+(b-t)*.37f);
+            path.lineTo(l+(r-l)*.60f, t+(b-t)*.69f);
+            path.lineTo(l+(r-l)*.76f, t+(b-t)*.48f);
+            path.lineTo(r-3, b-4);
+            path.close();
+            paint.setColor(0xff617b88);
+            c.drawPath(path, paint);
         }
 
-        private Activity getContextActivity() {
-            return (Activity) getContext();
+        private void round(Canvas c, float l, float t, float r, float b, float radius, int color) {
+            paint.setColor(color);
+            paint.setStyle(Paint.Style.FILL);
+            rect.set(l,t,r,b);
+            c.drawRoundRect(rect, radius, radius, paint);
         }
 
-        private static float dp(Activity activity, float value) {
-            return value * activity.getResources().getDisplayMetrics().density;
+        private void label(Canvas c, String label, float x, float y, float size, int color) {
+            paint.setColor(color);
+            paint.setTextSize(size);
+            paint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            paint.setTextAlign(Paint.Align.CENTER);
+            c.drawText(label,x,y,paint);
+        }
+
+        private void line(Canvas c, float x, float y, float x2, float y2, int color, float width) {
+            paint.setColor(color);
+            paint.setStrokeWidth(width);
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            c.drawLine(x,y,x2,y2,paint);
         }
     }
 }

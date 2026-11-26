@@ -88,3 +88,7 @@ No APK was produced. Device acceptance remains necessary for visual
 motion quality, system permission UI, real notification delivery and process death
 on the target OnePlus/Android 16 device. Tests exercise the routing/handoff
 contract with local intents, rather than sending live notifications.
+
+## 7.5 wizard refresh (Beta 10)
+
+The existing five steps remain, including the unchanged access gate and personalization callbacks. Welcome introduces the current experience; Meet describes the five independent feeds, Shows, OnlyFap, Spotlight and Library; the gesture guide covers swiping, supported gallery actions, seeking, collections and alphabet scrubbing. Two illustrative, local-only animated UI previews respect reduced motion and stop when detached or hidden. The last page points to the new Settings hub and replay entry. No live content, network requests, storage keys, onboarding eligibility or permission changes. Existing users are not forced through the wizard again. Final release highlights are updated separately during release preparation.
