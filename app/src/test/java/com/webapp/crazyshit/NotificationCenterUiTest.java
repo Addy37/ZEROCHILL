@@ -61,7 +61,7 @@ public class NotificationCenterUiTest {
             android.widget.LinearLayout row = (android.widget.LinearLayout) shell.getChildAt(1);
             android.widget.FrameLayout trailing = (android.widget.FrameLayout) row.getChildAt(2);
             android.graphics.drawable.GradientDrawable dot =
-                    (android.graphics.drawable.GradientDrawable) trailing.getChildAt(1).getBackground();
+                    (android.graphics.drawable.GradientDrawable) ((View) value(holder, "unread")).getBackground();
             assertEquals(AppearanceTheme.accent(activity), dot.getColor().getDefaultColor());
         } finally {
             if (controller != null) controller.pause().stop().destroy();
@@ -124,13 +124,13 @@ public class NotificationCenterUiTest {
         assertEquals(3, ((TextView) labels.getChildAt(1)).getMaxLines());
         assertNotNull(((android.widget.ImageView) row.getChildAt(0)).getDrawable());
         android.widget.FrameLayout trailing = (android.widget.FrameLayout) row.getChildAt(2);
-        assertEquals(View.VISIBLE, trailing.getChildAt(1).getVisibility());
+        assertEquals(View.VISIBLE, ((View) value(holder, "unread")).getVisibility());
         row.performClick();
         NotificationInboxTestIdle.await(activity);
         assertTrue(UpdateInboxStore.all(activity).get(0).read);
         adapter.bindViewHolder(holder, 0);
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200));
-        assertEquals(View.INVISIBLE, trailing.getChildAt(1).getVisibility());
+        assertEquals(View.INVISIBLE, ((View) value(holder, "unread")).getVisibility());
         controller.pause().stop().destroy();
     }
 
@@ -258,7 +258,7 @@ public class NotificationCenterUiTest {
         android.widget.LinearLayout row =
                 (android.widget.LinearLayout) ((android.widget.LinearLayout) holder.itemView).getChildAt(1);
         android.widget.FrameLayout trailing = (android.widget.FrameLayout) row.getChildAt(2);
-        View thumbnail = trailing.getChildAt(0);
+        View thumbnail = (View) value(holder, "thumbnail");
         assertEquals(View.VISIBLE, thumbnail.getVisibility());
         assertTrue(thumbnail.isClickable());
         assertEquals("Open video and conversation", thumbnail.getContentDescription());

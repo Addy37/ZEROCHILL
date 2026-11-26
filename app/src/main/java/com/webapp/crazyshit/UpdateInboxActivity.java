@@ -778,13 +778,13 @@ public final class UpdateInboxActivity extends Activity {
             view.setPadding(dp(14), 0, dp(14), 0);
             view.setBackground(new InsetDrawable(BrowseUi.rounded(
                     UpdateInboxActivity.this, UiPalette.RAISED, 12
-            ), 0, dp(4), 0, dp(4)));
+            ), 0, dp(12), 0, dp(12)));
             ZeroChillMotion.installPressFeedback(view);
             return view;
         }
 
         private LinearLayout.LayoutParams actionPillParams() {
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(32));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(48));
             params.setMargins(0, 0, dp(4), 0);
             return params;
         }
@@ -812,7 +812,7 @@ public final class UpdateInboxActivity extends Activity {
             holder.title.setFocusable(creatorGroup);
             holder.title.setClickable(creatorGroup);
             holder.title.setMinHeight(0);
-            holder.subtitle.setMaxLines(creatorGroup ? 1 : 2);
+            holder.subtitle.setMaxLines(creatorGroup ? 1 : UpdateInboxStore.CATEGORY_APP.equals(entry.category) ? 3 : 2);
             holder.title.setContentDescription(creatorGroup ? "Open " + entry.title + " creator gallery" : null);
             boolean social = UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category);
             boolean replyNotification = social
