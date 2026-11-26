@@ -96,7 +96,8 @@ final class ShitTokPoolDiagnostics {
         }
         // AppPerformance can record a diagnostic while holding its own monitor. Never
         // acquire that monitor while holding the playback diagnostics monitor.
-        return session + "\n\n" + AppPerformance.summary();
+        return session + "\n\nGallery diagnostics (recent failures and navigation)\n"
+                + GalleryDiagnostics.report() + "\n\n" + AppPerformance.summary();
     }
     static String redact(String value) {
         return value.replaceAll("https?://\\S+", "[content]");

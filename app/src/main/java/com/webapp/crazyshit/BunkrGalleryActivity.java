@@ -869,6 +869,7 @@ public final class BunkrGalleryActivity extends Activity {
                 runOnUiThread(() -> {
                     if (!canApplyMediaResult(requestGeneration)) return;
                     resolvingMedia.remove(item.url);
+                    GalleryDiagnostics.resolveFailure(item, prefetch);
                     adapter.setLoading(position, false);
                     if (pager.getCurrentItem() == position)
                         adapter.setFailed(position, true);
@@ -1555,11 +1556,17 @@ public final class BunkrGalleryActivity extends Activity {
                 return true;
             }
             if (item.getItemId() == 1) {
-                if (current != null) openPage(PawchiveRepository.pageUrl(current));
+                if (current != null) {
+                    String destination = PawchiveRepository.pageUrl(current);
+                    GalleryDiagnostics.navigation(current, false, destination);
+                    openPage(destination);
+                }
                 return true;
             }
             if (item.getItemId() == 2) {
-                openPage(PawchiveRepository.isProfile(fapelloProfileUrl) ? fapelloProfileUrl : albumUrl);
+                String destination = PawchiveRepository.isProfile(fapelloProfileUrl) ? fapelloProfileUrl : albumUrl;
+                GalleryDiagnostics.navigation(current, isCreatorGallery(), destination);
+                openPage(destination);
                 return true;
             }
             return false;

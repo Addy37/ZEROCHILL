@@ -596,6 +596,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 .listener(new RequestListener<Drawable>() {
                     @Override public boolean onLoadFailed(GlideException error, Object model,
                             Target<Drawable> target, boolean firstResource) {
+                        if (binding == holder.bindGeneration)
+                            GalleryDiagnostics.imageFailure("grid_artwork", item, url, imageReferer(item), model, error);
                         // Glide forbids starting another request synchronously inside its listener.
                         holder.image.post(() -> {
                             if (binding != holder.bindGeneration) return;
@@ -618,6 +620,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                     }
                     @Override public boolean onResourceReady(Drawable resource, Object model,
                             Target<Drawable> target, DataSource dataSource, boolean firstResource) {
+                        if (binding == holder.bindGeneration)
+                            GalleryDiagnostics.imageReady("grid_artwork", item, url,
+                                    resource.getIntrinsicWidth(), resource.getIntrinsicHeight());
                         if (adaptiveAspectRatios && binding == holder.bindGeneration)
                             applyAspectRatio(holder, item, resource);
                         return false;
@@ -634,9 +639,16 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                     : fallback.centerCrop().override(360, 360);
             fallback = fallback.listener(new RequestListener<Drawable>() {
                 @Override public boolean onLoadFailed(GlideException error, Object model,
-                        Target<Drawable> target, boolean firstResource) { return false; }
+                        Target<Drawable> target, boolean firstResource) {
+                    if (binding == holder.bindGeneration)
+                        GalleryDiagnostics.imageFailure("grid_original_fallback", item, item.url, imageReferer(item), model, error);
+                    return false;
+                }
                 @Override public boolean onResourceReady(Drawable resource, Object model,
                         Target<Drawable> target, DataSource source, boolean firstResource) {
+                    if (binding == holder.bindGeneration)
+                        GalleryDiagnostics.imageReady("grid_original_fallback", item, item.url,
+                                resource.getIntrinsicWidth(), resource.getIntrinsicHeight());
                     if (adaptiveAspectRatios && binding == holder.bindGeneration)
                         applyAspectRatio(holder, item, resource);
                     return false;
