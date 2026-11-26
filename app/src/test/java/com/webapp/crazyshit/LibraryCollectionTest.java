@@ -123,6 +123,33 @@ public class LibraryCollectionTest {
         assertEquals(4, clicks[0]);
     }
 
+    @Test public void populatedCollectionsUseLargePreviewsAndKeepLabelsReadable() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        LibraryCollectionView grid = new LibraryCollectionView(activity, () -> {}, () -> {}, () -> {}, () -> {});
+        int width = BrowseUi.dp(activity, 400);
+        for (String tag : new String[]{"watch-later", "downloads", "history", "favorites"}) {
+            grid.setPreviews(tag, java.util.Arrays.asList("file:///preview-a", "file:///preview-b", "file:///preview-c"));
+        }
+        grid.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        grid.layout(0, 0, width, grid.getMeasuredHeight());
+        grid.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        grid.layout(0, 0, width, grid.getMeasuredHeight());
+        for (String tag : new String[]{"watch-later", "downloads", "history", "favorites"}) {
+            ViewGroup stack = grid.findViewWithTag("library-collection-stack-" + tag);
+            assertEquals(View.VISIBLE, stack.getVisibility());
+            assertEquals(3, stack.getChildCount());
+            assertTrue(stack.getChildAt(2).getLayoutParams().width > BrowseUi.dp(activity, 40));
+            grid.setPreviews(tag, java.util.Collections.singletonList("file:///preview-a"));
+            assertEquals(1, stack.getChildCount());
+            assertTrue(stack.getChildAt(0).getLayoutParams().width >= BrowseUi.dp(activity, 48));
+            grid.setPreviews(tag, java.util.Collections.emptyList());
+            assertEquals(View.GONE, stack.getVisibility());
+        }
+        grid.release();
+    }
+
     private Intent open(Activity activity, LibraryHubView hub, String tag) {
         View tile = hub.findViewWithTag("library-collection-" + tag);
         assertNotNull(tag, tile);

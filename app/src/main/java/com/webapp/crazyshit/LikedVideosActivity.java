@@ -202,21 +202,24 @@ public final class LikedVideosActivity extends Activity {
 
         @Override public Holder onCreateViewHolder(ViewGroup parent, int type) {
             if (type == Row.HEADING) {
-                TextView label = BrowseUi.text(LikedVideosActivity.this, "", 13, UiPalette.TEXT_SECONDARY);
+                TextView label = LibraryDestinationChrome.sectionHeading(LikedVideosActivity.this, "");
                 label.setTag("library-source-heading");
-                label.setTypeface(null, android.graphics.Typeface.BOLD);
-                label.setPadding(dp(2), dp(12), dp(2), dp(6));
                 label.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
                 return new Holder(label, null, null, label);
             }
             LinearLayout row = new LinearLayout(LikedVideosActivity.this);
             row.setOrientation(LinearLayout.VERTICAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setGravity(Gravity.TOP);
             row.setClickable(true); row.setFocusable(true);
-            row.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
-            LibraryDestinationChrome.styleLikedRow(LikedVideosActivity.this, row);
+            RecyclerView.LayoutParams rowParams = new RecyclerView.LayoutParams(-1, -2);
+            rowParams.setMargins(dp(4), 0, dp(4), dp(8));
+            row.setLayoutParams(rowParams);
             LibraryAspectMediaCard card = new LibraryAspectMediaCard(LikedVideosActivity.this);
+            card.setUniform(true);
             LibraryDestinationChrome.styleMediaCard(LikedVideosActivity.this, card);
+            card.setRadius(dp(16));
+            card.setPreventCornerOverlap(false);
+            card.setClipToOutline(true);
             row.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
             ImageView image = new ImageView(LikedVideosActivity.this);
@@ -224,13 +227,9 @@ public final class LikedVideosActivity extends Activity {
             image.setBackgroundColor(android.graphics.Color.BLACK);
             card.addView(image, new MaterialCardView.LayoutParams(-1, -1));
 
-            TextView title = BrowseUi.text(LikedVideosActivity.this, "", 13,
-                    AppearanceTheme.primaryText(LikedVideosActivity.this));
-            title.setMaxLines(2);
-            title.setMinLines(2);
-            title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            TextView title = LibraryDestinationChrome.mediaCaption(LikedVideosActivity.this, "");
             LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
-            titleParams.topMargin = dp(8);
+            titleParams.setMargins(dp(2), dp(6), dp(2), 0);
             row.addView(title, titleParams);
             ZeroChillMotion.installPressFeedback(row);
             return new Holder(row, card, image, title);
@@ -250,7 +249,7 @@ public final class LikedVideosActivity extends Activity {
             if ("Saved video".equals(title)) title = "Liked video";
             else if ("Saved photo".equals(title)) title = "Liked photo";
             holder.title.setText(title);
-            holder.itemView.setContentDescription("Play liked video " + item.title);
+            holder.itemView.setContentDescription("Open " + title);
             Glide.with(holder.image).clear(holder.image);
             holder.image.setTag(item.url);
             holder.image.setScaleType(item.imageUrl.isEmpty()

@@ -188,7 +188,7 @@ public class FavoritesActivity extends Activity {
         chips.setVisibility(View.GONE);
         sourceChips = new LinearLayout(this);
         sourceChips.setOrientation(LinearLayout.HORIZONTAL);
-        sourceChips.setPadding(dp(12), 0, dp(12), dp(6));
+        sourceChips.setPadding(dp(12), 0, dp(12), dp(4));
         chips.addView(sourceChips, new HorizontalScrollView.LayoutParams(-2, -2));
         chipScroll = chips;
         root.addView(chips, new LinearLayout.LayoutParams(-1, -2));
@@ -452,7 +452,7 @@ public class FavoritesActivity extends Activity {
             int width = Math.max(dp(3), Math.round(dp(120) * (item.progressPercent() / 100f)));
             track.addView(fill, new FrameLayout.LayoutParams(width, -1));
         }
-        wrapper.addView(card, new LinearLayout.LayoutParams(-1, dp(118)));
+        wrapper.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
         TextView title = captionTitle(historyTitle(item));
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
@@ -478,7 +478,7 @@ public class FavoritesActivity extends Activity {
     private String historyTitle(PlaybackHistoryStore.Item item) {
         NativeContentItem content = item.content != null ? item.content
                 : OnlyFapVideoMetadata.basic(item.title, item.pageUrl, item.posterUrl);
-        return OnlyFapVideoMetadata.displayTitle(content);
+        return LibraryBrowseGroups.readableTitle(content, item.title);
     }
 
     private void showHistoryMenu(View anchor, PlaybackHistoryStore.Item item, boolean continueOnly) {
@@ -568,10 +568,10 @@ public class FavoritesActivity extends Activity {
         if (item.content != null && item.content.isImage() && thumbnail.getChildCount() > 1)
             thumbnail.getChildAt(1).setVisibility(View.GONE);
         media.addView(thumbnail, new FrameLayout.LayoutParams(-1, -1));
-        wrapper.addView(card, new LinearLayout.LayoutParams(-1, dp(118)));
+        wrapper.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
-        String label = OnlyFapVideoMetadata.displayTitle(item.content == null
-                ? OnlyFapVideoMetadata.basic(item.title, item.url, "") : item.content);
+        String label = LibraryBrowseGroups.readableTitle(item.content == null
+                ? OnlyFapVideoMetadata.basic(item.title, item.url, "") : item.content, item.title);
         TextView title = captionTitle(label);
         if (mediaFavorites && item.content != null && item.content.isImage()) {
             title.setFocusable(true);
@@ -640,13 +640,19 @@ public class FavoritesActivity extends Activity {
         labels.addAll(sources);
         for (String label : labels) {
             boolean selected = label.equals(sourceFilter);
-            TextView chip = text(label, 12, selected ? Color.BLACK : Color.WHITE);
+            int accent = AppearanceTheme.accent(this);
+            int selectedText = androidx.core.graphics.ColorUtils.calculateLuminance(accent) > .45
+                    ? Color.BLACK : Color.WHITE;
+            TextView chip = text(label, 12, selected ? selectedText : AppearanceTheme.secondaryText(this));
             chip.setTag("library-source-chip");
             chip.setContentDescription(label + " source");
             chip.setGravity(Gravity.CENTER);
             chip.setSingleLine(true);
-            chip.setPadding(dp(12), dp(6), dp(12), dp(6));
-            chip.setBackground(rounded(selected ? AppearanceTheme.accent(this) : Color.rgb(36, 36, 40), dp(14)));
+            chip.setPadding(dp(10), dp(4), dp(10), dp(4));
+            chip.setMinHeight(dp(32));
+            chip.setSelected(selected);
+            chip.setBackground(rounded(selected ? accent : Color.rgb(36, 36, 40), dp(16)));
+            ZeroChillMotion.installPressFeedback(chip);
             String chosen = label;
             chip.setOnClickListener(v -> {
                 if (chosen.equals(sourceFilter)) return;
@@ -661,10 +667,8 @@ public class FavoritesActivity extends Activity {
 
     private void addUniformSection(LinearLayout target, String heading, List<View> cards) {
         if (cards == null || cards.isEmpty()) return;
-        TextView label = text(heading, 13, UiPalette.TEXT_SECONDARY);
+        TextView label = LibraryDestinationChrome.sectionHeading(this, heading);
         label.setTag("library-date-heading");
-        label.setTypeface(null, android.graphics.Typeface.BOLD);
-        label.setPadding(dp(2), dp(10), dp(2), dp(6));
         target.addView(label);
         for (int i = 0; i < cards.size(); i += 2) {
             LinearLayout row = new LinearLayout(this);
@@ -685,21 +689,17 @@ public class FavoritesActivity extends Activity {
     }
 
     private MaterialCardView uniformMediaCard() {
-        MaterialCardView card = new MaterialCardView(this);
-        card.setCardElevation(0f);
+        LibraryAspectMediaCard card = new LibraryAspectMediaCard(this);
+        card.setUniform(true);
         LibraryDestinationChrome.styleMediaCard(this, card);
         card.setRadius(dp(16));
-        card.setPreventCornerOverlap(true);
+        card.setPreventCornerOverlap(false);
+        card.setClipToOutline(true);
         return card;
     }
 
     private TextView captionTitle(String value) {
-        TextView title = text(value, 13, Color.WHITE);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setMaxLines(2);
-        title.setMinLines(2);
-        title.setEllipsize(TextUtils.TruncateAt.END);
-        return title;
+        return LibraryDestinationChrome.mediaCaption(this, value);
     }
 
     private void addMixedGallery(LinearLayout target, List<View> cards, List<String> keys) {

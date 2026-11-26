@@ -48,6 +48,9 @@ final class LibraryBrowseGroups {
         String value = title.trim();
         if (value.isEmpty()) return true;
         if (value.matches("\\d{4,}")) return true;
+        if (value.matches("(?i)(?:saved |liked |onlyfap )?(?:video|photo|image|media)\\s*#?\\s*\\d{4,}")) return true;
+        if (value.matches("(?i)[a-z0-9_-]{8,}\\.(?:mp4|m4v|webm|mov|jpg|jpeg|png|gif)")
+                && value.replaceAll("[^0-9]", "").length() >= 3) return true;
         if (value.matches("(?i)[0-9a-f]{8,}")) return true;
         if (value.matches("(?i)[0-9a-f-]{12,}")) return true;
         String compact = value.replaceAll("\\s+", "");

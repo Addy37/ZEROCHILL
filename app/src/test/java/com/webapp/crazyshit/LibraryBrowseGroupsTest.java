@@ -33,6 +33,8 @@ public class LibraryBrowseGroupsTest {
     @Test public void rawIdsAreNeverUsedAsTitles() {
         assertTrue(LibraryBrowseGroups.isRawIdentifier("a1b2c3d4e5f60718"));
         assertTrue(LibraryBrowseGroups.isRawIdentifier("12345678"));
+        assertTrue(LibraryBrowseGroups.isRawIdentifier("Video #12345678"));
+        assertTrue(LibraryBrowseGroups.isRawIdentifier("abc123456.mp4"));
         assertTrue(LibraryBrowseGroups.isRawIdentifier("p744ZWo1file99"));
         assertFalse(LibraryBrowseGroups.isRawIdentifier("CarrotSoki"));
         assertFalse(LibraryBrowseGroups.isRawIdentifier("Night drive"));

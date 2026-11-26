@@ -86,7 +86,16 @@ final class LibraryCollectionView extends LinearLayout {
         stack.setTag("library-collection-stack-" + tag);
         stack.setVisibility(View.GONE);
         stack.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        tile.addView(stack, new FrameLayout.LayoutParams(dp(76), dp(48), Gravity.END | Gravity.CENTER_VERTICAL));
+        FrameLayout.LayoutParams stackParams = new FrameLayout.LayoutParams(dp(86), dp(76),
+                Gravity.END | Gravity.CENTER_VERTICAL);
+        stackParams.setMarginEnd(-dp(7));
+        stack.setClipChildren(false);
+        stack.setClipToPadding(false);
+        tile.addView(stack, stackParams);
+        tile.addOnLayoutChangeListener((v, l, t, right, b, ol, ot, or, ob) -> {
+            if (right - l != or - ol && stack.getChildCount() > 0)
+                updateStackGeometry(stack, label);
+        });
 
         LayoutParams params = new LayoutParams(0, -1, 1);
         if (row.getChildCount() > 0) params.setMarginStart(dp(10));
@@ -104,17 +113,11 @@ final class LibraryCollectionView extends LinearLayout {
         if (stack == null) return;
         clearStack(stack);
         List<String> chosen = LibraryBrowseGroups.firstUrls(urls, 3);
-        if (label != null && label.getLayoutParams() instanceof FrameLayout.LayoutParams) {
-            FrameLayout.LayoutParams labelParams = (FrameLayout.LayoutParams) label.getLayoutParams();
-            labelParams.rightMargin = chosen.isEmpty() ? 0 : dp(80);
-            label.setLayoutParams(labelParams);
-        }
         if (chosen.isEmpty()) {
-            stack.setVisibility(View.GONE);
+            updateStackGeometry(stack, label);
             return;
         }
-        stack.setVisibility(View.VISIBLE);
-        int size = dp(40);
+        int size = dp(64);
         for (int i = chosen.size() - 1; i >= 0; i--) {
             ImageView image = new ImageView(getContext());
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -125,15 +128,56 @@ final class LibraryCollectionView extends LinearLayout {
                     outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(8));
                 }
             });
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(size, size, Gravity.START | Gravity.CENTER_VERTICAL);
-            params.leftMargin = i * dp(16);
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(size, size, Gravity.END | Gravity.CENTER_VERTICAL);
+            image.setRotation(i == 0 ? 0f : i == 1 ? -7f : 7f);
             stack.addView(image, params);
             String url = chosen.get(i);
             Glide.with(image)
                     .load(LibraryHubView.remoteImage(url, url))
                     .dontTransform()
-                    .override(dp(128), dp(128))
+                    .override(dp(192), dp(192))
                     .into(image);
+        }
+        updateStackGeometry(stack, label);
+    }
+
+    private void updateStackGeometry(FrameLayout stack, TextView label) {
+        if (label == null) return;
+        FrameLayout tile = (FrameLayout) stack.getParent();
+        int count = stack.getChildCount();
+        int width = dp(86);
+        if (tile.getWidth() > 0) {
+            int labelWidth = (int) Math.ceil(label.getPaint().measureText(label.getText().toString()));
+            width = Math.min(width, tile.getWidth() - tile.getPaddingLeft()
+                    - tile.getPaddingRight() - labelWidth + dp(3));
+        }
+        // On unusually narrow or large-font screens, prioritize the full label.
+        boolean visible = count > 0 && width >= dp(42);
+        FrameLayout.LayoutParams labelParams = (FrameLayout.LayoutParams) label.getLayoutParams();
+        int reserve = visible ? width - dp(3) : 0;
+        if (labelParams.getMarginEnd() != reserve) {
+            labelParams.setMarginEnd(reserve);
+            label.setLayoutParams(labelParams);
+        }
+        stack.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (!visible) return;
+        FrameLayout.LayoutParams stackParams = (FrameLayout.LayoutParams) stack.getLayoutParams();
+        int height = Math.min(dp(76), width + dp(2));
+        if (stackParams.width != width || stackParams.height != height) {
+            stackParams.width = width;
+            stackParams.height = height;
+            stack.setLayoutParams(stackParams);
+        }
+        int step = count == 1 ? 0 : Math.min(dp(9), Math.max(dp(4), width / 9));
+        int size = Math.min(dp(64), width - dp(6) - (count - 1) * step);
+        size = Math.min(size, height - dp(8));
+        for (int child = 0; child < count; child++) {
+            View image = stack.getChildAt(child);
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) image.getLayoutParams();
+            params.width = size;
+            params.height = size;
+            params.setMarginEnd(dp(3) + (count - 1 - child) * step);
+            image.setLayoutParams(params);
         }
     }
 

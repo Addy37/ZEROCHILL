@@ -474,6 +474,8 @@ final class LibraryHubView extends ScrollView {
         card.addView(frame, new MaterialCardView.LayoutParams(-1, -1));
 
         ImageView image = mediaImage(frame);
+        // Apply the same conservative border crop used by the Shows resume shelf.
+        image.setTag(R.id.shows_watch_source_page, item.pageUrl);
         loadMediaImage(image, item.pageUrl, item.posterUrl, true);
 
         View shade = new View(activity);
@@ -1058,6 +1060,18 @@ final class LibraryHubView extends ScrollView {
                 ? source
                 : remoteImage(source, referer.isEmpty() ? pageUrl : referer);
         try {
+            if (pageUrl.equals(image.getTag(R.id.shows_watch_source_page))) {
+                Glide.with(image).load(model).disallowHardwareConfig()
+                        .transform(new com.bumptech.glide.load.MultiTransformation<>(
+                                new ShowsContinueFrameCrop(),
+                                new com.bumptech.glide.load.resource.bitmap.CenterCrop()))
+                        .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                        .transition(ThumbnailFades.thumbnail())
+                        .placeholder(new ColorDrawable(Color.rgb(22, 25, 29)))
+                        .error(new ColorDrawable(Color.rgb(22, 25, 29)))
+                        .into(image);
+                return;
+            }
             Glide.with(image)
                     .load(model)
                     .dontTransform()
