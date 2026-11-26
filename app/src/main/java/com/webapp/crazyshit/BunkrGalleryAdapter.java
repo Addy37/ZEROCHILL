@@ -61,7 +61,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
         void onLongPress(NativeContentItem item, View anchor);
 
-        default void onConfirmedBlackImage(NativeContentItem item) { }
+        default void onOmittedImage(NativeContentItem item) { }
     }
 
     private final ArrayList<NativeContentItem> items = new ArrayList<>();
@@ -606,11 +606,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private void loadArtwork(Holder holder, NativeContentItem item, String url, boolean repair) {
-        loadArtwork(holder, item, url, repair, false);
+        loadArtwork(holder, item, url, repair, false, false);
     }
 
     private void loadArtwork(Holder holder, NativeContentItem item, String url,
-            boolean repair, boolean verifyOriginal) {
+            boolean repair, boolean verifyOriginal, boolean finalOriginalAttempt) {
         int binding = holder.bindGeneration;
         int generation = galleryGeneration;
         int artworkRequest = ++holder.artworkRequest;
@@ -624,10 +624,14 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                     @Override public boolean onLoadFailed(GlideException error, Object model,
                             Target<Drawable> target, boolean firstResource) {
                         if (binding == holder.bindGeneration)
-                            GalleryDiagnostics.imageFailure("grid_artwork", item, url, imageReferer(item), model, error);
+                            GalleryDiagnostics.imageFailure(finalOriginalAttempt ? "grid_original_retry"
+                                    : verifyOriginal ? "grid_original_check" : "grid_artwork",
+                                    item, url, imageReferer(item), model, error);
                         // Glide forbids starting another request synchronously inside its listener.
                         holder.image.post(() -> {
-                            if (binding != holder.bindGeneration || artworkRequest != holder.artworkRequest) return;
+                            if (!currentArtworkRequest(holder, item, binding, generation, artworkRequest)) return;
+                            if (handleOriginalFailure(holder, item, url, binding, generation,
+                                    artworkRequest, finalOriginalAttempt)) return;
                             if (verifyOriginal) {
                                 holder.unavailable.setVisibility(View.VISIBLE);
                                 return;
@@ -656,8 +660,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                                     resource.getIntrinsicWidth(), resource.getIntrinsicHeight());
                         if (adaptiveAspectRatios && binding == holder.bindGeneration)
                             applyAspectRatio(holder, item, resource);
-                        if (binding == holder.bindGeneration && artworkRequest == holder.artworkRequest)
+                        if (binding == holder.bindGeneration && artworkRequest == holder.artworkRequest) {
+                            holder.unavailable.setVisibility(View.GONE);
                             inspectBlackImage(holder, item, resource, binding, generation, artworkRequest, verifyOriginal);
+                        }
                         return false;
                     }
                 });
@@ -679,6 +685,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                         Target<Drawable> target, boolean firstResource) {
                     if (binding == holder.bindGeneration)
                         GalleryDiagnostics.imageFailure("grid_original_fallback", item, item.url, imageReferer(item), model, error);
+                    holder.image.post(() -> {
+                        if (!currentArtworkRequest(holder, item, binding, generation, artworkRequest)) return;
+                        handleOriginalFailure(holder, item, item.url, binding, generation, artworkRequest, false);
+                    });
                     return false;
                 }
                 @Override public boolean onResourceReady(Drawable resource, Object model,
@@ -688,8 +698,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                                 resource.getIntrinsicWidth(), resource.getIntrinsicHeight());
                     if (adaptiveAspectRatios && binding == holder.bindGeneration)
                         applyAspectRatio(holder, item, resource);
-                    if (binding == holder.bindGeneration && artworkRequest == holder.artworkRequest)
+                    if (binding == holder.bindGeneration && artworkRequest == holder.artworkRequest) {
+                        holder.unavailable.setVisibility(View.GONE);
                         inspectBlackImage(holder, item, resource, binding, generation, artworkRequest, false);
+                    }
                     return false;
                 }
             });
@@ -698,21 +710,47 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         request.into(holder.image);
     }
 
+    private boolean currentArtworkRequest(Holder holder, NativeContentItem item,
+            int binding, int generation, int request) {
+        return binding == holder.bindGeneration && generation == galleryGeneration
+                && request == holder.artworkRequest && previewViewport != null
+                && holder.boundItem != null && item.url.equals(holder.boundItem.url)
+                && indexOfUrl(item.url) >= 0;
+    }
+
+    private boolean handleOriginalFailure(Holder holder, NativeContentItem item, String requested,
+            int binding, int generation, int request, boolean finalAttempt) {
+        GalleryBlackImage.FailureAction action =
+                GalleryBlackImage.originalFailureAction(item, requested, finalAttempt);
+        if (action == GalleryBlackImage.FailureAction.KEEP) return false;
+        holder.unavailable.setVisibility(View.VISIBLE);
+        if (action == GalleryBlackImage.FailureAction.RETRY) {
+            // One fresh original request, bypassing Glide's caches. Never loop on a server outage.
+            holder.image.postDelayed(() -> {
+                if (currentArtworkRequest(holder, item, binding, generation, request))
+                    loadArtwork(holder, item, item.url, false, true, true);
+            }, 650L);
+        } else {
+            GalleryDiagnostics.unavailableImage(item);
+            omitBlackImage(item.url);
+            listener.onOmittedImage(item);
+        }
+        return true;
+    }
+
     private void inspectBlackImage(Holder holder, NativeContentItem item, Drawable resource,
             int binding, int generation, int request, boolean verifiedOriginal) {
         if (!GalleryBlackImage.eligible(item)) return;
         GalleryBlackImage.check(resource, black -> holder.image.post(() -> {
-            if (!black || binding != holder.bindGeneration || generation != galleryGeneration
-                    || request != holder.artworkRequest || previewViewport == null
-                    || indexOfUrl(item.url) < 0) return;
+            if (!black || !currentArtworkRequest(holder, item, binding, generation, request)) return;
             if (!verifiedOriginal) {
                 // A blank thumbnail alone is not evidence that its original is blank.
-                loadArtwork(holder, item, item.url, false, true);
+                loadArtwork(holder, item, item.url, false, true, false);
                 return;
             }
             GalleryDiagnostics.blackImage(item);
             omitBlackImage(item.url);
-            listener.onConfirmedBlackImage(item);
+            listener.onOmittedImage(item);
         }));
     }
 

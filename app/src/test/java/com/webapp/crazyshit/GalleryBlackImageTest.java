@@ -21,6 +21,26 @@ public class GalleryBlackImageTest {
         return new NativeContentItem(kind, "Example", "https://media.cum.st/example." + extension,
                 "https://img.cum.st/example.jpg", "", "https://cum.st/creators/test/example", "");
     }
+    @Test public void failureOfOriginalRetriesOnceThenOmitsOnlyStaticPhotos() {
+        NativeContentItem photo = image(NativeContentItem.KIND_IMAGE, "jpg");
+        NativeContentItem webp = image(NativeContentItem.KIND_IMAGE, "webp");
+        NativeContentItem avif = image(NativeContentItem.KIND_IMAGE, "avif");
+        NativeContentItem gif = image(NativeContentItem.KIND_IMAGE, "gif");
+        NativeContentItem video = image(NativeContentItem.KIND_MEDIA, "mp4");
+        assertEquals(GalleryBlackImage.FailureAction.KEEP,
+                GalleryBlackImage.originalFailureAction(photo, photo.imageUrl, false));
+        assertEquals(GalleryBlackImage.FailureAction.RETRY,
+                GalleryBlackImage.originalFailureAction(photo, photo.url, false));
+        assertEquals(GalleryBlackImage.FailureAction.OMIT,
+                GalleryBlackImage.originalFailureAction(photo, photo.url, true));
+        assertTrue(GalleryBlackImage.eligible(webp));
+        assertTrue(GalleryBlackImage.eligible(avif));
+        assertEquals(GalleryBlackImage.FailureAction.KEEP,
+                GalleryBlackImage.originalFailureAction(gif, gif.url, true));
+        assertEquals(GalleryBlackImage.FailureAction.KEEP,
+                GalleryBlackImage.originalFailureAction(video, video.url, true));
+    }
+
     @Test public void staticPhotosOnlyAndOmissionResetsOnRefresh() {
         NativeContentItem black = image(NativeContentItem.KIND_IMAGE, "jpg");
         NativeContentItem gif = image(NativeContentItem.KIND_IMAGE, "gif");

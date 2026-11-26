@@ -1337,7 +1337,7 @@ public class NativeFeedBrowserActivity extends Activity {
                     }
 
                     @Override
-                    public void onConfirmedBlackImage(NativeContentItem item) {
+                    public void onOmittedImage(NativeContentItem item) {
                         if (isFinishing() || isDestroyed()) return;
                         omittedBlackImages.add(item.url);
                         for (BunkrGalleryAdapter tab : creatorTabAdapters)

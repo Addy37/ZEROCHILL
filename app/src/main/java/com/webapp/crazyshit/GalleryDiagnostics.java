@@ -48,6 +48,10 @@ final class GalleryDiagnostics {
         record("grid_original_black", item, "result=omitted_for_gallery");
     }
 
+    static void unavailableImage(NativeContentItem item) {
+        record("grid_original_unavailable", item, "result=omitted_after_retry");
+    }
+
     static void missingImage(NativeContentItem item) {
         record("viewer_empty", item, "result=no_image_url");
     }

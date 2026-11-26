@@ -21,7 +21,17 @@ final class GalleryBlackImage {
         if (path == null) return false;
         path = path.toLowerCase(java.util.Locale.ROOT);
         // Only static image originals, never videos, animated GIFs or ambiguous post pages.
-        return path.endsWith(".jpg") || path.endsWith(".jpeg") || path.endsWith(".png");
+        return path.endsWith(".jpg") || path.endsWith(".jpeg") || path.endsWith(".png")
+                || path.endsWith(".webp") || path.endsWith(".avif");
+    }
+
+    enum FailureAction { KEEP, RETRY, OMIT }
+
+    /** Never omit on a preview failure alone, nor on any video/GIF failure. */
+    static FailureAction originalFailureAction(NativeContentItem item, String requested,
+            boolean finalAttempt) {
+        if (!eligible(item) || !item.url.equals(requested)) return FailureAction.KEEP;
+        return finalAttempt ? FailureAction.OMIT : FailureAction.RETRY;
     }
 
     /** Snapshot pixels while Glide owns the resource. Scan the owned array off the UI thread. */
