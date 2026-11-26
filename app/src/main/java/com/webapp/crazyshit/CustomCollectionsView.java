@@ -143,7 +143,8 @@ final class CustomCollectionsView extends LinearLayout {
                     NativeMainActivity.FAVORITES_REQUEST));
             tile.setFocusable(true); tile.setClickable(true);
             ZeroChillMotion.installPressFeedback(tile);
-            LayoutParams cell = new LayoutParams(0, -1, 1);
+            // A wrap-content row must measure real content, not the one-pixel spacer.
+            LayoutParams cell = new LayoutParams(0, -2, 1);
             if (index % 2 == 1) cell.leftMargin = dp(10);
             row.addView(tile, cell);
         }

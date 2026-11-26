@@ -150,6 +150,22 @@ public class LibraryCollectionTest {
         assertEquals(1, rows.getChildCount());
         assertNull(rows.findViewWithTag("library-new-collection"));
         assertEquals(2, ((ViewGroup) rows.getChildAt(0)).getChildCount());
+        // A single collection plus an empty grid cell must not collapse the row.
+        int width = BrowseUi.dp(activity, 288);
+        view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        view.layout(0, 0, width, view.getMeasuredHeight());
+        View row = rows.getChildAt(0);
+        assertTrue("Single collection row must remain visible", row.getHeight() >= BrowseUi.dp(activity, 90));
+        assertTrue(tile.getHeight() >= BrowseUi.dp(activity, 90));
+        assertTrue(tile.getChildAt(0).getHeight() > BrowseUi.dp(activity, 70));
+        assertTrue(tile.getChildAt(2).getBottom() <= tile.getHeight());
+        assertEquals("Example collection", MediaCollectionStore.find(activity, id).name);
+        // Reconstruct the view as on an app restart; saved collection remains available.
+        CustomCollectionsView recreated = new CustomCollectionsView(activity);
+        recreated.bind(MediaCollectionStore.previews(activity));
+        assertNotNull(recreated.findViewWithTag("library-custom-collection-" + id));
+        recreated.release();
         view.bind(java.util.Collections.emptyList());
         assertSame(create, view.findViewWithTag("library-new-collection"));
         assertEquals("Tap + to create a collection", ((TextView) rows.getChildAt(0)).getText().toString());
