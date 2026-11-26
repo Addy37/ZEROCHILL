@@ -56,6 +56,7 @@ public class SettingsActivity extends ComponentActivity {
         prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         appUpdater = new AppUpdater(this);
         backup = new AppBackupController(this);
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         ZeroChillUi.applySystemBars(this);
         String page = state != null ? state.getString("settings_page", "")
                 : getIntent().getStringExtra(EXTRA_SECTION);
@@ -83,7 +84,7 @@ public class SettingsActivity extends ComponentActivity {
         settingsSections.clear();
         SettingsComposeScreen.Section notifications = addGroup("Notifications");
         addAction(notifications, "Account notification preferences",
-                "Comment replies, likes, direct messages, message previews, grouping and synced alerts.", "",
+                "Comment replies, likes, direct messages, message previews, grouping, creator and app alerts.", "",
                 () -> startActivity(new Intent(this, ZeroChillSocialSettingsActivity.class)
                         .putExtra(ZeroChillSocialSettingsActivity.EXTRA_MODE, ZeroChillSocialSettingsActivity.MODE_NOTIFICATIONS)));
         addSwitch(
@@ -182,6 +183,8 @@ public class SettingsActivity extends ComponentActivity {
                 true
         );
         SettingsComposeScreen.Section about = addGroup("About ZEROCHILL");
+        addAction(about, "Feedback & support", "Send feedback or view your existing conversations.", "",
+                () -> startActivity(new Intent(this, FeedbackActivity.class)));
         addAction(
                 about,
                 "Startup tour",

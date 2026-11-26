@@ -2,31 +2,24 @@ package com.webapp.crazyshit
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -41,12 +34,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.key
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.semantics.contentDescription
@@ -159,6 +155,7 @@ object SettingsComposeScreen {
             ),
         ) {
             val current = sections.firstOrNull { it.title == navigation.page }
+            val focus = LocalFocusManager.current
             Column(
                 modifier = Modifier.fillMaxSize().background(Black)
                     .padding(WindowInsets.safeDrawing.asPaddingValues())
@@ -181,9 +178,16 @@ object SettingsComposeScreen {
                         fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 }
                 key(current?.title, navigation.target) {
+                    val fade = remember { Animatable(1f) }
+                    LaunchedEffect(current?.title, navigation.target) {
+                        if (ZeroChillMotion.animationsEnabled(activity)) {
+                            fade.snapTo(.76f)
+                            fade.animateTo(1f, tween(150))
+                        }
+                    }
                     Column(
                         modifier = Modifier.weight(1f).fillMaxWidth()
-                            .verticalScroll(rememberScrollState()).padding(bottom = 16.dp),
+                            .verticalScroll(rememberScrollState()).alpha(fade.value).padding(bottom = 16.dp),
                     ) {
                         if (current == null) {
                             OutlinedTextField(
@@ -222,6 +226,7 @@ object SettingsComposeScreen {
                                     modifier = Modifier.padding(16.dp))
                                 matches.forEach { (section, item) ->
                                     HubRow(item.title, section, R.drawable.ic_more_settings, accent) {
+                                        focus.clearFocus()
                                         navigation.open(section, item.title)
                                     }
                                     SettingsDivider()

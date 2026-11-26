@@ -139,6 +139,7 @@ public final class CreatorsActivity extends Activity {
             });
             menu.getMenu().add(mergeMode ? "Exit merge mode" : "Merge creators").setOnMenuItemClickListener(item -> {
                 mergeMode = !mergeMode;
+                if (mergeMode) updatesOnly = false;
                 if (mergeMode) ZeroChillToast.makeText(this, "Hold a creator and drag onto another to merge.", ZeroChillToast.LENGTH_LONG).show();
                 render();
                 return true;
@@ -155,6 +156,7 @@ public final class CreatorsActivity extends Activity {
         input.setPadding(dp(14), 0, dp(14), 0);
         LibraryDestinationChrome.styleSearch(this, input);
         inlineSearch = LibraryDestinationChrome.attachInlineSearch(this, header, title, input);
+        header.getChildAt(0).setOnClickListener(v -> onBackPressed());
         count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
         count.setPadding(dp(16), dp(4), dp(16), dp(8));
         LibraryDestinationChrome.styleSummary(this, count);
@@ -343,6 +345,7 @@ public final class CreatorsActivity extends Activity {
         chip.setOnClickListener(v -> {
             if (updatesOnly == updates) return;
             updatesOnly = updates;
+            if (updates) mergeMode = false;
             render();
             recycler.scrollToPosition(0);
         });
