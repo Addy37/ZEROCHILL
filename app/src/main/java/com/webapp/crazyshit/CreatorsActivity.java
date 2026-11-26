@@ -67,6 +67,7 @@ public final class CreatorsActivity extends Activity {
     private String activeIndexLetter;
     private boolean indexDragging;
     private int indexPointer = -1;
+    private final boolean[] availableIndexLetters = new boolean[LETTERS.length()];
     private final Paint letterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RecyclerView.ItemDecoration letterDecoration = new RecyclerView.ItemDecoration() {
         @Override public void getItemOffsets(Rect outRect, View view, RecyclerView parent, RecyclerView.State state) {
@@ -484,6 +485,7 @@ public final class CreatorsActivity extends Activity {
         if (letterIndex == null || adapter == null) return;
         endIndexDrag(false);
         letterIndex.removeAllViews();
+        java.util.Arrays.fill(availableIndexLetters, false);
         if (adapter.getItemCount() == 0) {
             letterIndex.setVisibility(View.GONE);
             return;
@@ -492,6 +494,7 @@ public final class CreatorsActivity extends Activity {
         for (int i = 0; i < LETTERS.length(); i++) {
             String letter = String.valueOf(LETTERS.charAt(i));
             boolean present = adapter.positionForLetter(letter) >= 0;
+            availableIndexLetters[i] = present;
             TextView tick = new TextView(this);
             tick.setText(letter);
             tick.setTextSize(9);
@@ -556,11 +559,7 @@ public final class CreatorsActivity extends Activity {
                 break;
             }
         }
-        boolean[] available = new boolean[LETTERS.length()];
-        for (int i = 0; i < available.length; i++) {
-            available[i] = adapter.positionForLetter(String.valueOf(LETTERS.charAt(i))) >= 0;
-        }
-        int resolved = nearestAvailableIndex(requested, available);
+        int resolved = nearestAvailableIndex(requested, availableIndexLetters);
         if (resolved < 0) return;
         String letter = String.valueOf(LETTERS.charAt(resolved));
         if (!letter.equals(activeIndexLetter)) {
@@ -571,10 +570,12 @@ public final class CreatorsActivity extends Activity {
                 letterIndex.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
             }
         }
-        letterBubble.animate().cancel();
-        letterBubble.setAlpha(1f);
-        letterBubble.setText(letter);
-        letterBubble.setVisibility(View.VISIBLE);
+        if (letterBubble.getVisibility() != View.VISIBLE || letterBubble.getAlpha() != 1f) {
+            letterBubble.animate().cancel();
+            letterBubble.setAlpha(1f);
+            letterBubble.setVisibility(View.VISIBLE);
+        }
+        if (!letter.contentEquals(letterBubble.getText())) letterBubble.setText(letter);
         View stage = (View) letterIndex.getParent();
         float maxTop = Math.max(0, stage.getHeight() - dp(58));
         letterBubble.setTranslationY(Math.max(0, Math.min(maxTop,
@@ -599,7 +600,7 @@ public final class CreatorsActivity extends Activity {
             TextView tick = (TextView) letterIndex.getChildAt(i);
             String letter = tick.getText().toString();
             boolean selected = letter.equals(active);
-            boolean present = adapter.positionForLetter(letter) >= 0;
+            boolean present = availableIndexLetters[i];
             tick.setSelected(selected);
             tick.setTextColor(selected ? AppearanceTheme.onAccent(this)
                     : present ? AppearanceTheme.primaryText(this) : 0xFF44515C);
