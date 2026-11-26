@@ -59,20 +59,26 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         final String sectionTitle;
         final NativeContentItem item;
         final int source;
+        final String provider;
 
-        private Entry(boolean section, String sectionTitle, NativeContentItem item, int source) {
+        private Entry(boolean section, String sectionTitle, NativeContentItem item, int source, String provider) {
             this.section = section;
             this.sectionTitle = sectionTitle == null ? "" : sectionTitle;
             this.item = item;
             this.source = source;
+            this.provider = provider == null ? "" : provider;
         }
 
         static Entry section(String title) {
-            return new Entry(true, title, null, SOURCE_REMOTE);
+            return new Entry(true, title, null, SOURCE_REMOTE, "");
         }
 
         static Entry item(NativeContentItem item, int source) {
-            return new Entry(false, "", item, source);
+            return item(item, source, "");
+        }
+
+        static Entry item(NativeContentItem item, int source, String provider) {
+            return new Entry(false, "", item, source, provider);
         }
     }
 
@@ -181,7 +187,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                     public boolean areContentsTheSame(int a, int b) {
                         Entry x = old.get(a), y = ordered.get(b);
                         if (x.section) return x.sectionTitle.equals(y.sectionTitle);
-                        return x.item.url.equals(y.item.url) && x.item.searchQuery.equals(y.item.searchQuery)
+                        return x.provider.equals(y.provider) && x.item.url.equals(y.item.url) && x.item.searchQuery.equals(y.item.searchQuery)
                                 && x.item.title.equals(y.item.title) && x.item.imageUrl.equals(y.item.imageUrl)
                                 && x.item.views.equals(y.item.views) && x.item.uploader.equals(y.item.uploader)
                                 && x.item.comments.equals(y.item.comments) && x.item.description.equals(y.item.description);
@@ -265,7 +271,7 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         ImageView image = new ImageView(parent.getContext());
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setBackgroundColor(Color.rgb(31, 31, 36));
-        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(dp(parent, 100), dp(parent, 75));
+        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(dp(parent, 116), dp(parent, 76));
         row.addView(image, imageParams);
 
         LinearLayout text = new LinearLayout(parent.getContext());
@@ -291,11 +297,24 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         metaParams.topMargin = dp(parent, 5);
         text.addView(meta, metaParams);
 
+        TextView provider = new TextView(parent.getContext());
+        provider.setTextSize(10.5f);
+        provider.setTypeface(null, android.graphics.Typeface.BOLD);
+        provider.setMaxLines(1);
+        provider.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        provider.setTextColor(AppearanceTheme.accent(parent.getContext()));
+        provider.setPadding(dp(parent, 6), dp(parent, 2), dp(parent, 6), dp(parent, 2));
+        provider.setBackground(BrowseUi.rounded(parent.getContext(), UiPalette.RAISED, 6));
+        LinearLayout.LayoutParams providerParams = new LinearLayout.LayoutParams(-2, -2);
+        providerParams.topMargin = dp(parent, 4);
+        text.addView(provider, providerParams);
+        provider.setVisibility(View.GONE);
+
         TextView favorite = SearchResultFavorites.create(parent.getContext());
         row.addView(favorite, new LinearLayout.LayoutParams(dp(parent, 48), dp(parent, 48)));
         favorite.setVisibility(View.GONE);
         SearchTextContrast.apply(card);
-        return new ResultHolder(card, image, title, meta, favorite);
+        return new ResultHolder(card, image, title, meta, favorite, provider);
     }
 
     @Override
@@ -452,18 +471,24 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         fades.bind(result.card, result.entranceKey);
         boolean album = entry.source == SOURCE_ALBUM && item.isSeries();
         LinearLayout.LayoutParams imageSize = (LinearLayout.LayoutParams) result.image.getLayoutParams();
-        imageSize.width = dp(result.image, album ? 96 : item.isCreator() ? 72 : 100);
-        imageSize.height = dp(result.image, album ? 120 : item.isCreator() ? 72 : 75);
+        imageSize.width = dp(result.image, album ? 104 : item.isCreator() ? 72 : 116);
+        imageSize.height = dp(result.image, album ? 120 : item.isCreator() ? 72 : 76);
         result.image.setLayoutParams(imageSize);
         result.image.setScaleType(album ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
         int rowHeight = dp(result.card, album ? ALBUM_ROW_HEIGHT_DP : 104);
         result.card.setMinimumHeight(rowHeight);
         ((View) result.image.getParent()).setMinimumHeight(rowHeight);
-        result.meta.setMaxLines(album ? 3 : 1);
-        result.image.setBackground(BrowseUi.rounded(result.image.getContext(), Color.rgb(31, 31, 36), item.isCreator() ? 36 : 8));
+        result.meta.setMaxLines(album ? 3 : 2);
+        result.image.setBackground(BrowseUi.rounded(result.image.getContext(), Color.rgb(31, 31, 36), item.isCreator() ? 36 : 10));
         result.image.setClipToOutline(true);
         result.title.setText(item.title);
-        result.meta.setText(metaText(item, entry.source));
+        String meta = metaText(item, entry.source);
+        String duration = GalleryDuration.label(item);
+        if (!album && !duration.isEmpty() && !meta.contains(duration)) meta = duration + "  •  " + meta;
+        result.meta.setText(meta);
+        result.provider.setText(entry.provider);
+        result.provider.setTextColor(AppearanceTheme.accent(result.card.getContext()));
+        result.provider.setVisibility(entry.provider.isEmpty() ? View.GONE : View.VISIBLE);
         result.card.setContentDescription(item.title);
         result.card.setOnClickListener(v -> listener.onOpen(item));
         SearchResultFavorites.bind(result.favorite, result.card, item);
@@ -821,13 +846,16 @@ final class GlobalSearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         String boundUrl = "";
         String entranceKey = "";
 
-        ResultHolder(MaterialCardView card, ImageView image, TextView title, TextView meta, TextView favorite) {
+        final TextView provider;
+
+        ResultHolder(MaterialCardView card, ImageView image, TextView title, TextView meta, TextView favorite, TextView provider) {
             super(card);
             this.card = card;
             this.image = image;
             this.title = title;
             this.meta = meta;
             this.favorite = favorite;
+            this.provider = provider;
         }
     }
 

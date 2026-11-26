@@ -551,7 +551,7 @@ public class VisualRefreshTest {
         screen.pause().stop().destroy();
     }
 
-    @Test public void spotlightPopulatesInitiallyEmptyNaturalGridWithoutChangingLayout() {
+    @Test public void spotlightPopulatesInitiallyEmptyListDespiteSavedGridPreference() {
         ActivityController<SearchActivity> screen = Robolectric.buildActivity(SearchActivity.class)
                 .create().start().resume().visible();
         SearchPanel panel = screen.get().panel;
@@ -564,7 +564,8 @@ public class VisualRefreshTest {
         ReflectionHelpers.callInstanceMethod(panel, "applyScopeAdapter");
         RecyclerView recycler = ReflectionHelpers.getField(panel, "recycler");
         RecyclerView.LayoutManager manager = recycler.getLayoutManager();
-        assertTrue(manager instanceof androidx.recyclerview.widget.StaggeredGridLayoutManager);
+        assertTrue(manager instanceof androidx.recyclerview.widget.LinearLayoutManager);
+        assertFalse(manager instanceof androidx.recyclerview.widget.GridLayoutManager);
         View root = ((ViewGroup) screen.get().findViewById(android.R.id.content)).getChildAt(0);
         int w = BrowseUi.dp(screen.get(), 411), h = BrowseUi.dp(screen.get(), 891);
         int ws = View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY);
@@ -584,8 +585,15 @@ public class VisualRefreshTest {
         assertEquals(2, recycler.getAdapter().getItemCount());
         assertSame(manager, recycler.getLayoutManager());
         assertNotNull(recycler.findViewHolderForAdapterPosition(1));
+        // The old preference is intentionally retained but no longer controls Spotlight.
         assertEquals(SearchLayoutPreference.Mode.GRID,
                 SearchLayoutPreference.get(screen.get(), SearchPanel.Scope.EROME));
+        for (SearchPanel.Scope scope : SearchPanel.Scope.values()) {
+            SearchLayoutPreference.set(screen.get(), scope, SearchLayoutPreference.Mode.GRID);
+            ReflectionHelpers.setField(panel, "scope", scope);
+            ReflectionHelpers.callInstanceMethod(panel, "applyScopeAdapter");
+            assertSame(manager, recycler.getLayoutManager());
+        }
         screen.pause().stop().destroy();
     }
 

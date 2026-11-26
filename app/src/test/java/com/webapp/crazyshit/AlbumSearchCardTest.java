@@ -37,10 +37,10 @@ public class AlbumSearchCardTest {
                 boolean isAlbum = position == 0;
                 assertEquals(isAlbum ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP,
                         holder.image.getScaleType());
-                assertEquals(BrowseUi.dp(host.get(), isAlbum ? 96 : 100), holder.image.getLayoutParams().width);
-                assertEquals(BrowseUi.dp(host.get(), isAlbum ? 120 : 75), holder.image.getLayoutParams().height);
+                assertEquals(BrowseUi.dp(host.get(), isAlbum ? 104 : 116), holder.image.getLayoutParams().width);
+                assertEquals(BrowseUi.dp(host.get(), isAlbum ? 120 : 76), holder.image.getLayoutParams().height);
                 assertEquals(BrowseUi.dp(host.get(), isAlbum ? 136 : 104), holder.card.getMinimumHeight());
-                assertEquals(isAlbum ? 3 : 1, holder.meta.getMaxLines());
+                assertEquals(isAlbum ? 3 : 2, holder.meta.getMaxLines());
                 assertTrue(holder.image.getClipToOutline());
                 if (isAlbum) assertTrue(holder.meta.getText().toString().startsWith("12 pictures · 3 videos"));
                 for (int width : new int[]{320, 400}) {

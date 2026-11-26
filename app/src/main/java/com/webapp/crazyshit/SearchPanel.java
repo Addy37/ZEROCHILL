@@ -21,10 +21,8 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import androidx.recyclerview.widget.StaggeredGridLayoutManager;
 
 import org.json.JSONObject;
 
@@ -145,8 +143,6 @@ final class SearchPanel {
     private TextView searchState;
     private HorizontalScrollView controlsRow;
     private LinearLayout controls;
-    private TextView gridToggle;
-    private TextView listToggle;
     private final List<Future<?>> requests = new ArrayList<>();
     private final Map<Integer, String> errors = new LinkedHashMap<>();
     private final Map<String, Long> searchSourceTimings = new LinkedHashMap<>();
@@ -497,10 +493,12 @@ final class SearchPanel {
     private void refreshPublishedResults(boolean firstBatch) {
         if (recycler == null || recycler.getAdapter() == null
                 || recycler.getAdapter().getItemCount() == 0) return;
-        // Diff updates can arrive while Spotlight is measuring its empty grid.
-        // Drop stale span assignments on the first populated batch, not on pagination.
-        if (firstBatch && recycler.getLayoutManager() instanceof StaggeredGridLayoutManager) {
-            ((StaggeredGridLayoutManager) recycler.getLayoutManager()).invalidateSpanAssignments();
+        // A first batch may arrive while the empty panel is being measured.
+        // Rebind once on that boundary; subsequent diffs preserve the visible list.
+        if (firstBatch) recycler.getAdapter().notifyDataSetChanged();
+        if (!showingRecent()) {
+            resultLayer.setVisibility(View.VISIBLE);
+            updateContentVisibility();
         }
         updateResultSize();
         recycler.requestLayout();
@@ -521,7 +519,8 @@ final class SearchPanel {
         boolean recent = showingRecent();
         resultSurface.setRecentSurface(recent);
         boolean submitted = input.getText().toString().trim().length() >= 2;
-        if (controlsRow != null) controlsRow.setVisibility(!recent && submitted ? View.VISIBLE : View.GONE);
+        if (controlsRow != null) controlsRow.setVisibility(!recent && submitted
+                && !SearchProviderControls.supported(scope).isEmpty() ? View.VISIBLE : View.GONE);
         if (recent) {
             shell.setBrowsing(false);
             shell.setRecentContent(recentPanel);
@@ -529,7 +528,7 @@ final class SearchPanel {
             shell.setBrowsing(submitted);
             int count = recycler.getAdapter().getItemCount();
             boolean shortQuery = !submitted;
-            int rowHeight = scope == Scope.ONLYFAP ? 76
+            int rowHeight = scope == Scope.ONLYFAP ? 104
                     : scope == Scope.EROME ? GlobalSearchAdapter.ALBUM_ROW_HEIGHT_DP : 104;
             shell.setResultCount(shortQuery ? 0 : Math.max(1, count), rowHeight);
         }
@@ -705,57 +704,14 @@ final class SearchPanel {
 
     private void applyLayout() {
         if (recycler == null) return;
-        SearchLayoutPreference.Mode mode = SearchLayoutPreference.get(activity, scope);
-        boolean grid = mode == SearchLayoutPreference.Mode.GRID;
-        SearchCardStyle cardStyle = SearchCardStyle.forScope(scope, mode);
-        if (adapter != null) adapter.setStyle(cardStyle);
-        if (onlyFapAdapter != null) onlyFapAdapter.setPortraitGrid(scope == Scope.ONLYFAP && grid);
-        boolean natural = grid && cardStyle.naturalAspect();
-        RecyclerView.LayoutManager current = recycler.getLayoutManager();
-        boolean managerMatches = !grid
-                ? current instanceof LinearLayoutManager && !(current instanceof GridLayoutManager)
-                : natural
-                ? current instanceof StaggeredGridLayoutManager
-                : current instanceof GridLayoutManager;
-        if (!managerMatches) {
-            if (!grid) {
-                recycler.setLayoutManager(new LinearLayoutManager(activity));
-            } else if (natural) {
-                StaggeredGridLayoutManager manager = new StaggeredGridLayoutManager(
-                        2, StaggeredGridLayoutManager.VERTICAL);
-                manager.setGapStrategy(StaggeredGridLayoutManager.GAP_HANDLING_MOVE_ITEMS_BETWEEN_SPANS);
-                recycler.setLayoutManager(manager);
-            } else {
-                GridLayoutManager manager = new GridLayoutManager(activity, 2);
-                manager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
-                    @Override public int getSpanSize(int position) {
-                        RecyclerView.Adapter<?> shown = recycler.getAdapter();
-                        if (shown instanceof GlobalSearchAdapter
-                                && ((GlobalSearchAdapter) shown).isFullSpan(position)) return 2;
-                        return 1;
-                    }
-                });
-                recycler.setLayoutManager(manager);
-            }
-        }
-        if (grid && !gridGapInstalled) {
-            recycler.addItemDecoration(gridGap);
-            gridGapInstalled = true;
-        } else if (!grid && gridGapInstalled) {
-            recycler.removeItemDecoration(gridGap);
-            gridGapInstalled = false;
+        // Spotlight uses one stable list regardless of legacy saved layout preferences.
+        if (adapter != null) adapter.setStyle(SearchCardStyle.LIST);
+        if (onlyFapAdapter != null) onlyFapAdapter.setPortraitGrid(false);
+        if (!(recycler.getLayoutManager() instanceof LinearLayoutManager)) {
+            recycler.setLayoutManager(new LinearLayoutManager(activity));
         }
         refreshControls();
     }
-
-    private boolean gridGapInstalled;
-    private final RecyclerView.ItemDecoration gridGap = new RecyclerView.ItemDecoration() {
-        @Override public void getItemOffsets(android.graphics.Rect outRect, View view,
-                RecyclerView parent, RecyclerView.State state) {
-            int pad = dp(4);
-            outRect.set(pad, pad, pad, pad);
-        }
-    };
 
     private View buildControls() {
         controlsRow = new HorizontalScrollView(activity);
@@ -767,42 +723,12 @@ final class SearchPanel {
         controls.setGravity(Gravity.CENTER_VERTICAL);
         controls.setPadding(dp(8), dp(6), dp(8), 0);
         controlsRow.addView(controls, new HorizontalScrollView.LayoutParams(-2, -2));
-        gridToggle = layoutToggle("Grid", "Show results as a grid", SearchLayoutPreference.Mode.GRID);
-        listToggle = layoutToggle("List", "Show results as a list", SearchLayoutPreference.Mode.LIST);
-        controls.addView(gridToggle);
-        controls.addView(listToggle);
         return controlsRow;
     }
 
-    private TextView layoutToggle(String label, String description, SearchLayoutPreference.Mode mode) {
-        TextView chip = new TextView(activity);
-        chip.setText(label);
-        chip.setTextSize(13f);
-        chip.setGravity(Gravity.CENTER);
-        chip.setMinHeight(dp(32));
-        chip.setPadding(dp(12), 0, dp(12), 0);
-        chip.setContentDescription(description);
-        chip.setOnClickListener(v -> chooseLayout(mode, v));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(32));
-        params.setMargins(dp(3), 0, dp(3), 0);
-        chip.setLayoutParams(params);
-        return chip;
-    }
-
-    private void chooseLayout(SearchLayoutPreference.Mode mode, View source) {
-        if (destroyed || mode == null) return;
-        if (SearchLayoutPreference.get(activity, scope) == mode) return;
-        haptic(source);
-        SearchLayoutPreference.set(activity, scope, mode);
-        applyLayout();
-    }
-
     private void refreshControls() {
-        if (controls == null || gridToggle == null || listToggle == null) return;
-        SearchLayoutPreference.Mode mode = SearchLayoutPreference.get(activity, scope);
-        ZeroChillUi.styleSourceRailChip(gridToggle, mode == SearchLayoutPreference.Mode.GRID);
-        ZeroChillUi.styleSourceRailChip(listToggle, mode == SearchLayoutPreference.Mode.LIST);
-        while (controls.getChildCount() > 2) controls.removeViewAt(2);
+        if (controls == null) return;
+        controls.removeAllViews();
         EromePreference.Choice selected = EromePreference.get(activity);
         for (SearchProviderControls.Option option : SearchProviderControls.supported(scope)) {
             TextView chip = new TextView(activity);
@@ -1603,7 +1529,26 @@ final class SearchPanel {
         if (items == null || items.isEmpty()) return;
         out.add(GlobalSearchAdapter.Entry.section(title + "  •  " + items.size()));
         int count = Math.min(limit, items.size());
-        for (int i = 0; i < count; i++) out.add(GlobalSearchAdapter.Entry.item(items.get(i), source));
+        for (int i = 0; i < count; i++) {
+            NativeContentItem item = items.get(i);
+            out.add(GlobalSearchAdapter.Entry.item(item, source, resultProvider(item)));
+        }
+    }
+
+    private String resultProvider(NativeContentItem item) {
+        if (scope != Scope.SHOWS) return scopeLabel(scope);
+        if (containsResult(crazyVideos, item)) return "CrazyShit";
+        if (containsResult(efuktVideos, item)) return "EFukt";
+        if (containsResult(kaoticVideos, item)) return "Kaotic";
+        return "Shows";
+    }
+
+    private static boolean containsResult(List<NativeContentItem> items, NativeContentItem target) {
+        if (target == null || items == null) return false;
+        for (NativeContentItem item : items) {
+            if (item != null && target.url.equals(item.url)) return true;
+        }
+        return false;
     }
 
     private void restoreScroll() {
