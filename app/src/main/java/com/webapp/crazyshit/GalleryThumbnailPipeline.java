@@ -26,7 +26,15 @@ import java.util.function.Consumer;
 /** One bounded, main-thread-owned preparation queue per open gallery, shared by its tabs. */
 final class GalleryThumbnailPipeline {
     static final int SIZE = 384;
-    private static final int MAX_ACTIVE = 3, MAX_PREFETCH_QUEUE = 24, MAX_RESULTS = 512;
+    private static final int MAX_PREFETCH_QUEUE = 24, MAX_RESULTS = 512;
+    private int preparationColumns = 2;
+    private boolean preparationConstrained;
+    void setPreparationBudget(int columns, boolean constrained) {
+        if (preparationColumns == columns && preparationConstrained == constrained) return;
+        preparationColumns = columns;
+        preparationConstrained = constrained;
+        pump();
+    }
     private final Handler main = new Handler(Looper.getMainLooper());
     private final RequestManager glide;
     private final LinkedHashMap<String, Job> jobs = new LinkedHashMap<>();
@@ -118,7 +126,8 @@ final class GalleryThumbnailPipeline {
 
     private void pump() {
         if (closed) return;
-        while (active < MAX_ACTIVE) {
+        while (active < GalleryWorkload.preparationConcurrency(preparationColumns,
+                preparationConstrained || cooldown.skip(SystemClock.elapsedRealtime()))) {
             Job next = null;
             for (Job job : jobs.values()) {
                 if (job.running) continue;

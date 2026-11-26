@@ -25,7 +25,7 @@ public class GalleryThumbnailPipelineTest {
         assertEquals(0, BunkrGalleryAdapter.skeletonCount(0, 2));
         assertEquals(1, BunkrGalleryAdapter.skeletonCount(1, 2));
         assertEquals(4, BunkrGalleryAdapter.skeletonCount(50, 2));
-        assertEquals(6, BunkrGalleryAdapter.skeletonCount(50, 5));
+        assertEquals(10, BunkrGalleryAdapter.skeletonCount(50, 5));
     }
 
     @Test public void supportsOnlyAffectedProviderStaticPhotosAndVideos() {

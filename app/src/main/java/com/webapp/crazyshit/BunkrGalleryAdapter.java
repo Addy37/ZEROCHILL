@@ -74,11 +74,62 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final java.util.LinkedHashMap<String, GalleryThumbnailPipeline.Result> batchResults = new java.util.LinkedHashMap<>();
     private final android.os.Handler batchUi = new android.os.Handler(android.os.Looper.getMainLooper());
     private boolean batchEnabled, batchActive = true;
-    private int lastVisible;
-    private static final int BATCH_LIMIT = 6;
+    private int firstVisible, lastVisible;
+    private boolean batchFlushPosted;
+    private static final long BATCH_PUBLISH_MS = 45L;
     private static final int SKELETON_TYPE = 1;
     private final Runnable flushBatch = this::publishPreparedBatch;
-    private static final int MAX_REVEALS = 4;
+    private final GalleryWorkload.FramePressure framePressure = new GalleryWorkload.FramePressure();
+    private boolean frameSamplePosted;
+    private final android.view.Choreographer.FrameCallback frameSample = this::sampleRevealFrame;
+
+    private boolean constrained() {
+        return framePressure.constrained(android.os.SystemClock.uptimeMillis());
+    }
+
+    private int estimatedVisibleTiles() {
+        RecyclerView list = previewViewport;
+        return Math.max(Math.max(0, lastVisible - firstVisible + 1),
+                GalleryWorkload.estimatedScreenTiles(gridColumns,
+                        list == null ? 0 : list.getWidth(),
+                        list == null ? 0 : list.getHeight()));
+    }
+
+    private int revealCapacity(int visible) {
+        return GalleryWorkload.revealCapacity(gridColumns, visible, constrained());
+    }
+
+    private void updatePreparationBudget() {
+        if (batchActive && previewsActive && thumbnailPipeline != null)
+            thumbnailPipeline.setPreparationBudget(gridColumns, constrained());
+    }
+
+    private void sampleRevealFrame(long nanos) {
+        frameSamplePosted = false;
+        if (activeReveals <= 0 || !previewsActive || !batchActive || previewViewport == null) {
+            framePressure.idle();
+            updatePreparationBudget();
+            return;
+        }
+        boolean before = constrained();
+        framePressure.sample(nanos, android.os.SystemClock.uptimeMillis());
+        if (before != constrained()) updatePreparationBudget();
+        requestFrameSample();
+    }
+
+    private void requestFrameSample() {
+        if (!frameSamplePosted && activeReveals > 0) {
+            frameSamplePosted = true;
+            android.view.Choreographer.getInstance().postFrameCallback(frameSample);
+        }
+    }
+
+    private void stopFrameSampleIfIdle() {
+        if (activeReveals > 0) return;
+        if (frameSamplePosted) android.view.Choreographer.getInstance().removeFrameCallback(frameSample);
+        frameSamplePosted = false;
+        framePressure.idle();
+    }
     private final java.util.Set<String> locallyRevealed = new java.util.HashSet<>();
 
     private boolean hasRevealed(String url) {
@@ -149,8 +200,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 scheduleRevealTick(GalleryRevealImageView.SETTLE_MS);
             return;
         }
-        if (activeReveals >= MAX_REVEALS) return;
-        long wait = GalleryRevealImageView.STAGGER_MS - (now - lastRevealStart);
+        int visible = 0;
+        for (Holder holder : previewHolders) if (revealVisible(holder)) visible++;
+        if (activeReveals >= revealCapacity(visible)) return;
+        long stagger = GalleryWorkload.staggerMs(gridColumns, constrained());
+        long wait = stagger - (now - lastRevealStart);
         if (wait > 0L) { scheduleRevealTick(wait); return; }
         candidates.sort(java.util.Comparator.comparingInt((Holder h) -> h.itemView.getTop())
                 .thenComparingInt(h -> h.itemView.getLeft()));
@@ -173,12 +227,14 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 if (holder.revealAnimator != animation) return;
                 holder.revealAnimator = null;
                 activeReveals--;
+                stopFrameSampleIfIdle();
                 finishReveal(holder);
                 scheduleRevealTick(0L);
             }
         });
         animation.start();
-        scheduleRevealTick(GalleryRevealImageView.STAGGER_MS);
+        requestFrameSample();
+        scheduleRevealTick(stagger);
     }
 
     private void finishReveal(Holder holder) {
@@ -196,6 +252,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             holder.revealAnimator = null;
             activeReveals--;
             animation.cancel();
+            stopFrameSampleIfIdle();
         }
         holder.revealPending &= preservePending;
         holder.image.setRevealProgress(holder.revealPending ? 0f : 1f);
@@ -222,6 +279,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     void setBatchActive(boolean active) {
         batchActive = active;
         if (active) {
+            updatePreparationBudget();
             scheduleBatch();
             scheduleRevealTick(0L);
         } else {
@@ -231,35 +289,49 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
     boolean hasPendingThumbnails() { return !pendingTiles.isEmpty(); }
     static int skeletonCount(int pending, int columns) {
-        return Math.min(Math.max(0, pending), Math.min(6, Math.max(2, columns * 2)));
+        return Math.min(Math.max(0, pending), 2 * GalleryWorkload.columns(columns));
     }
     private int skeletonCount() { return skeletonCount(pendingTiles.size(), gridColumns); }
     private void resetBatch() {
         batchUi.removeCallbacks(flushBatch);
+        batchFlushPosted = false;
         if (thumbnailPipeline != null) thumbnailPipeline.unsubscribe(this);
         pendingTiles.clear(); batchInFlight.clear(); batchResults.clear();
-        lastVisible = 0;
+        firstVisible = lastVisible = 0;
     }
     private void scheduleBatch() {
         if (!batchEnabled || !batchActive || !previewsActive || thumbnailPipeline == null
-                || pendingTiles.isEmpty() || !batchInFlight.isEmpty() || !batchResults.isEmpty()
-                || items.size() - lastVisible > Math.max(12, gridColumns * 4)) return;
+                || pendingTiles.isEmpty()) return;
+        updatePreparationBudget();
+        int window = GalleryWorkload.preparationWindow(gridColumns, estimatedVisibleTiles());
+        int target = Math.max(firstVisible + window, lastVisible + 1 + gridColumns * 2);
+        int remaining = Math.min(window, Math.max(0, target - items.size()))
+                - batchInFlight.size() - batchResults.size();
+        if (remaining <= 0) return;
         int generation = galleryGeneration;
-        int count = 0;
-        for (NativeContentItem item : new ArrayList<>(pendingTiles.values())) {
-            if (count++ >= BATCH_LIMIT) break;
+        for (NativeContentItem item : pendingTiles.values()) {
+            if (remaining <= 0) break;
+            if (batchInFlight.contains(item.url) || batchResults.containsKey(item.url)) continue;
+            remaining--;
             batchInFlight.add(item.url);
             requestPreparedThumbnail(item, true, this, result -> {
                 if (generation != galleryGeneration || !batchInFlight.remove(item.url)) return;
                 if (pendingTiles.containsKey(item.url)) batchResults.put(item.url, result);
-                // Publish completed items together, without waiting for the slowest server response.
-                batchUi.removeCallbacks(flushBatch);
-                batchUi.postDelayed(flushBatch, batchInFlight.isEmpty() ? 0L : 120L);
+                // A rolling window: publish ready items promptly, even if earlier requests stall.
+                if (!batchFlushPosted) {
+                    batchFlushPosted = true;
+                    batchUi.postDelayed(flushBatch, BATCH_PUBLISH_MS);
+                }
+                if (batchInFlight.isEmpty()) {
+                    batchUi.removeCallbacks(flushBatch);
+                    batchUi.post(flushBatch);
+                }
             });
         }
     }
 
     private void publishPreparedBatch() {
+        batchFlushPosted = false;
         if (batchResults.isEmpty()) { scheduleBatch(); return; }
         int oldSkeletons = skeletonCount();
         int oldSize = items.size();
@@ -356,7 +428,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 if (holder.revealAnimator != null && !previewVisible(holder))
                     cancelReveal(holder, true);
                 if (holder.revealPending && holder.revealAnimator == null
-                        && activeReveals < MAX_REVEALS && revealVisible(holder)
+                        && activeReveals < revealCapacity(estimatedVisibleTiles()) && revealVisible(holder)
                         && viewport.getScrollState() != RecyclerView.SCROLL_STATE_SETTLING)
                     scheduleRevealTick(0L);
             }
@@ -393,7 +465,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         rememberAndSort();
         notifyDataSetChanged();
         if (preloadAhead) {
-            preloadRange(0, Math.min(items.size(), adaptiveAspectRatios ? 6 : 12));
+            preloadRange(0, Math.min(items.size(), GalleryWorkload.preparationWindow(gridColumns, estimatedVisibleTiles())));
             scheduleBatch();
         }
     }
@@ -412,7 +484,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         int added = items.size() - start;
         if (added > 0) {
             notifyItemRangeInserted(start, added);
-            if (preloadAhead) preloadRange(start, Math.min(items.size(), start + (adaptiveAspectRatios ? 6 : 12)));
+            if (preloadAhead && (!batchEnabled || batchActive))
+                preloadRange(start, Math.min(items.size(), start
+                        + GalleryWorkload.preparationWindow(gridColumns, estimatedVisibleTiles())));
         }
         if (skeletonCount() > 0) notifyItemRangeInserted(items.size(), skeletonCount());
         reorderFavorites();
@@ -529,11 +603,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
 
     void preloadVisible(int first, int last) {
-        lastVisible = Math.max(0, last);
+        firstVisible = Math.max(0, first);
+        lastVisible = Math.max(firstVisible, last);
+        if (!batchActive || !previewsActive) return;
         scheduleBatch();
-        int from = Math.max(0, first);
-        int lookAhead = adaptiveAspectRatios ? 6 : 12;
-        int to = Math.min(items.size(), Math.max(from, last + lookAhead));
+        int from = firstVisible;
+        int lookAhead = Math.max(adaptiveAspectRatios ? 6 : 12, gridColumns * 2 + 1);
+        int to = Math.min(items.size(), Math.max(from, lastVisible + lookAhead));
         preloadRange(from, to);
     }
 
@@ -572,6 +648,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         if (!items.isEmpty()) {
             notifyItemRangeChanged(0, items.size(), PAYLOAD_OVERLAY_DENSITY);
         }
+        updatePreparationBudget();
+        scheduleBatch();
+        scheduleRevealTick(0L);
     }
 
     static float overlayScaleForColumns(int columns) {
@@ -1253,6 +1332,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             stopRevealTick();
             for (Holder holder : previewHolders) cancelReveal(holder, true);
         } else {
+            updatePreparationBudget();
             scheduleBatch();
             scheduleRevealTick(0L);
         }
@@ -1271,6 +1351,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     @Override public void onAttachedToRecyclerView(@NonNull RecyclerView recycler) {
         super.onAttachedToRecyclerView(recycler);
         previewViewport = recycler;
+        updatePreparationBudget();
         BunkrMediaPreview.addPlaybackPreviewListener(playbackPreviewListener);
         recycler.getViewTreeObserver().addOnPreDrawListener(previewVisibility);
         recycler.addOnScrollListener(revealScroll);
