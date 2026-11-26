@@ -85,6 +85,7 @@ final class OnlyFapHubView extends FrameLayout {
 
     private HeaderProfileAvatar profileAvatar;
     private TextView preferenceSelector;
+    private TextView eromeFixtureEntry;
     private Runnable preferenceChanged;
     private ContentPreference discoveryPreference = ContentPreference.ALL;
     private ContentPreference publishedPreference;
@@ -105,6 +106,7 @@ final class OnlyFapHubView extends FrameLayout {
             clear();
         }
         ContentPreferenceUi.bindSelector(preferenceSelector);
+        if (eromeFixtureEntry != null) eromeFixtureEntry.setVisibility(mode == ContentPreference.PAWCHIVE ? View.GONE : View.VISIBLE);
         pulsePreferenceSelector();
         if (trendingShelf != null) {
             if (mode == ContentPreference.ALL) {
@@ -572,6 +574,26 @@ final class OnlyFapHubView extends FrameLayout {
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(dp(16), dp(12), dp(16), 0);
         content.addView(body, new LinearLayout.LayoutParams(-1, -2));
+
+        // Debug-only fixture entry; release builds never expose or load this activity.
+        if (context.getPackageName().endsWith(".dev")) {
+            android.content.Intent fixture = new android.content.Intent().setClassName(context,
+                    "com.webapp.crazyshit.EromeFixtureActivity");
+            if (fixture.resolveActivity(context.getPackageManager()) != null) {
+                eromeFixtureEntry = text("Erome preview  ›", 15f, AppearanceTheme.accent(context));
+                eromeFixtureEntry.setContentDescription("Open Erome sample content preview");
+                eromeFixtureEntry.setGravity(Gravity.CENTER);
+                eromeFixtureEntry.setMinHeight(dp(48));
+                eromeFixtureEntry.setBackground(ZeroChillUi.glass(context));
+                eromeFixtureEntry.setClickable(true);
+                eromeFixtureEntry.setFocusable(true);
+                eromeFixtureEntry.setOnClickListener(v -> context.startActivity(fixture));
+                ZeroChillMotion.installPressFeedback(eromeFixtureEntry);
+                LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, -2);
+                previewParams.bottomMargin = dp(12);
+                body.addView(eromeFixtureEntry, previewParams);
+            }
+        }
 
         favoritesSection = new LinearLayout(context);
         favoritesSection.setOrientation(LinearLayout.VERTICAL);
