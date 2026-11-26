@@ -80,13 +80,15 @@ final class GalleryThumbnailPipeline {
         return request;
     }
 
+    Result cached(String url) { return results.get(url); }
+
     void prepare(NativeContentItem item, GlideUrl preview, GlideUrl original, boolean visible,
             Object subscriber, Consumer<Result> callback) {
         if (closed) return;
         Result cached = results.get(item.url);
         if (cached != null) {
             if (callback != null) main.post(() -> {
-                if (!closed && results.get(item.url) == cached) callback.accept(cached);
+                if (!closed) callback.accept(cached);
             });
             return;
         }

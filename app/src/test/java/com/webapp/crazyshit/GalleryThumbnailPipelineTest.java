@@ -21,6 +21,13 @@ public class GalleryThumbnailPipelineTest {
         assertFalse(cooldown.skip(31));
     }
 
+    @Test public void tailSkeletonsAreBoundedAndNeverCountAsMedia() {
+        assertEquals(0, BunkrGalleryAdapter.skeletonCount(0, 2));
+        assertEquals(1, BunkrGalleryAdapter.skeletonCount(1, 2));
+        assertEquals(4, BunkrGalleryAdapter.skeletonCount(50, 2));
+        assertEquals(6, BunkrGalleryAdapter.skeletonCount(50, 5));
+    }
+
     @Test public void supportsOnlyAffectedProviderStaticPhotosAndVideos() {
         NativeContentItem photo = new NativeContentItem(NativeContentItem.KIND_IMAGE, "photo",
                 "https://media.cum.st/test.jpg", "", "", "https://cum.st/creators/test/example", "");

@@ -62,17 +62,93 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         void onLongPress(NativeContentItem item, View anchor);
 
         default void onOmittedImage(NativeContentItem item) { }
+        default void onBatchPublished() { }
     }
 
     private final ArrayList<NativeContentItem> items = new ArrayList<>();
     private final java.util.Set<String> omittedBlackImages = new java.util.HashSet<>();
     private int galleryGeneration;
     private GalleryThumbnailPipeline thumbnailPipeline;
+    private final java.util.LinkedHashMap<String, NativeContentItem> pendingTiles = new java.util.LinkedHashMap<>();
+    private final java.util.LinkedHashSet<String> batchInFlight = new java.util.LinkedHashSet<>();
+    private final java.util.LinkedHashMap<String, GalleryThumbnailPipeline.Result> batchResults = new java.util.LinkedHashMap<>();
+    private final android.os.Handler batchUi = new android.os.Handler(android.os.Looper.getMainLooper());
+    private boolean batchEnabled, batchActive;
+    private int lastVisible;
+    private static final int BATCH_LIMIT = 6;
+    private static final int SKELETON_TYPE = 1;
+    private final Runnable flushBatch = this::publishPreparedBatch;
 
     void setThumbnailPipeline(GalleryThumbnailPipeline pipeline) { thumbnailPipeline = pipeline; }
+    void setBatchEnabled(boolean enabled) { batchEnabled = enabled; }
+    void setBatchActive(boolean active) {
+        batchActive = active;
+        if (active) scheduleBatch();
+    }
+    boolean hasPendingThumbnails() { return !pendingTiles.isEmpty(); }
+    static int skeletonCount(int pending, int columns) {
+        return Math.min(Math.max(0, pending), Math.min(6, Math.max(2, columns * 2)));
+    }
+    private int skeletonCount() { return skeletonCount(pendingTiles.size(), gridColumns); }
+    private void resetBatch() {
+        batchUi.removeCallbacks(flushBatch);
+        if (thumbnailPipeline != null) thumbnailPipeline.unsubscribe(this);
+        pendingTiles.clear(); batchInFlight.clear(); batchResults.clear();
+        lastVisible = 0;
+    }
+    private void scheduleBatch() {
+        if (!batchEnabled || !batchActive || !previewsActive || thumbnailPipeline == null
+                || pendingTiles.isEmpty() || !batchInFlight.isEmpty() || !batchResults.isEmpty()
+                || items.size() - lastVisible > Math.max(12, gridColumns * 4)) return;
+        int generation = galleryGeneration;
+        int count = 0;
+        for (NativeContentItem item : new ArrayList<>(pendingTiles.values())) {
+            if (count++ >= BATCH_LIMIT) break;
+            batchInFlight.add(item.url);
+            requestPreparedThumbnail(item, true, this, result -> {
+                if (generation != galleryGeneration || !batchInFlight.remove(item.url)) return;
+                if (pendingTiles.containsKey(item.url)) batchResults.put(item.url, result);
+                // Publish completed items together, without waiting for the slowest server response.
+                batchUi.removeCallbacks(flushBatch);
+                batchUi.postDelayed(flushBatch, batchInFlight.isEmpty() ? 0L : 120L);
+            });
+        }
+    }
+
+    private void publishPreparedBatch() {
+        if (batchResults.isEmpty()) { scheduleBatch(); return; }
+        int oldSkeletons = skeletonCount();
+        int oldSize = items.size();
+        ArrayList<NativeContentItem> rejected = new ArrayList<>();
+        for (Map.Entry<String, GalleryThumbnailPipeline.Result> entry : batchResults.entrySet()) {
+            NativeContentItem item = pendingTiles.remove(entry.getKey());
+            if (item == null) continue;
+            if (entry.getValue().state == GalleryThumbnailPipeline.State.OMIT) {
+                omittedBlackImages.add(item.url);
+                rejected.add(item);
+            } else items.add(item);
+        }
+        batchResults.clear();
+        // The ready portion of the grid never gets rebound or rearranged for a failed candidate.
+        if (oldSkeletons > 0) notifyItemRangeRemoved(oldSize, oldSkeletons);
+        if (items.size() > oldSize) notifyItemRangeInserted(oldSize, items.size() - oldSize);
+        int skeletons = skeletonCount();
+        if (skeletons > 0) notifyItemRangeInserted(items.size(), skeletons);
+        for (NativeContentItem item : rejected) listener.onOmittedImage(item);
+        listener.onBatchPublished();
+        scheduleBatch();
+    }
 
     void omitBlackImages(Collection<String> urls) {
+        int oldSkeletons = skeletonCount();
         omittedBlackImages.addAll(urls);
+        for (String url : urls) {
+            pendingTiles.remove(url);
+            batchResults.remove(url);
+        }
+        int newSkeletons = skeletonCount();
+        if (oldSkeletons > newSkeletons)
+            notifyItemRangeRemoved(items.size() + newSkeletons, oldSkeletons - newSkeletons);
         stopFavoriteMoves();
         for (int end = items.size() - 1; end >= 0;) {
             if (!items.get(end).isImage() || !omittedBlackImages.contains(items.get(end).url)) {
@@ -90,6 +166,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     void resetBlackImageOmissions() {
         galleryGeneration++;
         omittedBlackImages.clear();
+        resetBatch();
     }
 
     void omitBlackImage(String url) {
@@ -153,13 +230,18 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     void replace(List<NativeContentItem> incoming, boolean preloadAhead) {
         stopFavoriteMoves();
         galleryGeneration++;
+        resetBatch();
         items.clear();
         normalOrder.clear();
         addUnique(incoming);
-        for (NativeContentItem item : items) normalOrder.put(item.url, normalOrder.size());
+        if (incoming != null) for (NativeContentItem item : incoming)
+            if (item != null) normalOrder.putIfAbsent(item.url, normalOrder.size());
         rememberAndSort();
         notifyDataSetChanged();
-        if (preloadAhead) preloadRange(0, Math.min(items.size(), adaptiveAspectRatios ? 6 : 12));
+        if (preloadAhead) {
+            preloadRange(0, Math.min(items.size(), adaptiveAspectRatios ? 6 : 12));
+            scheduleBatch();
+        }
     }
 
     void append(List<NativeContentItem> incoming) {
@@ -168,7 +250,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     void append(List<NativeContentItem> incoming, boolean preloadAhead) {
         int start = items.size();
+        int oldSkeletons = skeletonCount();
         addUnique(incoming);
+        if (oldSkeletons > 0) notifyItemRangeRemoved(start, oldSkeletons);
         if (incoming != null) for (NativeContentItem item : incoming)
             if (item != null) normalOrder.putIfAbsent(item.url, normalOrder.size());
         int added = items.size() - start;
@@ -176,14 +260,20 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             notifyItemRangeInserted(start, added);
             if (preloadAhead) preloadRange(start, Math.min(items.size(), start + (adaptiveAspectRatios ? 6 : 12)));
         }
+        if (skeletonCount() > 0) notifyItemRangeInserted(items.size(), skeletonCount());
         reorderFavorites();
+        if (preloadAhead) scheduleBatch();
     }
 
     void appendPinned(List<NativeContentItem> incoming) {
         int start = items.size();
+        int oldSkeletons = skeletonCount();
         addUnique(incoming);
+        if (oldSkeletons > 0) notifyItemRangeRemoved(start, oldSkeletons);
         if (items.size() > start) notifyItemRangeInserted(start, items.size() - start);
+        if (skeletonCount() > 0) notifyItemRangeInserted(items.size(), skeletonCount());
         reorderFavorites();
+        scheduleBatch();
     }
 
     private void rememberAndSort() {
@@ -285,6 +375,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
 
     void preloadVisible(int first, int last) {
+        lastVisible = Math.max(0, last);
+        scheduleBatch();
         int from = Math.max(0, first);
         int lookAhead = adaptiveAspectRatios ? 6 : 12;
         int to = Math.min(items.size(), Math.max(from, last + lookAhead));
@@ -297,6 +389,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     ArrayList<NativeContentItem> normalSnapshot() {
         ArrayList<NativeContentItem> result = snapshot();
+        result.addAll(pendingTiles.values());
         result.removeIf(item -> !normalOrder.containsKey(item.url));
         result.sort(java.util.Comparator.comparingInt(item -> normalOrder.get(item.url)));
         return result;
@@ -311,13 +404,17 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     int size() {
-        return items.size();
+        return items.size() + pendingTiles.size();
     }
 
     void setGridColumns(int columns) {
         int next = Math.max(1, columns);
         if (gridColumns == next) return;
+        int oldSkeletons = skeletonCount();
         gridColumns = next;
+        int newSkeletons = skeletonCount();
+        if (oldSkeletons > newSkeletons) notifyItemRangeRemoved(items.size() + newSkeletons, oldSkeletons - newSkeletons);
+        else if (newSkeletons > oldSkeletons) notifyItemRangeInserted(items.size() + oldSkeletons, newSkeletons - oldSkeletons);
         if (!items.isEmpty()) {
             notifyItemRangeChanged(0, items.size(), PAYLOAD_OVERLAY_DENSITY);
         }
@@ -355,7 +452,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public long getItemId(int position) {
-        return items.get(position).url.hashCode();
+        return position < items.size() ? items.get(position).url.hashCode()
+                : Long.MIN_VALUE + position - items.size();
+    }
+
+    @Override public int getItemViewType(int position) {
+        return position < items.size() ? 0 : SKELETON_TYPE;
     }
 
     @NonNull
@@ -540,6 +642,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             int position,
             @NonNull List<Object> payloads
     ) {
+        if (position >= items.size()) { onBindViewHolder(holder, position); return; }
         if (payloads.contains(PAYLOAD_FAVORITE)) {
             holder.favorite.setVisibility(favoriteUrls.contains(items.get(position).url) ? View.VISIBLE : View.GONE);
             if (payloads.contains(PAYLOAD_OVERLAY_DENSITY)) applyOverlayDensity(holder);
@@ -557,6 +660,22 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         resetTileTransform(holder.itemView);
         holder.morphPulse.animate().cancel();
         holder.morphPulse.setAlpha(0f);
+        if (position >= items.size()) {
+            holder.bindGeneration++;
+            holder.boundItem = null;
+            Glide.with(holder.image).clear(holder.image);
+            holder.tile.setAspectRatio(1f);
+            for (int i = 0; i < holder.tile.getChildCount(); i++)
+                holder.tile.getChildAt(i).setVisibility(View.GONE);
+            holder.image.setVisibility(View.VISIBLE);
+            holder.image.setImageDrawable(new ColorDrawable(Color.rgb(30, 34, 40)));
+            holder.itemView.setContentDescription("Preparing media");
+            holder.itemView.setOnClickListener(null);
+            holder.itemView.setOnLongClickListener(null);
+            holder.itemView.setClickable(false);
+            holder.itemView.setLongClickable(false);
+            return;
+        }
         NativeContentItem item = items.get(position);
         holder.favorite.setVisibility(favoriteUrls.contains(item.url) ? View.VISIBLE : View.GONE);
         holder.maintenance.bind(item);
@@ -642,7 +761,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         int generation = galleryGeneration;
         Glide.with(holder.image).clear(holder.image);
         holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
-        holder.preparing.setVisibility(View.VISIBLE);
+        // The tail skeleton owns loading. A rare cache miss uses a quiet matte, never a spinner.
+        holder.preparing.setVisibility(View.GONE);
         requestPreparedThumbnail(item, true, holder, result -> {
             if (binding != holder.bindGeneration || generation != galleryGeneration) return;
             if (result.state == GalleryThumbnailPipeline.State.OMIT) {
@@ -651,7 +771,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             }
             if (result.state == GalleryThumbnailPipeline.State.UNAVAILABLE) {
                 holder.preparing.setVisibility(View.GONE);
-                holder.unavailable.setVisibility(View.VISIBLE);
+                holder.image.setImageDrawable(new ColorDrawable(Color.rgb(30, 34, 40)));
+                holder.unavailable.setVisibility(item.isVideo() ? View.GONE : View.VISIBLE);
                 return;
             }
             GalleryThumbnailPipeline.request(Glide.with(holder.image), result.model, result.signature)
@@ -954,6 +1075,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         if (previewsActive == active) return;
         previewsActive = active;
         if (!active) stopFavoriteMoves();
+        else scheduleBatch();
         for (Holder holder : previewHolders) {
             if (!active) {
                 cancelPreview(holder);
@@ -1056,17 +1178,24 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public int getItemCount() {
-        return items.size();
+        return items.size() + skeletonCount();
     }
 
     private void addUnique(List<NativeContentItem> incoming) {
         if (incoming == null) return;
         java.util.Set<String> existing = new java.util.HashSet<>();
         for (NativeContentItem item : items) existing.add(item.url);
+        existing.addAll(pendingTiles.keySet());
         for (NativeContentItem candidate : incoming) {
             if (candidate == null || candidate.url == null || candidate.url.isEmpty()) continue;
             if (candidate.isImage() && omittedBlackImages.contains(candidate.url)) continue;
-            if (existing.add(candidate.url)) items.add(candidate);
+            if (!existing.add(candidate.url)) continue;
+            if (batchEnabled && thumbnailPipeline != null && GalleryThumbnailPipeline.supports(candidate)) {
+                GalleryThumbnailPipeline.Result cached = thumbnailPipeline.cached(candidate.url);
+                if (cached == null) pendingTiles.put(candidate.url, candidate);
+                else if (cached.state != GalleryThumbnailPipeline.State.OMIT) items.add(candidate);
+                else omittedBlackImages.add(candidate.url);
+            } else items.add(candidate);
         }
     }
 
@@ -1074,6 +1203,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         for (int i = start; i < end; i++) {
             NativeContentItem item = items.get(i);
             if (thumbnailPipeline != null && GalleryThumbnailPipeline.supports(item)) {
+                if (batchEnabled) continue;
                 int generation = galleryGeneration;
                 requestPreparedThumbnail(item, false, this, result -> {
                     if (generation == galleryGeneration && result.state == GalleryThumbnailPipeline.State.OMIT)

@@ -1362,6 +1362,18 @@ public class NativeFeedBrowserActivity extends Activity {
                     }
 
                     @Override
+                    public void onBatchPublished() {
+                        if (isFinishing() || isDestroyed()) return;
+                        updateCreatorTabLabels();
+                        updateCreatorEmptyState();
+                        if (!loading && !endReached && isCreatorGallery()) {
+                            BunkrGalleryAdapter active = activeCreatorAdapter();
+                            if (active != null && active.getItemCount() == 0 && !active.hasPendingThumbnails())
+                                load(true);
+                        }
+                    }
+
+                    @Override
                     public void onLongPress(NativeContentItem item, View anchor) {
                         if (creatorAvatarPickerMode) return;
                         if (isCreatorGallery()) {
@@ -1375,6 +1387,8 @@ public class NativeFeedBrowserActivity extends Activity {
         );
         if (galleryThumbnailPipeline == null) galleryThumbnailPipeline = new GalleryThumbnailPipeline(this);
         galleryAdapter.setThumbnailPipeline(galleryThumbnailPipeline);
+        galleryAdapter.setBatchEnabled(isCreatorGallery() && !creatorAvatarPickerMode);
+        galleryAdapter.setBatchActive(!isCreatorGallery());
         if (isCreatorGallery()) galleryAdapter.setFavoriteUrls(mediaFavoriteUrls);
         if (isCreatorGallery() && !notificationFreshUrls.isEmpty()) {
             galleryAdapter.setHighlightedUrls(notificationFreshUrls);
@@ -1411,9 +1425,13 @@ public class NativeFeedBrowserActivity extends Activity {
             creatorTabsPager.setCurrentItem(CREATOR_TAB_PICTURES, false);
         }
         updateCreatorTabLabels();
+        for (int tab = 0; tab < CREATOR_TAB_COUNT; tab++)
+            creatorTabAdapters[tab].setBatchActive(tab == activeCreatorTab());
         creatorTabsPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
+                for (int tab = 0; tab < CREATOR_TAB_COUNT; tab++)
+                    creatorTabAdapters[tab].setBatchActive(tab == position);
                 RecyclerView active = activeCreatorRecycler();
                 if (active != null) {
                     recycler = active;
@@ -1464,8 +1482,9 @@ public class NativeFeedBrowserActivity extends Activity {
             public void onScrolled(@NonNull RecyclerView view, int dx, int dy) {
                 int[] range = visibleRange(view.getLayoutManager());
                 galleryAdapter.preloadVisible(range[0], range[1]);
-                if (dy > 0 && !loading && !endReached &&
-                        range[1] >= Math.max(0, galleryAdapter.getItemCount() - 5)) {
+                if (dy > 0 && !loading && !endReached && !galleryAdapter.hasPendingThumbnails()
+                        && (!isCreatorGallery() || galleryAdapter == activeCreatorAdapter())
+                        && range[1] >= Math.max(0, galleryAdapter.getItemCount() - 5)) {
                     load(true);
                 }
             }
@@ -1926,7 +1945,7 @@ public class NativeFeedBrowserActivity extends Activity {
             TabLayout.Tab target = creatorTabs.getTabAt(tab);
             if (target == null) continue;
             BunkrGalleryAdapter galleryAdapter = creatorTabAdapters[tab];
-            int count = galleryAdapter == null ? 0 : galleryAdapter.getItemCount();
+            int count = galleryAdapter == null ? 0 : galleryAdapter.size();
             target.setText(count > 0 ? labels[tab] + "  " + count : labels[tab]);
         }
     }
@@ -3332,7 +3351,7 @@ public class NativeFeedBrowserActivity extends Activity {
         if (isEromeAlbum()) return bunkrAlbumItems.size();
         if (showDetailsMode) return showEpisodes.size();
         return isBunkr()
-                ? (bunkrGalleryAdapter == null ? 0 : bunkrGalleryAdapter.getItemCount())
+                ? (bunkrGalleryAdapter == null ? 0 : bunkrGalleryAdapter.size())
                 : (adapter == null ? 0 : adapter.getItemCount());
     }
 
