@@ -35,14 +35,24 @@ final class CreatorNotificationNavigator {
         if (isRetired(child)) return gallery(activity, parent, child.creatorName, null);
         Intent fallback = gallery(activity, parent, child.creatorName, child.item.url);
         if (!(child.item.isImage() || child.item.isVideo())) return fallback;
-        // A separate bounded snapshot avoids changing a cached full creator gallery.
-        String session = BunkrGallerySessionStore.create(parent.title, child.item.url);
-        BunkrGallerySessionStore.replace(session, Collections.singletonList(child.item), 1, true);
+        ArrayList<NativeContentItem> items = new ArrayList<>();
+        if (parent != null) {
+            for (UpdateInboxStore.CreatorItem sibling : parent.children) {
+                if (sibling == null || sibling.item == null || isRetired(sibling)) continue;
+                if (!(sibling.item.isImage() || sibling.item.isVideo())) continue;
+                items.add(sibling.item);
+            }
+        }
+        if (items.isEmpty()) items.add(child.item);
+        String album = parent != null && parent.fapelloProfileUrl != null && !parent.fapelloProfileUrl.isEmpty()
+                ? parent.fapelloProfileUrl : child.item.url;
+        String session = BunkrGallerySessionStore.create(parent == null ? child.creatorName : parent.title, album);
+        BunkrGallerySessionStore.replace(session, items, 1, true);
         BunkrGallerySessionStore.persist(activity, session);
         Intent intent = new Intent(activity, BunkrGalleryActivity.class);
         intent.putExtra(BunkrGalleryActivity.EXTRA_SESSION_ID, session);
-        intent.putExtra(BunkrGalleryActivity.EXTRA_TITLE, parent.title);
-        intent.putExtra(BunkrGalleryActivity.EXTRA_ALBUM_URL, child.item.url);
+        intent.putExtra(BunkrGalleryActivity.EXTRA_TITLE, parent == null ? child.creatorName : parent.title);
+        intent.putExtra(BunkrGalleryActivity.EXTRA_ALBUM_URL, album);
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL, child.item.url);
         return intent;
     }

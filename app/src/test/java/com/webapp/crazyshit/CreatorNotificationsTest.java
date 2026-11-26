@@ -212,7 +212,7 @@ public class CreatorNotificationsTest {
             assertEquals(item("Creator One", 101).url, intent.getStringExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL));
             assertEquals(3, group().unreadItems());
             assertFalse(intent.hasExtra(BunkrGalleryActivity.EXTRA_NOTIFICATION_GALLERY_FALLBACK));
-            assertEquals(1, BunkrGallerySessionStore.snapshot(intent.getStringExtra(BunkrGalleryActivity.EXTRA_SESSION_ID)).items.size());
+            assertEquals(4, BunkrGallerySessionStore.snapshot(intent.getStringExtra(BunkrGalleryActivity.EXTRA_SESSION_ID)).items.size());
             controller.recreate();
             NotificationInboxTestIdle.await(controller.get());
             assertEquals(5, ((RecyclerView) field(controller.get(), "recycler")).getAdapter().getItemCount());

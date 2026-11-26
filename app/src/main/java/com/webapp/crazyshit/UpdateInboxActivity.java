@@ -274,10 +274,10 @@ public final class UpdateInboxActivity extends Activity {
                 int total = dp(32) + dp(8) * (columns - 1);
                 out.left = dp(16) + (dp(8) - dp(32)) * column / columns;
                 out.right = total / columns - out.left;
-                out.bottom = dp(8);
+                out.bottom = dp(4);
             }
         });
-        recycler.setPadding(0, dp(4), 0, dp(16));
+        recycler.setPadding(0, dp(2), 0, dp(8));
         recycler.setClipToPadding(false);
         DefaultItemAnimator itemAnimator = new DefaultItemAnimator();
         if (ZeroChillMotion.animationsEnabled(this)) {
@@ -471,7 +471,7 @@ public final class UpdateInboxActivity extends Activity {
     }
 
     static int creatorGridColumns(int widthDp) {
-        return widthDp < 320 ? 2 : Math.max(3, Math.min(6, (widthDp - 24) / 120));
+        return widthDp < 320 ? 2 : Math.max(3, Math.min(6, (widthDp - 16) / 96));
     }
 
     private void openCreator(UpdateInboxStore.Entry entry) {
@@ -647,20 +647,20 @@ public final class UpdateInboxActivity extends Activity {
             LinearLayout row = new LinearLayout(UpdateInboxActivity.this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.TOP);
-            row.setPadding(dp(10), dp(12), dp(7), dp(12));
+            row.setPadding(dp(10), dp(8), dp(7), dp(8));
             row.setBackground(BrowseUi.rounded(UpdateInboxActivity.this, UiPalette.SURFACE, 14));
             row.setFocusable(true);
             row.setClickable(true);
             ZeroChillMotion.installPressFeedback(row);
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
-            rowParams.setMargins(0, dp(4), 0, dp(4));
+            rowParams.setMargins(0, dp(2), 0, dp(2));
             shell.addView(row, rowParams);
 
             ImageView avatar = new ImageView(UpdateInboxActivity.this);
             avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
             avatar.setClipToOutline(true);
-            avatar.setBackground(BrowseUi.rounded(UpdateInboxActivity.this, BrowseUi.SURFACE, 24));
-            row.addView(avatar, new LinearLayout.LayoutParams(dp(48), dp(48)));
+            avatar.setBackground(BrowseUi.rounded(UpdateInboxActivity.this, BrowseUi.SURFACE, 28));
+            row.addView(avatar, new LinearLayout.LayoutParams(dp(56), dp(56)));
 
             LinearLayout labels = new LinearLayout(UpdateInboxActivity.this);
             labels.setOrientation(LinearLayout.VERTICAL);
@@ -673,7 +673,7 @@ public final class UpdateInboxActivity extends Activity {
             labels.addView(title, new LinearLayout.LayoutParams(-1, -2));
 
             TextView subtitle = BrowseUi.text(UpdateInboxActivity.this, "", 13, BrowseUi.MUTED);
-            subtitle.setMaxLines(3);
+            subtitle.setMaxLines(2);
             subtitle.setEllipsize(TextUtils.TruncateAt.END);
             subtitle.setPadding(0, dp(4), 0, 0);
             labels.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
@@ -695,15 +695,16 @@ public final class UpdateInboxActivity extends Activity {
             actions.addView(like, actionPillParams());
 
             android.widget.FrameLayout trailing = new android.widget.FrameLayout(UpdateInboxActivity.this);
-            LinearLayout.LayoutParams trailingParams = new LinearLayout.LayoutParams(dp(52), dp(52));
+            LinearLayout.LayoutParams trailingParams = new LinearLayout.LayoutParams(dp(72), dp(68));
             row.addView(trailing, trailingParams);
 
-            ImageView thumbnail = new ImageView(UpdateInboxActivity.this);
-            thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            thumbnail.setClipToOutline(true);
-            thumbnail.setBackground(BrowseUi.rounded(UpdateInboxActivity.this, BrowseUi.SURFACE, 10));
+            ImageView previewThree = previewThumb();
+            ImageView previewTwo = previewThumb();
+            trailing.addView(previewThree, previewParams(dp(10)));
+            trailing.addView(previewTwo, previewParams(dp(5)));
+            ImageView thumbnail = previewThumb();
             ZeroChillMotion.installPressFeedback(thumbnail);
-            trailing.addView(thumbnail, new android.widget.FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER));
+            trailing.addView(thumbnail, previewParams(0));
 
             View unread = new View(UpdateInboxActivity.this);
             unread.setBackground(circle(AppearanceTheme.accent(UpdateInboxActivity.this)));
@@ -713,7 +714,7 @@ public final class UpdateInboxActivity extends Activity {
             trailing.addView(unread, dotParams);
 
             return new Holder(shell, row, section, avatar, title, subtitle, actions, reply, like,
-                    trailing, thumbnail, unread);
+                    trailing, thumbnail, previewTwo, previewThree, unread);
         }
 
         private Holder createMediaTile() {
@@ -721,7 +722,7 @@ public final class UpdateInboxActivity extends Activity {
                 @Override protected void onMeasure(int widthSpec, int heightSpec) {
                     int width = View.MeasureSpec.getSize(widthSpec);
                     super.onMeasure(widthSpec, View.MeasureSpec.makeMeasureSpec(
-                            Math.round(width * 1.25f), View.MeasureSpec.EXACTLY));
+                            Math.round(width * 1.02f), View.MeasureSpec.EXACTLY));
                 }
             };
             tile.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
@@ -781,7 +782,7 @@ public final class UpdateInboxActivity extends Activity {
         }
 
         private LinearLayout.LayoutParams actionPillParams() {
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(48));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(32));
             params.setMargins(0, 0, dp(4), 0);
             return params;
         }
@@ -808,14 +809,15 @@ public final class UpdateInboxActivity extends Activity {
             holder.title.setOnClickListener(creatorGroup ? v -> openCreator(entry) : null);
             holder.title.setFocusable(creatorGroup);
             holder.title.setClickable(creatorGroup);
-            holder.title.setMinHeight(creatorGroup ? dp(48) : 0);
+            holder.title.setMinHeight(0);
+            holder.subtitle.setMaxLines(creatorGroup ? 1 : 2);
             holder.title.setContentDescription(creatorGroup ? "Open " + entry.title + " creator gallery" : null);
             boolean social = UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category);
             boolean replyNotification = social
                     && ZeroChillSocialRepository.SocialActivity.TYPE_REPLY.equals(entry.socialType);
 
             String section = entry.creatorItem == null ? sectionLabel(position) : "";
-            holder.row.setPadding(dp(entry.creatorItem == null ? 10 : 28), dp(12), dp(7), dp(12));
+            holder.row.setPadding(dp(entry.creatorItem == null ? 10 : 28), dp(creatorGroup ? 6 : 8), dp(7), dp(creatorGroup ? 6 : 8));
             holder.section.setText(section);
             holder.section.setVisibility(section.isEmpty() ? View.GONE : View.VISIBLE);
 
@@ -1104,6 +1106,22 @@ public final class UpdateInboxActivity extends Activity {
             loadImage(avatar, imageUrl, referer, fallback, true);
         }
 
+        private ImageView previewThumb() {
+            ImageView image = new ImageView(UpdateInboxActivity.this);
+            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            image.setClipToOutline(true);
+            image.setBackground(BrowseUi.rounded(UpdateInboxActivity.this, BrowseUi.SURFACE, 10));
+            image.setVisibility(View.GONE);
+            return image;
+        }
+
+        private android.widget.FrameLayout.LayoutParams previewParams(int endMargin) {
+            android.widget.FrameLayout.LayoutParams params =
+                    new android.widget.FrameLayout.LayoutParams(dp(64), dp(64), Gravity.END | Gravity.CENTER_VERTICAL);
+            params.setMarginEnd(endMargin);
+            return params;
+        }
+
         private void bindThumbnail(Holder holder, UpdateInboxStore.Entry entry) {
             NativeContentItem first = entry.firstItem();
             if (UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)
@@ -1119,10 +1137,26 @@ public final class UpdateInboxActivity extends Activity {
             String imageUrl = first == null || WikiFeetRepository.isRetiredItem(first) ? "" : first.imageUrl;
             String referer = first == null ? "" : mediaReferer(first);
             boolean show = entry.creatorItem == null && imageUrl != null && !imageUrl.trim().isEmpty();
+            java.util.ArrayList<String> stack = new java.util.ArrayList<>();
+            java.util.ArrayList<String> referers = new java.util.ArrayList<>();
+            if (UpdateInboxStore.CATEGORY_ONLYFAP.equals(entry.category)) {
+                for (UpdateInboxStore.CreatorItem child : entry.children) {
+                    if (child == null || child.item == null || WikiFeetRepository.isRetiredItem(child.item)) continue;
+                    String childImage = child.item.imageUrl == null ? "" : child.item.imageUrl.trim();
+                    if (childImage.isEmpty()) continue;
+                    stack.add(childImage);
+                    referers.add(mediaReferer(child.item));
+                    if (stack.size() == 3) break;
+                }
+            }
+            if (stack.isEmpty() && show) {
+                stack.add(imageUrl.trim());
+                referers.add(referer);
+            }
+            show = !stack.isEmpty();
             if (!show && UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category)) {
                 requestLocalSocialArtwork(entry);
             }
-            if (!(referer.startsWith("https://") || referer.startsWith("http://"))) referer = first == null ? "" : first.url;
             holder.thumbnail.setVisibility(show ? View.VISIBLE : View.GONE);
             holder.thumbnail.setClickable(show);
             holder.thumbnail.setFocusable(show);
@@ -1133,14 +1167,34 @@ public final class UpdateInboxActivity extends Activity {
                     openCreatorItem(entry, entry.children.get(0));
                 else open(entry);
             } : null);
+            boolean layered = stack.size() > 1;
             LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) holder.trailing.getLayoutParams();
-            params.width = dp(show ? 52 : 14);
+            params.width = show ? dp(layered ? 86 : 72) : dp(14);
+            params.height = dp(show ? 68 : 52);
             holder.trailing.setLayoutParams(params);
-            Glide.with(holder.thumbnail).clear(holder.thumbnail);
-            if (show) {
-                holder.thumbnail.setImageDrawable(null);
-                loadImage(holder.thumbnail, imageUrl, referer, 0, false);
+            bindPreview(holder.thumbnail, show ? stack.get(0) : "", show ? referers.get(0) : "", dp(layered ? 56 : 64));
+            bindPreview(holder.previewTwo, stack.size() > 1 ? stack.get(1) : "",
+                    stack.size() > 1 ? referers.get(1) : "", dp(56));
+            bindPreview(holder.previewThree, stack.size() > 2 ? stack.get(2) : "",
+                    stack.size() > 2 ? referers.get(2) : "", dp(56));
+        }
+
+        private void bindPreview(ImageView image, String imageUrl, String referer, int size) {
+            if (image == null) return;
+            android.view.ViewGroup.LayoutParams params = image.getLayoutParams();
+            if (params != null) {
+                params.width = size;
+                params.height = size;
+                image.setLayoutParams(params);
             }
+            Glide.with(image).clear(image);
+            boolean show = imageUrl != null && !imageUrl.trim().isEmpty();
+            image.setVisibility(show ? View.VISIBLE : View.GONE);
+            if (!show) return;
+            image.setImageDrawable(null);
+            String safeReferer = referer != null && (referer.startsWith("https://") || referer.startsWith("http://"))
+                    ? referer : "";
+            loadImage(image, imageUrl, safeReferer, 0, false);
         }
 
         private void requestLocalSocialArtwork(UpdateInboxStore.Entry entry) {
@@ -1204,6 +1258,8 @@ public final class UpdateInboxActivity extends Activity {
         public void onViewRecycled(Holder holder) {
             Glide.with(holder.avatar).clear(holder.avatar);
             if (holder.thumbnail != null) Glide.with(holder.thumbnail).clear(holder.thumbnail);
+            if (holder.previewTwo != null) Glide.with(holder.previewTwo).clear(holder.previewTwo);
+            if (holder.previewThree != null) Glide.with(holder.previewThree).clear(holder.previewThree);
             super.onViewRecycled(holder);
         }
 
@@ -1230,6 +1286,8 @@ public final class UpdateInboxActivity extends Activity {
             final TextView like;
             final android.widget.FrameLayout trailing;
             final ImageView thumbnail;
+            final ImageView previewTwo;
+            final ImageView previewThree;
             final View unread;
             String boundId;
             TextView videoBadge;
@@ -1241,6 +1299,7 @@ public final class UpdateInboxActivity extends Activity {
                 this.videoBadge = video;
                 row = null; section = null; title = null; subtitle = null; actions = null;
                 reply = null; like = null; trailing = null; thumbnail = null;
+                previewTwo = null; previewThree = null;
             }
 
             Holder(
@@ -1255,6 +1314,8 @@ public final class UpdateInboxActivity extends Activity {
                     TextView like,
                     android.widget.FrameLayout trailing,
                     ImageView thumbnail,
+                    ImageView previewTwo,
+                    ImageView previewThree,
                     View unread
             ) {
                 super(shell);
@@ -1268,6 +1329,8 @@ public final class UpdateInboxActivity extends Activity {
                 this.like = like;
                 this.trailing = trailing;
                 this.thumbnail = thumbnail;
+                this.previewTwo = previewTwo;
+                this.previewThree = previewThree;
                 this.unread = unread;
             }
         }
