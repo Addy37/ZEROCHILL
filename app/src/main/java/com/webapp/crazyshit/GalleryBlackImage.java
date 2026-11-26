@@ -36,25 +36,26 @@ final class GalleryBlackImage {
 
     /** Snapshot pixels while Glide owns the resource. Scan the owned array off the UI thread. */
     static void check(Drawable drawable, java.util.function.Consumer<Boolean> result) {
-        if (!(drawable instanceof BitmapDrawable)) return;
+        if (!(drawable instanceof BitmapDrawable)) { result.accept(false); return; }
         Bitmap bitmap = ((BitmapDrawable) drawable).getBitmap();
-        if (bitmap == null || bitmap.isRecycled()) return;
+        if (bitmap == null || bitmap.isRecycled()) { result.accept(false); return; }
         int w = bitmap.getWidth(), h = bitmap.getHeight();
-        if (w <= 0 || h <= 0 || (long) w * h > MAX_PIXELS) return;
+        if (w <= 0 || h <= 0 || (long) w * h > MAX_PIXELS) { result.accept(false); return; }
         try {
             // Fast rejection for normal images; avoid copying them or scheduling work.
             if (bitmap.getPixel(0, 0) != Color.BLACK
                     || bitmap.getPixel(w / 2, h / 2) != Color.BLACK
                     || bitmap.getPixel(w - 1, h - 1) != Color.BLACK
                     || bitmap.getPixel(w - 1, 0) != Color.BLACK
-                    || bitmap.getPixel(0, h - 1) != Color.BLACK) return;
+                    || bitmap.getPixel(0, h - 1) != Color.BLACK) { result.accept(false); return; }
             int[] pixels = new int[w * h];
             bitmap.getPixels(pixels, 0, w, 0, 0, w, h);
             WORKER.execute(() -> {
-                if (allOpaqueBlack(pixels)) result.accept(true);
+                result.accept(allOpaqueBlack(pixels));
             });
         } catch (RuntimeException unavailable) {
             // Hardware, recycled or unreadable bitmaps are never suppressed.
+            result.accept(false);
         }
     }
 

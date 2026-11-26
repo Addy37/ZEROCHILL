@@ -67,6 +67,25 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final ArrayList<NativeContentItem> items = new ArrayList<>();
     private final java.util.Set<String> omittedBlackImages = new java.util.HashSet<>();
     private int galleryGeneration;
+    private GalleryThumbnailPipeline thumbnailPipeline;
+
+    void setThumbnailPipeline(GalleryThumbnailPipeline pipeline) { thumbnailPipeline = pipeline; }
+
+    void omitBlackImages(Collection<String> urls) {
+        omittedBlackImages.addAll(urls);
+        stopFavoriteMoves();
+        for (int end = items.size() - 1; end >= 0;) {
+            if (!items.get(end).isImage() || !omittedBlackImages.contains(items.get(end).url)) {
+                end--; continue;
+            }
+            int start = end;
+            while (start > 0 && items.get(start - 1).isImage()
+                    && omittedBlackImages.contains(items.get(start - 1).url)) start--;
+            items.subList(start, end + 1).clear();
+            notifyItemRangeRemoved(start, end - start + 1);
+            end = start - 1;
+        }
+    }
 
     void resetBlackImageOmissions() {
         galleryGeneration++;
@@ -356,6 +375,15 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         image.setBackgroundColor(Color.rgb(20, 20, 23));
         tile.addView(image, new FrameLayout.LayoutParams(-1, -1));
 
+        android.widget.ProgressBar preparing = new android.widget.ProgressBar(parent.getContext());
+        preparing.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(
+                AppearanceTheme.accent(parent.getContext())));
+        FrameLayout.LayoutParams preparingParams = new FrameLayout.LayoutParams(dp(parent, 22), dp(parent, 22),
+                Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        preparingParams.topMargin = dp(parent, 12);
+        preparing.setVisibility(View.GONE);
+        tile.addView(preparing, preparingParams);
+
         TextView unavailable = new TextView(parent.getContext());
         unavailable.setText(R.string.media_preview_unavailable);
         unavailable.setTextColor(Color.LTGRAY);
@@ -502,7 +530,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 playIcon,
                 playDuration,
                 morphPulse,
-                unavailable, favorite, maintenance, gif
+                unavailable, favorite, maintenance, gif, preparing
         );
     }
 
@@ -563,6 +591,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         );
 
         holder.bindGeneration++;
+        if (thumbnailPipeline != null) thumbnailPipeline.unsubscribe(holder);
+        holder.preparing.setVisibility(View.GONE);
         holder.unavailable.setVisibility(View.GONE);
         cancelPreview(holder);
         holder.boundItem = item;
@@ -575,7 +605,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         File cachedPreview = BunkrRepository.isBunkrUrl(item.url) || pawchiveVideo
                 ? BunkrMediaPreview.cached(context, item) : null;
         String eromeArtwork = EromeRepository.gridArtwork(item);
-        if (!eromeArtwork.isEmpty()) {
+        if (thumbnailPipeline != null && GalleryThumbnailPipeline.supports(item)) {
+            prepareThumbnail(holder, item);
+        } else if (!eromeArtwork.isEmpty()) {
             loadArtwork(holder, item, eromeArtwork, true);
         } else if (cachedPreview != null) {
             holder.wantsMediaPreview = true;
@@ -603,6 +635,56 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             listener.onLongPress(items.get(current), v);
             return true;
         });
+    }
+
+    private void prepareThumbnail(Holder holder, NativeContentItem item) {
+        int binding = holder.bindGeneration;
+        int generation = galleryGeneration;
+        Glide.with(holder.image).clear(holder.image);
+        holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
+        holder.preparing.setVisibility(View.VISIBLE);
+        requestPreparedThumbnail(item, true, holder, result -> {
+            if (binding != holder.bindGeneration || generation != galleryGeneration) return;
+            if (result.state == GalleryThumbnailPipeline.State.OMIT) {
+                listener.onOmittedImage(item);
+                return;
+            }
+            if (result.state == GalleryThumbnailPipeline.State.UNAVAILABLE) {
+                holder.preparing.setVisibility(View.GONE);
+                holder.unavailable.setVisibility(View.VISIBLE);
+                return;
+            }
+            GalleryThumbnailPipeline.request(Glide.with(holder.image), result.model, result.signature)
+                    .transition(ThumbnailFades.thumbnail())
+                    .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
+                    .listener(new RequestListener<Drawable>() {
+                        @Override public boolean onLoadFailed(GlideException error, Object model,
+                                Target<Drawable> target, boolean first) {
+                            if (binding != holder.bindGeneration || generation != galleryGeneration) return true;
+                            thumbnailPipeline.invalidateReady(item.url);
+                            holder.preparing.setVisibility(View.GONE);
+                            holder.unavailable.setVisibility(View.VISIBLE);
+                            return false;
+                        }
+                        @Override public boolean onResourceReady(Drawable resource, Object model,
+                                Target<Drawable> target, DataSource source, boolean first) {
+                            if (binding != holder.bindGeneration || generation != galleryGeneration) return true;
+                            if (adaptiveAspectRatios) applyAspectRatio(holder, item, resource);
+                            holder.preparing.setVisibility(View.GONE);
+                            holder.unavailable.setVisibility(View.GONE);
+                            return false;
+                        }
+                    }).into(holder.image);
+        });
+    }
+
+    private void requestPreparedThumbnail(NativeContentItem item, boolean visible,
+            Object subscriber, java.util.function.Consumer<GalleryThumbnailPipeline.Result> callback) {
+        String referer = imageReferer(item);
+        GlideUrl original = GalleryBlackImage.eligible(item) ? withHeaders(item.url, referer) : null;
+        GlideUrl preview = item.imageUrl.isEmpty() || item.imageUrl.equals(item.url)
+                ? null : withHeaders(item.imageUrl, referer);
+        thumbnailPipeline.prepare(item, preview, original, visible, subscriber, callback);
     }
 
     private void loadArtwork(Holder holder, NativeContentItem item, String url, boolean repair) {
@@ -958,6 +1040,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         resetTileTransform(holder.itemView);
         previewHolders.remove(holder);
         holder.bindGeneration++;
+        if (thumbnailPipeline != null) thumbnailPipeline.unsubscribe(holder);
+        holder.preparing.setVisibility(View.GONE);
         cancelPreview(holder);
         holder.boundItem = null;
         holder.maintenance.bind(null);
@@ -989,6 +1073,14 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private void preloadRange(int start, int end) {
         for (int i = start; i < end; i++) {
             NativeContentItem item = items.get(i);
+            if (thumbnailPipeline != null && GalleryThumbnailPipeline.supports(item)) {
+                int generation = galleryGeneration;
+                requestPreparedThumbnail(item, false, this, result -> {
+                    if (generation == galleryGeneration && result.state == GalleryThumbnailPipeline.State.OMIT)
+                        listener.onOmittedImage(item);
+                });
+                continue;
+            }
             String imageUrl = EromeRepository.gridArtwork(item);
             if (imageUrl.isEmpty()) imageUrl = item.imageUrl == null ? "" : item.imageUrl.trim();
             if (imageUrl.isEmpty()) continue;
@@ -1225,6 +1317,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final ImageView favorite;
         final BunkrMaintenanceUi.Badge maintenance;
         final TextView gif;
+        final android.widget.ProgressBar preparing;
 
         Holder(
                 AspectRatioFrameLayout itemView,
@@ -1238,7 +1331,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 TextView playDuration,
                 View morphPulse,
                 TextView unavailable, ImageView favorite, BunkrMaintenanceUi.Badge maintenance,
-                TextView gif
+                TextView gif, android.widget.ProgressBar preparing
         ) {
             super(itemView);
             this.tile = itemView;
@@ -1255,6 +1348,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             this.favorite = favorite;
             this.maintenance = maintenance;
             this.gif = gif;
+            this.preparing = preparing;
         }
     }
 
