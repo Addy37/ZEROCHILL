@@ -84,16 +84,20 @@ public class StartupWizardUiTest {
             showPage.setAccessible(true);
             showPage.invoke(activity, 2, true);
             View root = activity.getWindow().getDecorView();
-            assertNotNull(find(root, "Spotlight search"));
-            assertNotNull(find(root, "Switch between Chaos, Straight, Gay, Trans and Groups. Each feed remembers its own place."));
-            View preview = findDescription(root, "Illustration of independent feeds and custom collections");
-            assertNotNull(preview);
-            assertNull(org.robolectric.util.ReflectionHelpers.getField(preview, "animator"));
-            showPage.invoke(activity, 3, true);
-            assertNotNull(find(root, "Made for your fingertips"));
-            assertNotNull(find(root, "Find a favorite creator"));
-            assertNotNull(find(root, "Save and organize"));
-            assertNotNull(findDescription(root, "Illustration of video swiping and favorite creator alphabet scrolling"));
+            CinematicTourView tour = org.robolectric.util.ReflectionHelpers.getField(activity, "tour");
+            assertEquals(0, tour.currentScene());
+            assertNull(org.robolectric.util.ReflectionHelpers.getField(tour, "animation"));
+            assertNotNull(find(root, "Find your feed."));
+            for (int i = 1; i < 5; i++) {
+                findDescription(root, "Next preview").performClick();
+                assertEquals(i, tour.currentScene());
+                assertNotNull(find(root, CinematicTourView.TITLES[i]));
+            }
+            findDescription(root, "Next preview").performClick();
+            assertEquals(0, tour.currentScene());
+            find(root, "CONTINUE").performClick();
+            assertNotNull(find(root, "Make it yours"));
+            assertNull(org.robolectric.util.ReflectionHelpers.getField(activity, "tour"));
             activity.finish();
         } finally {
             context.getSharedPreferences("app_prefs", 0).edit().remove("immersive_motion_enabled").commit();
@@ -174,6 +178,7 @@ public class StartupWizardUiTest {
         showSettings(activity);
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         View root = activity.getWindow().getDecorView();
+        find(root, "+  Notification & haptic preferences").performClick();
         View switchView = findSwitch(root, "Favorite creator alerts");
         assertNotNull(switchView);
         boolean before = ((CompoundButton) switchView).isChecked();
@@ -196,7 +201,7 @@ public class StartupWizardUiTest {
         Method showPage = StartupWizardActivity.class.getDeclaredMethod(
                 "showPage", int.class, boolean.class);
         showPage.setAccessible(true);
-        showPage.invoke(activity, 4, true);
+        showPage.invoke(activity, 3, true);
     }
 
     private static View find(View root, String text) {
