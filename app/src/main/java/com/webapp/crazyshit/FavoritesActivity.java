@@ -58,6 +58,13 @@ public class FavoritesActivity extends Activity {
     public static final String EXTRA_SELECTED_TAB = "selected_tab";
     public static final String EXTRA_MEDIA_FAVORITES = "media_favorites";
     private boolean mediaFavorites;
+    public static final String EXTRA_COLLECTION_ID = "collection_id";
+    private String collectionId = "";
+    private int collectionColumns = 2;
+    private TextView sectionHeading;
+    private android.view.ScaleGestureDetector collectionScale;
+    private boolean collectionGesture;
+    private float collectionScaleFactor = 1f;
     public static final String EXTRA_START_TAB = "start_tab";
     public static final int START_CONTINUE = 0;
     public static final int START_HISTORY = 1;
@@ -102,6 +109,31 @@ public class FavoritesActivity extends Activity {
                 : getIntent().getIntExtra(EXTRA_START_TAB, TAB_CONTINUE);
         mediaFavorites = getIntent() != null && getIntent().getBooleanExtra(EXTRA_MEDIA_FAVORITES, false);
         if (tab < TAB_CONTINUE || tab > TAB_WATCH_LATER) tab = TAB_CONTINUE;
+        String requestedCollection = getIntent() == null ? null : getIntent().getStringExtra(EXTRA_COLLECTION_ID);
+        collectionId = requestedCollection == null ? "" : requestedCollection;
+        if (!collectionId.isEmpty()) {
+            mediaFavorites = true;
+            tab = TAB_WATCH_LATER;
+            if (state != null) collectionColumns = Math.max(2, Math.min(5, state.getInt("collection_columns", 2)));
+            collectionScale = new android.view.ScaleGestureDetector(this,
+                    new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                        @Override public boolean onScaleBegin(android.view.ScaleGestureDetector detector) {
+                            collectionScaleFactor = 1f; return true;
+                        }
+                        @Override public boolean onScale(android.view.ScaleGestureDetector detector) {
+                            collectionScaleFactor *= detector.getScaleFactor(); return true;
+                        }
+                        @Override public void onScaleEnd(android.view.ScaleGestureDetector detector) {
+                            int next = Math.max(2, Math.min(5, collectionColumns
+                                    + (collectionScaleFactor < .80f ? 1 : collectionScaleFactor > 1.25f ? -1 : 0)));
+                            if (next != collectionColumns) {
+                                collectionColumns = next;
+                                renderAllPages();
+                            }
+                        }
+                    });
+            collectionScale.setQuickScaleEnabled(false);
+        }
         getWindow().setStatusBarColor(Color.rgb(13, 13, 15));
         getWindow().setNavigationBarColor(Color.BLACK);
         thumbnailResolvers = new RenderedThumbnailResolver[] {
@@ -140,6 +172,7 @@ public class FavoritesActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle state) {
         state.putString("query", searchQuery());
+        state.putInt("collection_columns", collectionColumns);
         state.putString("source_filter", sourceFilter);
         super.onSaveInstanceState(state);
     }
@@ -156,6 +189,7 @@ public class FavoritesActivity extends Activity {
         header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         TextView title = BrowseUi.text(this, sectionTitle(), 20, Color.WHITE);
+        sectionHeading = title;
         title.setPadding(dp(12), 0, 0, 0);
         title.setContentDescription(sectionTitle() + " section");
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
@@ -226,7 +260,30 @@ public class FavoritesActivity extends Activity {
         return page;
     }
 
+    @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+        if (collectionScale == null) return super.dispatchTouchEvent(event);
+        int action = event.getActionMasked();
+        if (action == android.view.MotionEvent.ACTION_POINTER_DOWN && !collectionGesture) {
+            collectionGesture = true;
+            android.view.MotionEvent cancel = android.view.MotionEvent.obtain(event);
+            cancel.setAction(android.view.MotionEvent.ACTION_CANCEL);
+            super.dispatchTouchEvent(cancel);
+            cancel.recycle();
+        }
+        collectionScale.onTouchEvent(event);
+        if (collectionGesture) {
+            if (action == android.view.MotionEvent.ACTION_UP || action == android.view.MotionEvent.ACTION_CANCEL)
+                collectionGesture = false;
+            return true;
+        }
+        return super.dispatchTouchEvent(event);
+    }
+
     private String sectionTitle() {
+        if (!collectionId.isEmpty()) {
+            MediaCollectionStore.Group group = MediaCollectionStore.find(this, collectionId);
+            return group == null ? "Collection" : group.name;
+        }
         if (tab == TAB_HISTORY) return "History";
         if (tab == TAB_WATCH_LATER) return mediaFavorites ? "Favorites" : "Watch Later";
         return "Continue Watching";
@@ -495,7 +552,8 @@ public class FavoritesActivity extends Activity {
 
     private void renderWatchLater(LinearLayout target) {
         if (target == null) return;
-        List<FavoriteStore.Item> allItems = mediaFavorites ? FavoriteStore.mediaFavorites(this) : FavoriteStore.watchLater(this);
+        List<FavoriteStore.Item> allItems = !collectionId.isEmpty() ? MediaCollectionStore.items(this, collectionId)
+                : mediaFavorites ? FavoriteStore.mediaFavorites(this) : FavoriteStore.watchLater(this);
         String query = searchQuery();
         List<FavoriteStore.Item> items = new ArrayList<>();
         LinkedHashSet<String> sources = new LinkedHashSet<>();
@@ -516,7 +574,9 @@ public class FavoritesActivity extends Activity {
         }
 
         if (allItems.isEmpty()) {
-            showEmpty(target, "Nothing saved yet", mediaFavorites ? "Long-press a gallery item and choose Favorite." : "Long-press a video card and choose Save to Watch Later.");
+            showEmpty(target, "Nothing saved yet", !collectionId.isEmpty()
+                    ? "Long-press a media favorite button and choose this collection."
+                    : mediaFavorites ? "Long-press a gallery item and choose Favorite." : "Long-press a video card and choose Save to Watch Later.");
             return;
         }
         if (items.isEmpty()) {
@@ -606,12 +666,22 @@ public class FavoritesActivity extends Activity {
             menu.getMenu().add("Open gallery").setEnabled(gallery != null)
                     .setOnMenuItemClickListener(clicked -> { CreatorGalleryTransition.start(this, gallery, anchor); return true; });
         }
-        menu.getMenu().add(mediaFavorites ? "Remove from favorites" : "Remove from Watch Later");
-        menu.setOnMenuItemClickListener(clicked -> {
+        if (mediaFavorites || item.content != null) {
+            NativeContentItem content = item.content == null
+                    ? OnlyFapVideoMetadata.basic(item.title, item.url, "") : item.content;
+            menu.getMenu().add("Save to collections").setOnMenuItemClickListener(clicked -> {
+                MediaCollectionPicker.show(this, content, item.galleryKey, this::renderAllPages); return true;
+            });
+        }
+        menu.getMenu().add(!collectionId.isEmpty() ? "Remove from collection"
+                : mediaFavorites ? "Remove from favorites" : "Remove from Watch Later")
+                .setOnMenuItemClickListener(clicked -> {
             haptic(anchor);
-            if (mediaFavorites && item.content != null) FavoriteStore.setMediaFavorite(this, item.content, false);
+            if (!collectionId.isEmpty()) {
+                try { MediaCollectionStore.remove(this, collectionId, item.url); }
+                catch (Exception error) { MediaCollectionPicker.failure(this); }
+            } else if (mediaFavorites && item.content != null) FavoriteStore.setMediaFavorite(this, item.content, false);
             else FavoriteStore.remove(this, item.url);
-            ZeroChillToast.makeText(this, mediaFavorites ? "Removed from Favorites." : "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
             renderAllPages();
             return true;
         });
@@ -670,12 +740,15 @@ public class FavoritesActivity extends Activity {
         TextView label = LibraryDestinationChrome.sectionHeading(this, heading);
         label.setTag("library-date-heading");
         target.addView(label);
-        for (int i = 0; i < cards.size(); i += 2) {
+        int columns = collectionId.isEmpty() ? 2 : collectionColumns;
+        for (int i = 0; i < cards.size(); i += columns) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
-            row.addView(cards.get(i), uniformCell(true));
-            if (i + 1 < cards.size()) row.addView(cards.get(i + 1), uniformCell(false));
-            else row.addView(new View(this), uniformCell(false));
+            for (int j = 0; j < columns; j++) {
+                LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(0, -2, 1f);
+                cell.setMargins(j == 0 ? 0 : dp(4), 0, j == columns - 1 ? 0 : dp(4), 0);
+                row.addView(i + j < cards.size() ? cards.get(i + j) : new View(this), cell);
+            }
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
             rowParams.bottomMargin = dp(8);
             target.addView(row, rowParams);
@@ -825,7 +898,8 @@ public class FavoritesActivity extends Activity {
                     })
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .dontAnimate()
-                    .transition(ThumbnailFades.thumbnail())
+                    .transition(collectionId.isEmpty() ? ThumbnailFades.thumbnail()
+                            : SharedArtworkReveal.artwork("collection-" + collectionId, pageUrl, false))
                     .placeholder(new ColorDrawable(UiPalette.SURFACE))
                     .error(new ColorDrawable(UiPalette.SURFACE))
                     .into(image);
@@ -920,6 +994,24 @@ public class FavoritesActivity extends Activity {
 
     private void showSectionMenu(View anchor) {
         ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
+        if (!collectionId.isEmpty()) {
+            menu.getMenu().add("Rename collection").setOnMenuItemClickListener(clicked -> {
+                MediaCollectionPicker.name(this, "Rename collection", sectionTitle(), name -> {
+                    MediaCollectionStore.rename(this, collectionId, name);
+                    sectionHeading.setText(name);
+                    input.setHint("Search " + name);
+                }); return true;
+            });
+            menu.getMenu().add("Delete collection").setOnMenuItemClickListener(clicked -> {
+                new ZeroChillDialog.Builder(this).destructive().setTitle("Delete collection?")
+                        .setMessage("Your saved favorites will remain.")
+                        .setNegativeButton("Cancel", null).setPositiveButton("Delete", (dialog, which) -> {
+                            try { MediaCollectionStore.delete(this, collectionId); finish(); }
+                            catch (Exception error) { MediaCollectionPicker.failure(this); }
+                        }).show(); return true;
+            });
+            menu.show(); return;
+        }
         String label = tab == TAB_WATCH_LATER
                 ? (mediaFavorites ? "Clear Favorites" : "Clear Watch Later")
                 : "Clear watch history";

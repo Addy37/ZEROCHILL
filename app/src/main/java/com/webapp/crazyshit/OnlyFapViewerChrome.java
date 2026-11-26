@@ -23,6 +23,7 @@ import java.util.Locale;
 final class OnlyFapViewerChrome extends FrameLayout {
     interface Actions {
         void close(); void favorite(); void playback(); void fullscreen();
+        default void collections() { }
         void more(View anchor); void hide();
     }
     private final Actions actions;
@@ -73,6 +74,7 @@ final class OnlyFapViewerChrome extends FrameLayout {
         pill.setMargins(dp(9), 0, dp(9), 0);
         photoRow.addView(photoPill, pill);
         photoFavorite = button(R.drawable.ic_action_heart_outline, "Favorite media", actions::favorite, true);
+        photoFavorite.setOnLongClickListener(v -> { actions.collections(); return true; });
         photoRow.addView(photoFavorite, cell());
         ImageButton photoMore = button(R.drawable.ic_more_overflow, "More options", null, true);
         photoMore.setOnClickListener(v -> { setMenuOpen(true); actions.more(v); });
@@ -141,6 +143,7 @@ final class OnlyFapViewerChrome extends FrameLayout {
         play.setBackground(new android.graphics.drawable.InsetDrawable(prominent, dp(7)));
         play.setPadding(dp(14), dp(14), dp(14), dp(14)); row.addView(play, cell());
         videoFavorite = button(R.drawable.ic_action_heart_outline, "Favorite media", actions::favorite, false);
+        videoFavorite.setOnLongClickListener(v -> { actions.collections(); return true; });
         row.addView(videoFavorite, cell());
         fullscreen = button(R.drawable.ic_action_fullscreen, "Fullscreen", actions::fullscreen, false);
         row.addView(fullscreen, cell());

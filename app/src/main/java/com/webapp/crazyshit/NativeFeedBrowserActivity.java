@@ -2280,7 +2280,8 @@ public class NativeFeedBrowserActivity extends Activity {
                         if (android.os.Build.VERSION.SDK_INT < 33)
                             ZeroChillToast.makeText(this, "Link copied", ZeroChillToast.LENGTH_SHORT).show();
                     },
-                    () -> GalleryMediaDownloader.download(this, io, item, "", "", null)
+                    () -> GalleryMediaDownloader.download(this, io, item, "", "", null),
+                    () -> MediaCollectionPicker.show(this, item, creatorGalleryCacheKey, this::refreshMediaFavorites)
                 }, () -> galleryContextMenu = null);
     }
 

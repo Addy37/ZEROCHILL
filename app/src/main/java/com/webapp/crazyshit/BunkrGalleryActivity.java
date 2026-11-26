@@ -311,6 +311,13 @@ public final class BunkrGalleryActivity extends Activity {
         viewerChrome = new OnlyFapViewerChrome(this, new OnlyFapViewerChrome.Actions() {
             @Override public void close() { finishViewer(); }
             @Override public void favorite() { toggleCurrentFavorite(); }
+            @Override public void collections() {
+                NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
+                BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(sessionId);
+                MediaCollectionPicker.show(BunkrGalleryActivity.this, current,
+                        snapshot == null ? value(creatorQuery) : snapshot.creatorQuery,
+                        BunkrGalleryActivity.this::refreshCurrentFavorite);
+            }
             @Override public void playback() { toggleCurrentPlayback(); }
             @Override public void fullscreen() { toggleVideoFullscreen(); }
             @Override public void more(View anchor) { showMenu(anchor); }
@@ -1529,6 +1536,9 @@ public final class BunkrGalleryActivity extends Activity {
         ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         menu.setOnDismissListener(() -> { if (viewerChrome != null) viewerChrome.setMenuOpen(false); });
         if (savedFavoriteImage(current)) {
+            menu.getMenu().add("Save to collections").setOnMenuItemClickListener(item -> {
+                MediaCollectionPicker.show(this, current, value(creatorQuery), this::refreshCurrentFavorite); return true;
+            });
             menu.getMenu().add("Share item").setOnMenuItemClickListener(item -> { shareCurrent(); return true; });
             menu.getMenu().add("Open gallery").setEnabled(savedCreatorGallery() != null)
                     .setOnMenuItemClickListener(item -> { openSavedCreatorGallery(); return true; });
@@ -1541,6 +1551,11 @@ public final class BunkrGalleryActivity extends Activity {
             menu.showAbove();
             return;
         }
+        menu.getMenu().add("Save to collections").setEnabled(current != null).setOnMenuItemClickListener(item -> {
+            BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(sessionId);
+            MediaCollectionPicker.show(this, current, snapshot == null ? value(creatorQuery) : snapshot.creatorQuery,
+                    this::refreshCurrentFavorite); return true;
+        });
         menu.getMenu().add("Share item").setEnabled(current != null).setOnMenuItemClickListener(item -> { shareCurrent(); return true; });
         if (current != null && current.isVideo()) {
             menu.getMenu().add(Menu.NONE, 3, 0, "Download video");
@@ -1649,7 +1664,12 @@ public final class BunkrGalleryActivity extends Activity {
                                 getSystemService(CLIPBOARD_SERVICE);
                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Media link", PawchiveRepository.pageUrl(item)));
                     },
-                    () -> downloadGalleryItem(position, item)
+                    () -> downloadGalleryItem(position, item),
+                    () -> {
+                        BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(sessionId);
+                        MediaCollectionPicker.show(this, item, snapshot == null ? value(creatorQuery) : snapshot.creatorQuery,
+                                this::refreshCurrentFavorite);
+                    }
                 }, () -> mediaContextMenu = null);
             });
         });

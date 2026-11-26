@@ -51,6 +51,7 @@ final class LibraryHubView extends ScrollView {
     private final LinearLayout content;
     private LibraryProfileHeader socialHub;
     private LibraryCollectionView collection;
+    private CustomCollectionsView customCollections;
     private final Map<String, List<ImageView>> thumbnailTargets = new HashMap<>();
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
     private final Map<String, Boolean> portraitThumbnails = new HashMap<>();
@@ -134,6 +135,8 @@ final class LibraryHubView extends ScrollView {
                 () -> activity.startActivity(new Intent(activity, DownloadedActivity.class)),
                 () -> openSavedVideos(FavoritesActivity.START_HISTORY), this::openMediaFavorites);
         content.addView(collection, new LinearLayout.LayoutParams(-1, -2));
+        customCollections = new CustomCollectionsView(activity);
+        content.addView(customCollections, new LinearLayout.LayoutParams(-1, -2));
     }
 
     @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
@@ -216,6 +219,7 @@ final class LibraryHubView extends ScrollView {
 
     private void render(Snapshot snapshot) {
         bindCollectionPreviews(snapshot);
+        if (customCollections != null) customCollections.bind(snapshot.customCollections);
         videoMetadata = snapshot.videoMetadata;
         int scrollY = getScrollY();
         Map<String, int[]> railPositions = new HashMap<>();
@@ -337,6 +341,7 @@ final class LibraryHubView extends ScrollView {
         final List<CreatorAvatarOverrideStore.Override> avatars;
         final List<FavoriteStore.Item> watchLater;
         final List<FavoriteStore.Item> mediaFavorites;
+        final List<MediaCollectionStore.Preview> customCollections;
         final List<VideoDownloadStore.Entry> downloads;
         final String downloadState;
 
@@ -359,6 +364,7 @@ final class LibraryHubView extends ScrollView {
                 avatars = previous.avatars;
                 watchLater = previous.watchLater;
                 mediaFavorites = previous.mediaFavorites;
+                customCollections = previous.customCollections;
             } else {
                 videoMetadata = OnlyFapVideoMetadata.snapshot(activity);
                 history = PlaybackHistoryStore.load(activity);
@@ -373,6 +379,7 @@ final class LibraryHubView extends ScrollView {
                 }
                 watchLater = first(FavoriteStore.watchLater(activity), 10);
                 mediaFavorites = first(FavoriteStore.mediaFavorites(activity), 10);
+                customCollections = MediaCollectionStore.previews(activity);
             }
             String encoded = "";
             try { encoded = ContentItemCodec.encodeList(new ArrayList<>(videoMetadata.values()),
@@ -399,6 +406,7 @@ final class LibraryHubView extends ScrollView {
         }
         if (mediaContent != null) clearImages(mediaContent);
         if (collection != null) collection.release();
+        if (customCollections != null) customCollections.release();
         ShowsContinueFrameStore.removeListener(frameListener);
         if (socialHub != null) socialHub.close();
         for (RenderedThumbnailResolver resolver : thumbnailResolvers) {
