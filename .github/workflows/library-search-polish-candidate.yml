@@ -88,7 +88,15 @@ jobs:
             --tests com.webapp.crazyshit.ShowsContinueFrameCropTest \
             --tests com.webapp.crazyshit.BaddieHubSearchFallbackTest \
             --tests com.webapp.crazyshit.SpotlightSearchTest \
-            --tests com.webapp.crazyshit.VisualRefreshTest
+            --tests com.webapp.crazyshit.VisualRefreshTest \
+            --tests com.webapp.crazyshit.LibraryBrowseGroupsTest \
+            --tests com.webapp.crazyshit.LibraryThumbnailFitTest \
+            --tests com.webapp.crazyshit.OnlyFapLibraryMetadataTest \
+            --tests com.webapp.crazyshit.FavoriteImageNavigationTest \
+            --tests com.webapp.crazyshit.LikedVideosActivityTest \
+            --tests com.webapp.crazyshit.LibraryCollectionTest \
+            --tests com.webapp.crazyshit.FavoriteCreatorsScrollTest \
+            --tests com.webapp.crazyshit.CreatorNotificationsTest
       - name: Assemble and verify side-by-side APK
         run: |
           set -euo pipefail
