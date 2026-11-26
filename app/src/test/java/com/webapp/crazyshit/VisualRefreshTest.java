@@ -448,8 +448,11 @@ public class VisualRefreshTest {
             ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
             capture(root, "shittok-portrait-controls", 400, 900);
             View fittedMedia = ReflectionHelpers.getField(holder, "mediaLayer");
-            int capturedVideoBottom = fittedMedia.getTop() + (fittedMedia.getHeight()
-                    + Math.min(fittedMedia.getHeight(), Math.round(fittedMedia.getWidth() / 2f))) / 2;
+            View fittedPlayer = ReflectionHelpers.getField(holder, "playerView");
+            int capturedInset = ((FrameLayout.LayoutParams) fittedPlayer.getLayoutParams()).bottomMargin;
+            int capturedViewport = Math.max(0, fittedMedia.getHeight() - capturedInset);
+            int capturedVideoBottom = fittedMedia.getTop() + fittedPlayer.getTop()
+                    + (capturedViewport + Math.min(capturedViewport, Math.round(fittedPlayer.getWidth() / 2f))) / 2;
             assertTrue(root.findViewWithTag("shittok_fullscreen").getTop() >= capturedVideoBottom
                     + BrowseUi.dp(host.get(), 8));
             root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
@@ -458,9 +461,19 @@ public class VisualRefreshTest {
             FrameLayout.LayoutParams promptParams = (FrameLayout.LayoutParams)
                     root.findViewWithTag("shittok_fullscreen").getLayoutParams();
             media = ReflectionHelpers.getField(holder, "mediaLayer");
-            int fittedHeight = Math.min(media.getHeight(), Math.round(media.getWidth() / 2f));
-            int videoBottom = media.getTop() + (media.getHeight() + fittedHeight) / 2;
+            View player = ReflectionHelpers.getField(holder, "playerView");
+            int playerInset = ((FrameLayout.LayoutParams) player.getLayoutParams()).bottomMargin;
+            int viewportHeight = Math.max(0, media.getHeight() - playerInset);
+            int fittedHeight = Math.min(viewportHeight, Math.round(player.getWidth() / 2f));
+            int videoBottom = media.getTop() + player.getTop() + (viewportHeight + fittedHeight) / 2;
             assertTrue(promptParams.topMargin >= videoBottom + BrowseUi.dp(host.get(), 8));
+            View progress = root.findViewWithTag("shittok_progress_row");
+            android.widget.SeekBar bar = ReflectionHelpers.getField(holder, "seekBar");
+            int content = progress.getHeight() - bar.getPaddingTop() - bar.getPaddingBottom();
+            int track = Math.min(BrowseUi.dp(host.get(), 2), Math.max(1, content));
+            int trackTop = progress.getTop() + bar.getPaddingTop() + Math.max(0, content - track) / 2;
+            assertTrue(media.getBottom() >= trackTop - 1);
+            assertTrue(player.getBottom() + media.getTop() < trackTop);
             assertEquals(View.GONE, root.findViewWithTag("shittok_elapsed").getVisibility());
             assertEquals(View.GONE, root.findViewWithTag("shittok_remaining").getVisibility());
             ChaosFeedView fresh = new ChaosFeedView(host.get(), item -> { }, false);

@@ -6021,7 +6021,9 @@ public final class ChaosFeedView extends FrameLayout {
                     || landscapeFullscreen()) return;
             FrameLayout.LayoutParams mediaParams = (FrameLayout.LayoutParams) mediaLayer.getLayoutParams();
             int usableHeight = root.getHeight() - root.getPaddingBottom();
-            int mediaHeight = usableHeight - mediaParams.topMargin - mediaParams.bottomMargin;
+            int playerInset = playerView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams
+                    ? ((ViewGroup.MarginLayoutParams) playerView.getLayoutParams()).bottomMargin : 0;
+            int mediaHeight = usableHeight - mediaParams.topMargin - mediaParams.bottomMargin - playerInset;
             int fittedHeight = Math.min(mediaHeight, Math.round(root.getWidth() / videoAspectRatio));
             int videoBottom = mediaParams.topMargin + (mediaHeight + fittedHeight) / 2;
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) fullscreen.getLayoutParams();
@@ -6048,11 +6050,40 @@ public final class ChaosFeedView extends FrameLayout {
             seekBar.setPadding(0, landscape ? 0 : dp(18), 0, 0);
             // True fullscreen keeps the landscape media edge-to-edge. Header, scrubber and
             // actions are overlays so none of them reduce the fitted video viewport.
+            int reservedBottom = horizontalVideo ? dp(44) : 0;
+            int blurExtension = !landscape && reservedBottom > 0
+                    ? ShitTokAmbientSampling.portraitBlurExtensionToSeek(
+                            reservedBottom,
+                            progress.height > 0 ? progress.height : dp(48),
+                            progress.bottomMargin,
+                            seekBar.getPaddingTop(),
+                            seekBar.getPaddingBottom(),
+                            dp(2))
+                    : 0;
             FrameLayout.LayoutParams media = (FrameLayout.LayoutParams) mediaLayer.getLayoutParams();
             media.topMargin = 0;
-            media.bottomMargin = landscape ? 0 : (horizontalVideo ? dp(44) : 0);
+            media.bottomMargin = landscape ? 0 : Math.max(0, reservedBottom - blurExtension);
             mediaLayer.setLayoutParams(media);
+            // The sharp player, poster and spinner stay in the old viewport.
+            // Only the blur layers, which match the media layer, reach the seek track.
+            insetPlaybackViewport(blurExtension);
             updateFullscreenPromptPosition();
+        }
+
+        private void insetPlaybackViewport(int inset) {
+            insetBottom(playerView, inset);
+            insetBottom(poster, inset);
+            insetBottom(failure, inset);
+            insetBottom(loading, inset);
+            insetBottom(pausePlayOverlay, inset);
+        }
+
+        private static void insetBottom(View view, int inset) {
+            if (!(view.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
+            if (params.bottomMargin == inset) return;
+            params.bottomMargin = inset;
+            view.setLayoutParams(params);
         }
 
         private void applyControlLayout() {

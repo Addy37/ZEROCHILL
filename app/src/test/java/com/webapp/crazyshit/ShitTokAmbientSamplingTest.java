@@ -50,4 +50,12 @@ public class ShitTokAmbientSamplingTest {
         assertTrue(ShitTokAmbientSampling.shouldDisable(0, missed, 2));
         assertFalse(ShitTokAmbientSampling.shouldDisable(10, 10, 2));
     }
+
+    @Test public void portraitHorizontalBlurExtendsToTheSeekTrackWithoutPassingTheReservedGap() {
+        assertEquals(41, ShitTokAmbientSampling.portraitBlurExtensionToSeek(44, 48, -13, 18, 0, 2));
+        assertEquals(40, ShitTokAmbientSampling.portraitBlurExtensionToSeek(44, 48, -13, 18, 0, 4));
+        assertEquals(0, ShitTokAmbientSampling.portraitBlurExtensionToSeek(0, 48, -13, 18, 0, 2));
+        assertEquals(0, ShitTokAmbientSampling.portraitBlurExtensionToSeek(44, 0, -13, 18, 0, 2));
+        assertTrue(ShitTokAmbientSampling.portraitBlurExtensionToSeek(44, 48, -13, 18, 0, 2) <= 44);
+    }
 }
