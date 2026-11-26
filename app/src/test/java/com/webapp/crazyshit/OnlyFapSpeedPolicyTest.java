@@ -44,4 +44,28 @@ public class OnlyFapSpeedPolicyTest {
         ));
         assertFalse(BunkrGalleryActivity.shouldAutoplayInitialSelection(true, url, image));
     }
+
+    @Test public void swipedGalleryVideosAutoplayAndImagesDoNot() {
+        NativeContentItem video = new NativeContentItem(
+                NativeContentItem.KIND_MEDIA,
+                "Next",
+                "https://example.test/video/next",
+                "",
+                "",
+                "",
+                ""
+        );
+        NativeContentItem image = new NativeContentItem(
+                NativeContentItem.KIND_IMAGE,
+                "Still",
+                "https://example.test/photo/1",
+                "",
+                "",
+                "",
+                ""
+        );
+        assertTrue(BunkrGalleryActivity.shouldAutoplayGallerySelection(video));
+        assertFalse(BunkrGalleryActivity.shouldAutoplayGallerySelection(image));
+        assertFalse(BunkrGalleryActivity.shouldAutoplayGallerySelection(null));
+    }
 }

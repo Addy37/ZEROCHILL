@@ -61,7 +61,7 @@ public class LikedVideosActivityTest {
             calls.get(0).complete(new SocialContentContextStore.LikedPage(Collections.singletonList(item), 1, 100, true), null);
             shadowOf(Looper.getMainLooper()).idle();
             RecyclerView list = ReflectionHelpers.getField(activity, "recycler");
-            assertEquals(1, list.getAdapter().getItemCount());
+            assertEquals(2, list.getAdapter().getItemCount());
             assertTrue(((TextView) ReflectionHelpers.getField(activity, "status")).getText().toString().contains("older likes"));
             LibraryProfileTest.description(activity.getWindow().getDecorView(), "Load more liked videos").performClick();
             assertEquals(Integer.valueOf(100), offsets.get(1));
@@ -69,14 +69,14 @@ public class LikedVideosActivityTest {
             shadowOf(Looper.getMainLooper()).idle();
             list.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY));
             list.layout(0, 0, 600, 900);
-            assertEquals(2, list.getAdapter().getItemCount());
+            assertEquals(3, list.getAdapter().getItemCount());
             LibraryPlayback.Playable previousPlayable = LibraryPlayback.playable;
             java.util.concurrent.Executor previousIo = LibraryPlayback.playbackIo;
             LibraryPlayback.playbackIo = Runnable::run;
             LibraryPlayback.playable = (host, content) -> new CrazyShitRepository.StreamInfo(
                     "https://fixture.invalid/media.mp4", content.url, content.title);
             try {
-                list.findViewHolderForAdapterPosition(0).itemView.performClick();
+                list.findViewHolderForAdapterPosition(1).itemView.performClick();
                 shadowOf(Looper.getMainLooper()).idle();
                 assertFalse(activity.isFinishing());
                 assertNotEquals(Activity.RESULT_OK, shadowOf(activity).getResultCode());
@@ -98,7 +98,7 @@ public class LikedVideosActivityTest {
         try {
             settle(activity);
             RecyclerView list = ReflectionHelpers.getField(activity, "recycler");
-            assertEquals(1, list.getAdapter().getItemCount());
+            assertEquals(2, list.getAdapter().getItemCount());
             ((View) ReflectionHelpers.getField(activity, "refresh")).performClick();
             owner = "account-b";
             ZeroChillSessionStore.preferences(activity).edit().putString("test-owner", owner).apply();
@@ -119,11 +119,11 @@ public class LikedVideosActivityTest {
             calls.get(0).complete(null, new Exception("offline"));
             shadowOf(Looper.getMainLooper()).idle();
             RecyclerView list = ReflectionHelpers.getField(activity, "recycler");
-            assertEquals(1, list.getAdapter().getItemCount());
+            assertEquals(2, list.getAdapter().getItemCount());
             controller.recreate();
             activity = controller.get(); settle(activity);
             list = ReflectionHelpers.getField(activity, "recycler");
-            assertEquals(1, list.getAdapter().getItemCount());
+            assertEquals(2, list.getAdapter().getItemCount());
             assertEquals("Recreation must not start network work", 1, calls.size());
         } finally { controller.pause().stop().destroy(); }
     }

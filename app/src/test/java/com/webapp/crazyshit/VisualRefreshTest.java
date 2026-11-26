@@ -448,8 +448,11 @@ public class VisualRefreshTest {
             ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
             capture(root, "shittok-portrait-controls", 400, 900);
             View fittedMedia = ReflectionHelpers.getField(holder, "mediaLayer");
-            int capturedVideoBottom = fittedMedia.getTop() + (fittedMedia.getHeight()
-                    + Math.min(fittedMedia.getHeight(), Math.round(fittedMedia.getWidth() / 2f))) / 2;
+            View fittedPlayer = ReflectionHelpers.getField(holder, "playerView");
+            int capturedInset = ((FrameLayout.LayoutParams) fittedPlayer.getLayoutParams()).bottomMargin;
+            int capturedViewport = Math.max(0, fittedMedia.getHeight() - capturedInset);
+            int capturedVideoBottom = fittedMedia.getTop() + fittedPlayer.getTop()
+                    + (capturedViewport + Math.min(capturedViewport, Math.round(fittedPlayer.getWidth() / 2f))) / 2;
             assertTrue(root.findViewWithTag("shittok_fullscreen").getTop() >= capturedVideoBottom
                     + BrowseUi.dp(host.get(), 8));
             root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
@@ -458,9 +461,19 @@ public class VisualRefreshTest {
             FrameLayout.LayoutParams promptParams = (FrameLayout.LayoutParams)
                     root.findViewWithTag("shittok_fullscreen").getLayoutParams();
             media = ReflectionHelpers.getField(holder, "mediaLayer");
-            int fittedHeight = Math.min(media.getHeight(), Math.round(media.getWidth() / 2f));
-            int videoBottom = media.getTop() + (media.getHeight() + fittedHeight) / 2;
+            View player = ReflectionHelpers.getField(holder, "playerView");
+            int playerInset = ((FrameLayout.LayoutParams) player.getLayoutParams()).bottomMargin;
+            int viewportHeight = Math.max(0, media.getHeight() - playerInset);
+            int fittedHeight = Math.min(viewportHeight, Math.round(player.getWidth() / 2f));
+            int videoBottom = media.getTop() + player.getTop() + (viewportHeight + fittedHeight) / 2;
             assertTrue(promptParams.topMargin >= videoBottom + BrowseUi.dp(host.get(), 8));
+            progress = root.findViewWithTag("shittok_progress_row");
+            android.widget.SeekBar bar = ReflectionHelpers.getField(holder, "seekBar");
+            int content = progress.getHeight() - bar.getPaddingTop() - bar.getPaddingBottom();
+            int track = Math.min(BrowseUi.dp(host.get(), 2), Math.max(1, content));
+            int trackTop = progress.getTop() + bar.getPaddingTop() + Math.max(0, content - track) / 2;
+            assertTrue(media.getBottom() >= trackTop - 1);
+            assertTrue(player.getBottom() + media.getTop() < trackTop);
             assertEquals(View.GONE, root.findViewWithTag("shittok_elapsed").getVisibility());
             assertEquals(View.GONE, root.findViewWithTag("shittok_remaining").getVisibility());
             ChaosFeedView fresh = new ChaosFeedView(host.get(), item -> { }, false);
@@ -538,6 +551,44 @@ public class VisualRefreshTest {
         screen.pause().stop().destroy();
     }
 
+    @Test public void spotlightPopulatesInitiallyEmptyNaturalGridWithoutChangingLayout() {
+        ActivityController<SearchActivity> screen = Robolectric.buildActivity(SearchActivity.class)
+                .create().start().resume().visible();
+        SearchPanel panel = screen.get().panel;
+        EditText input = ReflectionHelpers.getField(panel, "input");
+        input.setText("Coast");
+        ReflectionHelpers.callInstanceMethod(panel, "cancelSearchWork");
+        ReflectionHelpers.setField(panel, "scope", SearchPanel.Scope.EROME);
+        ReflectionHelpers.setField(panel, "activeQuery", "Coast");
+        SearchLayoutPreference.set(screen.get(), SearchPanel.Scope.EROME, SearchLayoutPreference.Mode.GRID);
+        ReflectionHelpers.callInstanceMethod(panel, "applyScopeAdapter");
+        RecyclerView recycler = ReflectionHelpers.getField(panel, "recycler");
+        RecyclerView.LayoutManager manager = recycler.getLayoutManager();
+        assertTrue(manager instanceof androidx.recyclerview.widget.StaggeredGridLayoutManager);
+        View root = ((ViewGroup) screen.get().findViewById(android.R.id.content)).getChildAt(0);
+        int w = BrowseUi.dp(screen.get(), 411), h = BrowseUi.dp(screen.get(), 891);
+        int ws = View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY);
+        int hs = View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY);
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(220));
+        root.measure(ws, hs);
+        root.layout(0, 0, w, h);
+        assertEquals(0, recycler.getAdapter().getItemCount());
+        NativeContentItem album = new NativeContentItem(NativeContentItem.KIND_SERIES,
+                "Coast", "https://example.invalid/a/coast", "", "", "", "");
+        ReflectionHelpers.setField(panel, "eromeResults", Collections.singletonList(album));
+        ReflectionHelpers.callInstanceMethod(panel, "renderResults");
+        assertTrue(recycler.isLayoutRequested());
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(220));
+        root.measure(ws, hs);
+        root.layout(0, 0, w, h);
+        assertEquals(2, recycler.getAdapter().getItemCount());
+        assertSame(manager, recycler.getLayoutManager());
+        assertNotNull(recycler.findViewHolderForAdapterPosition(1));
+        assertEquals(SearchLayoutPreference.Mode.GRID,
+                SearchLayoutPreference.get(screen.get(), SearchPanel.Scope.EROME));
+        screen.pause().stop().destroy();
+    }
+
     @Test public void searchResultsLeaveRoomForTheKeyboardAndOpenTheCreator() throws Exception {
         ActivityController<SearchActivity> screen = Robolectric.buildActivity(SearchActivity.class).create().start().resume().visible();
         CreatorCatalog.remember(screen.get(), Collections.singletonList(creator()));
@@ -558,6 +609,7 @@ public class VisualRefreshTest {
         capture(root, "creator-search-keyboard-space", 360, 380);
         RecyclerView suggestionList = ReflectionHelpers.getField(panel, "recycler");
         assertTrue(suggestionList.getHeight() - suggestionList.getPaddingTop() >= BrowseUi.dp(screen.get(), 104));
+        assertNotNull(suggestionList.findViewHolderForAdapterPosition(0));
         GlassHeaderView scopes = ReflectionHelpers.getField(panel, "scopeSurface");
         GlassHeaderView header = ReflectionHelpers.getField(panel, "header");
         assertEquals(View.VISIBLE, scopes.getVisibility());

@@ -202,6 +202,7 @@ final class BaddieHubRepository {
             throw new IOException("BaddieHub search was cancelled");
         }
         ArrayList<NativeContentItem> found = new ArrayList<>();
+        List<Candidate> randomFallback = null;
         String searchUrl = searchUrl(config.baseUrl, value);
         IOException failure = null;
         boolean siteSearch = false;
@@ -209,9 +210,17 @@ final class BaddieHubRepository {
             try {
                 Document document = fetch(context, searchUrl, config.baseUrl, config);
                 siteSearch = true;
-                addSearchItems(found, toShowsItems(parseListing(
-                        document, config.cardLinksSelector, 40)));
-                publishSearch(listener, found);
+                Element randomBlock = document.selectFirst("div.notfound-videos");
+                if (randomBlock != null) {
+                    // The site still renders unrelated clips under "Random videos".
+                    // Keep them out of the match list until we know nothing else hit.
+                    randomFallback = parseListing(
+                            randomBlock, document.location(), config.cardLinksSelector, 40);
+                } else {
+                    addSearchItems(found, toShowsItems(parseListing(
+                            document, config.cardLinksSelector, 40)));
+                    publishSearch(listener, found);
+                }
             } catch (IOException error) {
                 failure = error;
             }
@@ -242,11 +251,51 @@ final class BaddieHubRepository {
                     }
                 }
             } catch (IOException error) {
-                if (found.isEmpty()) throw failure == null ? error : failure;
+                if (found.isEmpty() && (randomFallback == null || randomFallback.isEmpty())) {
+                    throw failure == null ? error : failure;
+                }
             }
         }
         if (found.isEmpty() && failure != null && !siteSearch) throw failure;
+        if (found.isEmpty() && randomFallback != null && !randomFallback.isEmpty()) {
+            ArrayList<NativeContentItem> labeled = new ArrayList<>();
+            labeled.add(randomFallbackMarker());
+            addSearchItems(labeled, toShowsItems(randomFallback));
+            return labeled;
+        }
         return found;
+    }
+
+    static final String RANDOM_FALLBACK_URL = "baddiehub://search-random";
+
+    static NativeContentItem randomFallbackMarker() {
+        return new NativeContentItem(
+                NativeContentItem.KIND_SECTION,
+                "Random videos",
+                RANDOM_FALLBACK_URL,
+                "",
+                "",
+                LABEL,
+                ""
+        );
+    }
+
+    static boolean isRandomFallbackMarker(NativeContentItem item) {
+        return item != null && item.isSection() && RANDOM_FALLBACK_URL.equals(item.url);
+    }
+
+    /** Real hits stay unmarked. An empty site search returns the marker, then the same random clips. */
+    static List<NativeContentItem> parseSearchListing(String html, String location, String selector) {
+        Document document = Jsoup.parse(html == null ? "" : html, location == null ? "" : location);
+        Element randomBlock = document.selectFirst("div.notfound-videos");
+        if (randomBlock == null) {
+            return toShowsItems(parseListing(document, selector, 40));
+        }
+        ArrayList<NativeContentItem> labeled = new ArrayList<>();
+        labeled.add(randomFallbackMarker());
+        addSearchItems(labeled, toShowsItems(parseListing(
+                randomBlock, document.location(), selector, 40)));
+        return labeled;
     }
 
     private static void publishSearch(SearchListener listener, List<NativeContentItem> items) {
@@ -514,10 +563,21 @@ final class BaddieHubRepository {
             String cardSelector,
             int maxItems
     ) {
-        LinkedHashMap<String, Candidate> found = new LinkedHashMap<>();
         if (document == null) return new ArrayList<>();
-        for (Element anchor : document.select(cardSelector)) {
-            String url = absolute(anchor, "href", document.location());
+        return parseListing(document, document.location(), cardSelector, maxItems);
+    }
+
+    private static List<Candidate> parseListing(
+            Element scope,
+            String location,
+            String cardSelector,
+            int maxItems
+    ) {
+        LinkedHashMap<String, Candidate> found = new LinkedHashMap<>();
+        if (scope == null) return new ArrayList<>();
+        String base = location == null ? "" : location;
+        for (Element anchor : scope.select(cardSelector)) {
+            String url = absolute(anchor, "href", base);
             if (!isVideoPage(url)) continue;
             Element image = anchor.selectFirst("img");
             if (image == null && anchor.parent() != null) image = anchor.parent().selectFirst("img");
@@ -528,7 +588,7 @@ final class BaddieHubRepository {
             String title = cardTitle(anchor);
             if (title.isEmpty()) title = clean(image.attr("alt"));
             if (title.isEmpty()) title = slugTitle(canonical);
-            String imageUrl = imageUrl(image, document.location());
+            String imageUrl = imageUrl(image, base);
             found.put(canonical, new Candidate(canonical, title, imageUrl));
             if (found.size() >= maxItems) break;
         }

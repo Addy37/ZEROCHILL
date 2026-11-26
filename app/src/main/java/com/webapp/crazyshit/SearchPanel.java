@@ -24,6 +24,7 @@ import android.widget.TextView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.StaggeredGridLayoutManager;
 
 import org.json.JSONObject;
 
@@ -493,6 +494,28 @@ final class SearchPanel {
         if (recycler != null) recycler.scrollToPosition(0);
     }
 
+    private void refreshPublishedResults(boolean firstBatch) {
+        if (recycler == null || recycler.getAdapter() == null
+                || recycler.getAdapter().getItemCount() == 0) return;
+        // Diff updates can arrive while Spotlight is measuring its empty grid.
+        // Drop stale span assignments on the first populated batch, not on pagination.
+        if (firstBatch && recycler.getLayoutManager() instanceof StaggeredGridLayoutManager) {
+            ((StaggeredGridLayoutManager) recycler.getLayoutManager()).invalidateSpanAssignments();
+        }
+        updateResultSize();
+        recycler.requestLayout();
+        // Run after the adapter's diff and the current glass/IME layout traversal.
+        final int token = generation;
+        final RecyclerView.Adapter<?> shown = recycler.getAdapter();
+        recycler.postOnAnimation(() -> {
+            if (destroyed || closing || token != generation || recycler.getAdapter() != shown
+                    || shown.getItemCount() == 0) return;
+            updateResultSize();
+            recycler.requestLayout();
+            recycler.invalidate();
+        });
+    }
+
     private void updateResultSize() {
         if (shell == null || recycler == null || recycler.getAdapter() == null) return;
         boolean recent = showingRecent();
@@ -684,23 +707,35 @@ final class SearchPanel {
         if (recycler == null) return;
         SearchLayoutPreference.Mode mode = SearchLayoutPreference.get(activity, scope);
         boolean grid = mode == SearchLayoutPreference.Mode.GRID;
-        if (adapter != null) adapter.setStyle(SearchCardStyle.forScope(scope, mode));
+        SearchCardStyle cardStyle = SearchCardStyle.forScope(scope, mode);
+        if (adapter != null) adapter.setStyle(cardStyle);
         if (onlyFapAdapter != null) onlyFapAdapter.setPortraitGrid(scope == Scope.ONLYFAP && grid);
-        boolean usingGrid = recycler.getLayoutManager() instanceof GridLayoutManager;
-        if (grid != usingGrid) {
-            if (grid) {
+        boolean natural = grid && cardStyle.naturalAspect();
+        RecyclerView.LayoutManager current = recycler.getLayoutManager();
+        boolean managerMatches = !grid
+                ? current instanceof LinearLayoutManager && !(current instanceof GridLayoutManager)
+                : natural
+                ? current instanceof StaggeredGridLayoutManager
+                : current instanceof GridLayoutManager;
+        if (!managerMatches) {
+            if (!grid) {
+                recycler.setLayoutManager(new LinearLayoutManager(activity));
+            } else if (natural) {
+                StaggeredGridLayoutManager manager = new StaggeredGridLayoutManager(
+                        2, StaggeredGridLayoutManager.VERTICAL);
+                manager.setGapStrategy(StaggeredGridLayoutManager.GAP_HANDLING_MOVE_ITEMS_BETWEEN_SPANS);
+                recycler.setLayoutManager(manager);
+            } else {
                 GridLayoutManager manager = new GridLayoutManager(activity, 2);
                 manager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
                     @Override public int getSpanSize(int position) {
-                        RecyclerView.Adapter<?> current = recycler.getAdapter();
-                        if (current instanceof GlobalSearchAdapter
-                                && ((GlobalSearchAdapter) current).isFullSpan(position)) return 2;
+                        RecyclerView.Adapter<?> shown = recycler.getAdapter();
+                        if (shown instanceof GlobalSearchAdapter
+                                && ((GlobalSearchAdapter) shown).isFullSpan(position)) return 2;
                         return 1;
                     }
                 });
                 recycler.setLayoutManager(manager);
-            } else {
-                recycler.setLayoutManager(new LinearLayoutManager(activity));
             }
         }
         if (grid && !gridGapInstalled) {
@@ -908,7 +943,11 @@ final class SearchPanel {
             searchFirstResultMs = android.os.SystemClock.elapsedRealtime() - searchStarted;
             AppPerformance.record("Search first results", searchFirstResultMs);
         }
-        if (scope == Scope.ONLYFAP && onlyFapAdapter != null) onlyFapAdapter.replace(creatorResults);
+        if (scope == Scope.ONLYFAP && onlyFapAdapter != null) {
+            boolean firstBatch = onlyFapAdapter.getItemCount() == 0 && !creatorResults.isEmpty();
+            onlyFapAdapter.replace(creatorResults);
+            refreshPublishedResults(firstBatch);
+        }
         updateResultSize();
     }
 
@@ -1443,8 +1482,7 @@ final class SearchPanel {
             appendSection(output, "Albums", SearchRelevance.prefer(activeQuery, eromeResults),
                     GlobalSearchAdapter.SOURCE_ALBUM, 180);
         } else if (scope == Scope.BADDIEHUB) {
-            appendKind(output, "Videos", SearchRelevance.prefer(activeQuery, baddieResults), false);
-            appendKind(output, "Categories", baddieResults, true);
+            appendBaddieResults(output);
         } else if (scope == Scope.LIBRARY) {
             appendSection(output, "Library", SearchRelevance.prefer(activeQuery, library),
                     GlobalSearchAdapter.SOURCE_LIBRARY, 80);
@@ -1458,7 +1496,9 @@ final class SearchPanel {
             searchCompletedMs = android.os.SystemClock.elapsedRealtime() - searchStarted;
             AppPerformance.record("Search complete", searchCompletedMs);
         }
+        boolean firstBatch = adapter.getItemCount() == 0 && !output.isEmpty();
         adapter.replace(output, scope == Scope.SHOWS);
+        refreshPublishedResults(firstBatch);
         progress.setVisibility(pendingSources > 0 ? View.VISIBLE : View.GONE);
         String unavailable = unavailableNow();
         searchState.setVisibility(View.VISIBLE);
@@ -1500,6 +1540,28 @@ final class SearchPanel {
             status.setVisibility(View.GONE);
             restoreScroll();
         }
+    }
+
+    private void appendBaddieResults(List<GlobalSearchAdapter.Entry> output) {
+        boolean randomFallback = false;
+        ArrayList<NativeContentItem> items = new ArrayList<>();
+        if (baddieResults != null) {
+            for (NativeContentItem item : baddieResults) {
+                if (BaddieHubRepository.isRandomFallbackMarker(item)) {
+                    randomFallback = true;
+                    continue;
+                }
+                if (item != null) items.add(item);
+            }
+        }
+        if (!randomFallback) {
+            appendKind(output, "Videos", SearchRelevance.prefer(activeQuery, baddieResults), false);
+            appendKind(output, "Categories", baddieResults, true);
+            return;
+        }
+        output.add(GlobalSearchAdapter.Entry.section("Nothing found"));
+        appendKind(output, "Random videos", items, false);
+        appendKind(output, "Categories", items, true);
     }
 
     private void appendKind(List<GlobalSearchAdapter.Entry> out, String title,

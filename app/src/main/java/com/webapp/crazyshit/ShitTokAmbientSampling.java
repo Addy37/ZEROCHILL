@@ -26,4 +26,28 @@ final class ShitTokAmbientSampling {
                 frameGapNs > MISSED_VSYNC_NS;
         return slow && previousSlowFrames + 1 >= MAX_SLOW_FRAMES;
     }
+
+    /**
+     * Extra pixels the portrait horizontal blur needs so its bottom meets the
+     * seek track. The fitted video viewport stays put; this only fills the gap
+     * under it. {@code progressBottomMargin} uses layout-margin sign, so a
+     * negative value pulls the row downward.
+     */
+    static int portraitBlurExtensionToSeek(
+            int reservedMediaBottom,
+            int progressHeight,
+            int progressBottomMargin,
+            int seekPaddingTop,
+            int seekPaddingBottom,
+            int trackHeight
+    ) {
+        if (reservedMediaBottom <= 0 || progressHeight <= 0) return 0;
+        int content = progressHeight - Math.max(0, seekPaddingTop) - Math.max(0, seekPaddingBottom);
+        if (content <= 0) return 0;
+        int track = Math.max(1, Math.min(Math.max(trackHeight, 1), content));
+        int trackInset = Math.max(0, seekPaddingTop) + (content - track) / 2;
+        int extension = reservedMediaBottom - progressBottomMargin - progressHeight + trackInset;
+        if (extension <= 0) return 0;
+        return Math.min(extension, reservedMediaBottom);
+    }
 }

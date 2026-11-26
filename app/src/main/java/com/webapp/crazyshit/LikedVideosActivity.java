@@ -11,13 +11,14 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.recyclerview.widget.GridLayoutManager;
-import com.google.android.material.card.MaterialCardView;
-import java.util.HashMap;
-import java.util.Map;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
+import com.google.android.material.card.MaterialCardView;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -25,6 +26,7 @@ import java.util.concurrent.Executors;
 public final class LikedVideosActivity extends Activity {
     private final ExecutorService disk = Executors.newSingleThreadExecutor();
     private final List<NativeContentItem> items = new ArrayList<>();
+    private final List<Row> rows = new ArrayList<>();
     private final LikesAdapter adapter = new LikesAdapter();
     private RecyclerView recycler;
     private GridLayoutManager galleryLayout;
@@ -60,8 +62,7 @@ public final class LikedVideosActivity extends Activity {
         galleryLayout = new GridLayoutManager(this, 2);
         galleryLayout.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
             @Override public int getSpanSize(int position) {
-                return position >= 0 && position < items.size()
-                        && Boolean.TRUE.equals(portraitLikedVideos.get(items.get(position).url)) ? 1 : 2;
+                return position >= 0 && position < rows.size() && rows.get(position).heading() ? 2 : 1;
             }
         });
         recycler.setLayoutManager(galleryLayout);
@@ -80,7 +81,7 @@ public final class LikedVideosActivity extends Activity {
         if (retained != null && owner.equals(retained.owner)) {
             items.addAll(retained.items);
             nextOffset = retained.nextOffset; unavailable = retained.unavailable; hasMore = retained.hasMore;
-            adapter.notifyDataSetChanged(); showStatus(false);
+            publish(); showStatus(false);
             if (restoredScroll != null) recycler.getLayoutManager().onRestoreInstanceState(restoredScroll);
             restoredScroll = null;
         } else loadLocal();
@@ -108,7 +109,7 @@ public final class LikedVideosActivity extends Activity {
         loading = false;
         nextOffset = unavailable = 0;
         hasMore = false;
-        items.clear(); portraitLikedVideos.clear(); adapter.notifyDataSetChanged();
+        items.clear(); portraitLikedVideos.clear(); publish();
         more.setVisibility(View.GONE);
         status.setText("Loading your likes…");
         loadLocal();
@@ -121,7 +122,7 @@ public final class LikedVideosActivity extends Activity {
             List<NativeContentItem> cached = SocialContentContextStore.likedVideos(this, requested);
             runOnUiThread(() -> {
                 if (!valid(request, requested)) return;
-                items.clear(); items.addAll(cached); adapter.notifyDataSetChanged();
+                items.clear(); items.addAll(cached); publish();
                 showStatus(false);
                 if (restoredScroll != null) {
                     recycler.getLayoutManager().onRestoreInstanceState(restoredScroll);
@@ -157,7 +158,7 @@ public final class LikedVideosActivity extends Activity {
                 if (present.add(ZeroChillSocialRepository.contentKey(item.url))) items.add(item);
             unavailable += page.unavailable;
             nextOffset = page.nextOffset; hasMore = page.hasMore;
-            adapter.notifyDataSetChanged(); showStatus(true);
+            publish(); showStatus(true);
         }));
     }
 
@@ -176,16 +177,49 @@ public final class LikedVideosActivity extends Activity {
                 : synced ? items.size() + " liked videos" : "Saved on this device · Refresh to check your account likes");
     }
 
+    private void publish() {
+        rebuildRows();
+        if (galleryLayout != null) galleryLayout.getSpanSizeLookup().invalidateSpanIndexCache();
+        adapter.notifyDataSetChanged();
+    }
+
+    private void rebuildRows() {
+        rows.clear();
+        LinkedHashMap<String, List<NativeContentItem>> groups = new LinkedHashMap<>();
+        for (NativeContentItem item : items) {
+            groups.computeIfAbsent(LibraryBrowseGroups.sourceLabel(item.url), key -> new ArrayList<>()).add(item);
+        }
+        for (Map.Entry<String, List<NativeContentItem>> entry : groups.entrySet()) {
+            rows.add(Row.heading(entry.getKey()));
+            for (NativeContentItem item : entry.getValue()) rows.add(Row.card(item));
+        }
+    }
+
     private final class LikesAdapter extends RecyclerView.Adapter<Holder> {
+        @Override public int getItemViewType(int position) {
+            return rows.get(position).heading() ? Row.HEADING : Row.CARD;
+        }
+
         @Override public Holder onCreateViewHolder(ViewGroup parent, int type) {
+            if (type == Row.HEADING) {
+                TextView label = LibraryDestinationChrome.sectionHeading(LikedVideosActivity.this, "");
+                label.setTag("library-source-heading");
+                label.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
+                return new Holder(label, null, null, label);
+            }
             LinearLayout row = new LinearLayout(LikedVideosActivity.this);
             row.setOrientation(LinearLayout.VERTICAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setGravity(Gravity.TOP);
             row.setClickable(true); row.setFocusable(true);
-            row.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
-            LibraryDestinationChrome.styleLikedRow(LikedVideosActivity.this, row);
+            RecyclerView.LayoutParams rowParams = new RecyclerView.LayoutParams(-1, -2);
+            rowParams.setMargins(dp(4), 0, dp(4), dp(8));
+            row.setLayoutParams(rowParams);
             LibraryAspectMediaCard card = new LibraryAspectMediaCard(LikedVideosActivity.this);
+            card.setUniform(true);
             LibraryDestinationChrome.styleMediaCard(LikedVideosActivity.this, card);
+            card.setRadius(dp(16));
+            card.setPreventCornerOverlap(false);
+            card.setClipToOutline(true);
             row.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
             ImageView image = new ImageView(LikedVideosActivity.this);
@@ -193,22 +227,29 @@ public final class LikedVideosActivity extends Activity {
             image.setBackgroundColor(android.graphics.Color.BLACK);
             card.addView(image, new MaterialCardView.LayoutParams(-1, -1));
 
-            TextView title = BrowseUi.text(LikedVideosActivity.this, "", 13,
-                    AppearanceTheme.primaryText(LikedVideosActivity.this));
-            title.setMaxLines(2);
-            title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            TextView title = LibraryDestinationChrome.mediaCaption(LikedVideosActivity.this, "");
             LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
-            titleParams.topMargin = dp(8);
+            titleParams.setMargins(dp(2), dp(6), dp(2), 0);
             row.addView(title, titleParams);
             ZeroChillMotion.installPressFeedback(row);
             return new Holder(row, card, image, title);
         }
 
         @Override public void onBindViewHolder(Holder holder, int position) {
-            NativeContentItem item = items.get(position);
-            holder.card.setPortrait(Boolean.TRUE.equals(portraitLikedVideos.get(item.url)));
-            holder.title.setText(OnlyFapVideoMetadata.displayTitle(item));
-            holder.itemView.setContentDescription("Play liked video " + item.title);
+            Row row = rows.get(position);
+            if (row.heading()) {
+                holder.title.setText(row.label);
+                holder.itemView.setClickable(false);
+                holder.itemView.setOnClickListener(null);
+                holder.itemView.setContentDescription(row.label + " likes");
+                return;
+            }
+            NativeContentItem item = row.item;
+            String title = LibraryBrowseGroups.readableTitle(item, "");
+            if ("Saved video".equals(title)) title = "Liked video";
+            else if ("Saved photo".equals(title)) title = "Liked photo";
+            holder.title.setText(title);
+            holder.itemView.setContentDescription("Open " + title);
             Glide.with(holder.image).clear(holder.image);
             holder.image.setTag(item.url);
             holder.image.setScaleType(item.imageUrl.isEmpty()
@@ -242,8 +283,23 @@ public final class LikedVideosActivity extends Activity {
             holder.itemView.setOnClickListener(v ->
                     LibraryPlayback.openSaved(LikedVideosActivity.this, item, -1L, false));
         }
-        @Override public int getItemCount() { return items.size(); }
-        @Override public void onViewRecycled(Holder holder) { Glide.with(holder.image).clear(holder.image); }
+        @Override public int getItemCount() { return rows.size(); }
+        @Override public void onViewRecycled(Holder holder) {
+            if (holder.image != null) Glide.with(holder.image).clear(holder.image);
+        }
+    }
+    private static final class Row {
+        static final int CARD = 0;
+        static final int HEADING = 2;
+        final String label;
+        final NativeContentItem item;
+        private Row(String label, NativeContentItem item) {
+            this.label = label;
+            this.item = item;
+        }
+        static Row heading(String label) { return new Row(label, null); }
+        static Row card(NativeContentItem item) { return new Row(null, item); }
+        boolean heading() { return item == null; }
     }
     private static final class Holder extends RecyclerView.ViewHolder {
         final LibraryAspectMediaCard card;
@@ -258,17 +314,9 @@ public final class LikedVideosActivity extends Activity {
     }
 
     private void onLikedOrientation(String url, boolean portrait) {
-        Boolean previous = portraitLikedVideos.put(url, portrait);
-        if (previous != null && previous == portrait) return;
-        if (galleryLayout == null || recycler == null) return;
-        galleryLayout.getSpanSizeLookup().invalidateSpanIndexCache();
-        for (int i = 0; i < items.size(); i++) {
-            if (url.equals(items.get(i).url)) {
-                adapter.notifyItemChanged(i);
-                break;
-            }
-        }
+        portraitLikedVideos.put(url, portrait);
     }
+
     @Override protected void onResume() { super.onResume(); if (status != null) checkAccount(); }
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());

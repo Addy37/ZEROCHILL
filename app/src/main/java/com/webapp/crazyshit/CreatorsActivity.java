@@ -3,6 +3,10 @@ package com.webapp.crazyshit;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -15,6 +19,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -41,6 +46,8 @@ import java.util.HashMap;
 /** All starred creators, including favorites saved before the creator catalog existed. */
 public final class CreatorsActivity extends Activity {
     private static final int REQUEST_PICK_AVATAR = 4106;
+    private static final String RECENT_PREFS = "creator_recent_v1";
+    private static final String LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#";
 
     private static final java.util.concurrent.ExecutorService ARTWORK_IO = java.util.concurrent.Executors.newSingleThreadExecutor();
     private java.util.concurrent.Future<?> artworkTask;
@@ -50,6 +57,31 @@ public final class CreatorsActivity extends Activity {
     private EditText input;
     private TextView empty, count;
     private RecyclerView recycler;
+    private HorizontalScrollView recentScroll;
+    private LinearLayout recentRow;
+    private TextView stickyLetter;
+    private LinearLayout letterIndex;
+    private final Paint letterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final RecyclerView.ItemDecoration letterDecoration = new RecyclerView.ItemDecoration() {
+        @Override public void getItemOffsets(Rect outRect, View view, RecyclerView parent, RecyclerView.State state) {
+            int position = parent.getChildAdapterPosition(view);
+            if (rowStartsLetter(position)) outRect.top = dp(20);
+        }
+
+        @Override public void onDraw(Canvas canvas, RecyclerView parent, RecyclerView.State state) {
+            if (adapter == null) return;
+            letterPaint.setColor(0xFF9AA7B2);
+            letterPaint.setTextSize(dp(11));
+            letterPaint.setTypeface(Typeface.DEFAULT_BOLD);
+            int span = spanCount();
+            for (int i = 0; i < parent.getChildCount(); i++) {
+                View child = parent.getChildAt(i);
+                int position = parent.getChildAdapterPosition(child);
+                if (position < 0 || position % span != 0 || !rowStartsLetter(position)) continue;
+                canvas.drawText(rowLetter(position), child.getLeft(), child.getTop() - dp(6), letterPaint);
+            }
+        }
+    };
     private CreatorGridAdapter adapter;
     private Parcelable pendingScroll;
     private ItemTouchHelper dragHelper;
@@ -137,13 +169,15 @@ public final class CreatorsActivity extends Activity {
         recycler.getRecycledViewPool().setMaxRecycledViews(0, 12);
         recycler.setItemAnimator(null);
         recycler.setClipToPadding(false);
-        recycler.setPadding(dp(8), dp(2), dp(8), dp(20));
+        recycler.setPadding(dp(8), dp(2), dp(30), dp(20));
+        recycler.addItemDecoration(letterDecoration);
         adapter = new CreatorGridAdapter();
         recycler.setAdapter(adapter);
         recycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(RecyclerView view, int dx, int dy) {
                 if (dy != 0) scrollDirection = dy > 0 ? 1 : -1;
                 scheduleAvatarPrefetch();
+                updateStickyLetter();
             }
             @Override public void onScrollStateChanged(RecyclerView view, int state) {
                 scheduleAvatarPrefetch();
@@ -201,7 +235,31 @@ public final class CreatorsActivity extends Activity {
             }
         });
         dragHelper.attachToRecyclerView(recycler);
-        root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        recentScroll = new HorizontalScrollView(this);
+        recentScroll.setHorizontalScrollBarEnabled(false);
+        recentScroll.setVisibility(View.GONE);
+        recentRow = new LinearLayout(this);
+        recentRow.setOrientation(LinearLayout.HORIZONTAL);
+        recentRow.setPadding(dp(12), 0, dp(12), dp(8));
+        recentScroll.addView(recentRow, new HorizontalScrollView.LayoutParams(-2, -2));
+        root.addView(recentScroll, new LinearLayout.LayoutParams(-1, -2));
+
+        FrameLayout stage = new FrameLayout(this);
+        stage.addView(recycler, new FrameLayout.LayoutParams(-1, -1));
+        stickyLetter = BrowseUi.text(this, "", 12, Color.WHITE);
+        stickyLetter.setTypeface(null, Typeface.BOLD);
+        stickyLetter.setPadding(dp(14), dp(4), dp(14), dp(4));
+        stickyLetter.setBackgroundColor(Color.argb(230, 8, 10, 12));
+        stickyLetter.setVisibility(View.GONE);
+        FrameLayout.LayoutParams stickyParams = new FrameLayout.LayoutParams(-1, -2, Gravity.TOP);
+        stickyParams.rightMargin = dp(22);
+        stage.addView(stickyLetter, stickyParams);
+        letterIndex = new LinearLayout(this);
+        letterIndex.setOrientation(LinearLayout.VERTICAL);
+        letterIndex.setGravity(Gravity.CENTER_HORIZONTAL);
+        stage.addView(letterIndex, new FrameLayout.LayoutParams(dp(22), -1, Gravity.END));
+        root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
         input.addTextChangedListener(BrowseUi.onText(value -> render()));
         if (state != null) {
@@ -260,6 +318,9 @@ public final class CreatorsActivity extends Activity {
                 && group.members.values().stream().noneMatch(member ->
                 CreatorNameMatcher.rank(member.title, query) != Integer.MAX_VALUE));
         adapter.replace(creators);
+        bindRecent(creators);
+        bindLetterIndex();
+        updateStickyLetter();
         count.setText(creators.size() + (creators.size() == 1 ? " creator · A–Z" : " creators · A–Z"));
         empty.setVisibility(creators.isEmpty() ? View.VISIBLE : View.GONE);
         empty.setText(input.length() == 0 ? "No favorite creators yet\n\nTap + to find creators, then tap ☆ to save them here."
@@ -283,8 +344,166 @@ public final class CreatorsActivity extends Activity {
         return super.dispatchKeyEvent(event);
     }
 
+    private int spanCount() {
+        if (recycler != null && recycler.getLayoutManager() instanceof GridLayoutManager) {
+            return Math.max(1, ((GridLayoutManager) recycler.getLayoutManager()).getSpanCount());
+        }
+        return 3;
+    }
+
+    private boolean rowStartsLetter(int position) {
+        if (adapter == null || position < 0) return false;
+        int span = spanCount();
+        int start = (position / span) * span;
+        for (int i = start; i < start + span && i < adapter.getItemCount(); i++) {
+            if (adapter.startsLetter(i)) return true;
+        }
+        return false;
+    }
+
+    private String rowLetter(int position) {
+        int span = spanCount();
+        int start = Math.max(0, position) / span * span;
+        StringBuilder label = new StringBuilder();
+        for (int i = start; i < start + span && i < adapter.getItemCount(); i++) {
+            if (!adapter.startsLetter(i)) continue;
+            if (label.length() > 0) label.append("  ");
+            label.append(adapter.letterAt(i));
+        }
+        return label.toString();
+    }
+
+    private void updateStickyLetter() {
+        if (stickyLetter == null || adapter == null) return;
+        GridLayoutManager grid = recycler.getLayoutManager() instanceof GridLayoutManager
+                ? (GridLayoutManager) recycler.getLayoutManager() : null;
+        int first = grid == null ? -1 : grid.findFirstVisibleItemPosition();
+        if (first < 0 || adapter.getItemCount() == 0) {
+            stickyLetter.setVisibility(View.GONE);
+            return;
+        }
+        stickyLetter.setText(adapter.letterAt(first));
+        View child = grid.findViewByPosition(first);
+        boolean headerOnScreen = rowStartsLetter(first) && child != null && child.getTop() >= recycler.getPaddingTop();
+        stickyLetter.setVisibility(headerOnScreen ? View.GONE : View.VISIBLE);
+    }
+
+    private void bindLetterIndex() {
+        if (letterIndex == null || adapter == null) return;
+        letterIndex.removeAllViews();
+        if (adapter.getItemCount() == 0) {
+            letterIndex.setVisibility(View.GONE);
+            return;
+        }
+        letterIndex.setVisibility(View.VISIBLE);
+        for (int i = 0; i < LETTERS.length(); i++) {
+            String letter = String.valueOf(LETTERS.charAt(i));
+            boolean present = adapter.positionForLetter(letter) >= 0;
+            TextView tick = new TextView(this);
+            tick.setText(letter);
+            tick.setTextSize(9);
+            tick.setGravity(Gravity.CENTER);
+            tick.setIncludeFontPadding(false);
+            tick.setTextColor(present ? Color.WHITE : 0xFF44515C);
+            tick.setContentDescription(letter + " creators");
+            if (present) tick.setOnClickListener(v -> jumpToLetter(letter));
+            letterIndex.addView(tick, new LinearLayout.LayoutParams(-1, 0, 1f));
+        }
+    }
+
+    private void jumpToLetter(String letter) {
+        int position = adapter.positionForLetter(letter);
+        if (position < 0) {
+            int start = LETTERS.indexOf(letter);
+            for (int i = start + 1; i < LETTERS.length() && position < 0; i++) {
+                position = adapter.positionForLetter(String.valueOf(LETTERS.charAt(i)));
+            }
+        }
+        if (position < 0 || !(recycler.getLayoutManager() instanceof GridLayoutManager)) return;
+        ((GridLayoutManager) recycler.getLayoutManager()).scrollToPositionWithOffset(position, dp(22));
+        recycler.post(this::updateStickyLetter);
+    }
+
+    private void bindRecent(List<CreatorCatalog.FavoriteGroup> creators) {
+        if (recentScroll == null || recentRow == null) return;
+        recentRow.removeAllViews();
+        boolean searching = input != null && input.length() > 0;
+        if (searching || creators == null || creators.isEmpty()) {
+            recentScroll.setVisibility(View.GONE);
+            return;
+        }
+        Map<String, CreatorCatalog.FavoriteGroup> byUrl = new HashMap<>();
+        for (CreatorCatalog.FavoriteGroup group : creators) {
+            if (group.item != null && group.item.url != null && !group.item.url.isEmpty())
+                byUrl.put(group.item.url, group);
+        }
+        int shown = 0;
+        for (String url : recentUrls()) {
+            CreatorCatalog.FavoriteGroup group = byUrl.get(url);
+            if (group == null) continue;
+            recentRow.addView(recentChip(group));
+            if (++shown == 8) break;
+        }
+        recentScroll.setVisibility(shown == 0 ? View.GONE : View.VISIBLE);
+    }
+
+    private View recentChip(CreatorCatalog.FavoriteGroup group) {
+        LinearLayout chip = new LinearLayout(this);
+        chip.setOrientation(LinearLayout.VERTICAL);
+        chip.setGravity(Gravity.CENTER_HORIZONTAL);
+        chip.setPadding(dp(6), 0, dp(6), 0);
+        chip.setContentDescription("Recent " + group.item.title);
+        chip.setOnClickListener(v -> openCreator(group, chip));
+        ImageView avatar = new ImageView(this);
+        avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        avatar.setBackgroundColor(Color.rgb(19, 23, 27));
+        avatar.setClipToOutline(true);
+        avatar.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setOval(0, 0, view.getWidth(), view.getHeight());
+            }
+        });
+        chip.addView(avatar, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        if (group.item.imageUrl != null && !group.item.imageUrl.isEmpty()) {
+            Glide.with(avatar).load(group.item.imageUrl).dontTransform().override(dp(96), dp(96)).into(avatar);
+        } else {
+            avatar.setImageResource(R.drawable.ic_more_account);
+        }
+        TextView name = BrowseUi.text(this, group.item.title, 11, Color.WHITE);
+        name.setGravity(Gravity.CENTER);
+        name.setMaxLines(1);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(dp(64), -2);
+        nameParams.topMargin = dp(4);
+        chip.addView(name, nameParams);
+        return chip;
+    }
+
+    private void rememberRecent(String url) {
+        String value = url == null ? "" : url.trim();
+        if (value.isEmpty()) return;
+        ArrayList<String> urls = new ArrayList<>();
+        urls.add(value);
+        for (String existing : recentUrls()) {
+            if (existing.equals(value)) continue;
+            urls.add(existing);
+            if (urls.size() == 8) break;
+        }
+        getSharedPreferences(RECENT_PREFS, MODE_PRIVATE).edit()
+                .putString("urls", TextUtils.join("\n", urls)).apply();
+    }
+
+    private List<String> recentUrls() {
+        ArrayList<String> urls = new ArrayList<>();
+        String raw = getSharedPreferences(RECENT_PREFS, MODE_PRIVATE).getString("urls", "");
+        if (raw == null || raw.isEmpty()) return urls;
+        for (String existing : raw.split("\n")) if (!existing.isEmpty()) urls.add(existing);
+        return urls;
+    }
+
     private void openCreator(CreatorCatalog.FavoriteGroup group, View anchor) {
         if (group == null || group.item == null) return;
+        if (group.item.url != null) rememberRecent(group.item.url);
         BrowseUi.hideKeyboard(this, input);
         CreatorGallerySpec spec = CreatorGallerySpec.from(group);
         String sessionId = CreatorGalleryPreloader.sessionId(this, spec.sessionKey);
@@ -494,6 +713,21 @@ public final class CreatorsActivity extends Activity {
         @Override
         public int getItemCount() {
             return cards.size();
+        }
+
+        String letterAt(int position) {
+            if (position < 0 || position >= cards.size() || cards.get(position).group.item == null) return "#";
+            return LibraryBrowseGroups.letter(cards.get(position).group.item.title);
+        }
+
+        boolean startsLetter(int position) {
+            return position >= 0 && position < cards.size()
+                    && (position == 0 || !letterAt(position).equals(letterAt(position - 1)));
+        }
+
+        int positionForLetter(String letter) {
+            for (int i = 0; i < cards.size(); i++) if (letterAt(i).equals(letter)) return i;
+            return -1;
         }
 
         @Override

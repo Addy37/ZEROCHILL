@@ -97,6 +97,24 @@ final class LibraryDestinationChrome {
         card.setStrokeColor(ColorUtils.setAlphaComponent(AppearanceTheme.accent(context), 65));
     }
 
+    static TextView mediaCaption(Context context, String value) {
+        TextView title = BrowseUi.text(context, value, 14, AppearanceTheme.primaryText(context));
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        title.setMaxLines(2);
+        title.setMinLines(2);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        title.setIncludeFontPadding(false);
+        return title;
+    }
+
+    static TextView sectionHeading(Context context, String value) {
+        TextView title = BrowseUi.text(context, value, 15, AppearanceTheme.secondaryText(context));
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        title.setPadding(dp(context, 2), dp(context, 8), dp(context, 2), dp(context, 6));
+        androidx.core.view.ViewCompat.setAccessibilityHeading(title, true);
+        return title;
+    }
+
     static void styleLikedRow(Context context, LinearLayout row) {
         row.setBackground(surface(context, 18, 0xFF151F28, 0xFF10161D, 47));
         row.setPadding(dp(context, 12), dp(context, 10), dp(context, 12), dp(context, 10));
