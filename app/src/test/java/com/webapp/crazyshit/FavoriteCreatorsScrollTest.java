@@ -132,7 +132,19 @@ public class FavoriteCreatorsScrollTest {
     }
 
     @Test public void alphabetDragShowsIndicatorAndReleasesOnCancel() {
-        seedFavorites(48);
+        List<NativeContentItem> creators = new ArrayList<>();
+        HashSet<String> keys = new HashSet<>();
+        for (String prefix : Arrays.asList("Alpha", "Middle", "Zulu")) {
+            for (int i = 0; i < 16; i++) {
+                String name = prefix + "Fixture" + i;
+                String key = name.toLowerCase(java.util.Locale.US);
+                creators.add(new NativeContentItem(NativeContentItem.KIND_CREATOR, name,
+                        "https://fapello.com/" + key + "/", "", "", "", "", "", key));
+                keys.add(key);
+            }
+        }
+        context.getSharedPreferences("creator_favorites", 0).edit().putStringSet("creators", keys).commit();
+        CreatorCatalog.remember(context, creators);
         try (ActivityController<CreatorsActivity> controller = Robolectric.buildActivity(CreatorsActivity.class).setup()) {
             CreatorsActivity activity = controller.get();
             android.widget.LinearLayout index = ReflectionHelpers.getField(activity, "letterIndex");
@@ -147,21 +159,23 @@ public class FavoriteCreatorsScrollTest {
             android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
                     android.view.MotionEvent.ACTION_DOWN, 2f, 2f, 0);
             android.view.MotionEvent move = android.view.MotionEvent.obtain(now, now + 16,
-                    android.view.MotionEvent.ACTION_MOVE, 2f, 899f, 0);
+                    android.view.MotionEvent.ACTION_MOVE, 2f, (index.getChildAt(12).getTop() + index.getChildAt(12).getBottom()) / 2f, 0);
             android.view.MotionEvent cancel = android.view.MotionEvent.obtain(now, now + 32,
                     android.view.MotionEvent.ACTION_CANCEL, 2f, 899f, 0);
             try {
                 assertTrue(index.dispatchTouchEvent(down));
                 assertEquals(View.VISIBLE, bubble.getVisibility());
-                assertEquals("T", bubble.getText().toString());
-                assertTrue(index.getChildAt(19).isSelected());
+                assertEquals("A", bubble.getText().toString());
+                assertTrue(index.getChildAt(0).isSelected());
                 assertTrue(index.dispatchTouchEvent(move));
-                assertEquals("T", bubble.getText().toString());
+                assertEquals("M", bubble.getText().toString());
+                assertTrue(index.getChildAt(12).isSelected());
+                assertFalse(index.getChildAt(0).isSelected());
                 assertTrue(bubble.getTranslationY() >= 0);
                 assertTrue(bubble.getTranslationY() <= stage.getHeight() - BrowseUi.dp(activity, 58));
                 assertTrue(index.dispatchTouchEvent(cancel));
                 assertEquals(View.GONE, bubble.getVisibility());
-                assertFalse(index.getChildAt(19).isSelected());
+                assertFalse(index.getChildAt(12).isSelected());
                 assertEquals(48, grid(activity).getAdapter().getItemCount());
             } finally { down.recycle(); move.recycle(); cancel.recycle(); }
         }
