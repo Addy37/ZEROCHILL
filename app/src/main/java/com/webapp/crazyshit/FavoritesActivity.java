@@ -15,6 +15,7 @@ import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -37,6 +38,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -78,6 +81,9 @@ public class FavoritesActivity extends Activity {
     private final ScrollView[] sectionScroll = new ScrollView[PAGE_COUNT];
     private final int[] savedScroll = new int[PAGE_COUNT];
     private int tab = TAB_CONTINUE;
+    private String sourceFilter = "All";
+    private HorizontalScrollView chipScroll;
+    private LinearLayout sourceChips;
 
     private final Map<String, List<ImageView>> thumbnailTargets = new HashMap<>();
     private final Map<String, String> resolvedThumbnails = new HashMap<>();
@@ -106,6 +112,7 @@ public class FavoritesActivity extends Activity {
         if (state != null && input != null) {
             input.setText(state.getString("query", ""));
             input.setSelection(input.length());
+            sourceFilter = state.getString("source_filter", "All");
         }
     }
 
@@ -133,6 +140,7 @@ public class FavoritesActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle state) {
         state.putString("query", searchQuery());
+        state.putString("source_filter", sourceFilter);
         super.onSaveInstanceState(state);
     }
 
@@ -174,6 +182,16 @@ public class FavoritesActivity extends Activity {
         count.setPadding(dp(16), dp(4), dp(16), dp(8));
         LibraryDestinationChrome.styleSummary(this, count);
         root.addView(count);
+
+        HorizontalScrollView chips = new HorizontalScrollView(this);
+        chips.setHorizontalScrollBarEnabled(false);
+        chips.setVisibility(View.GONE);
+        sourceChips = new LinearLayout(this);
+        sourceChips.setOrientation(LinearLayout.HORIZONTAL);
+        sourceChips.setPadding(dp(12), 0, dp(12), dp(6));
+        chips.addView(sourceChips, new HorizontalScrollView.LayoutParams(-2, -2));
+        chipScroll = chips;
+        root.addView(chips, new LinearLayout.LayoutParams(-1, -2));
 
         for (int i = 0; i < PAGE_COUNT; i++) pageViews[i] = buildPage(i);
 
@@ -245,24 +263,37 @@ public class FavoritesActivity extends Activity {
 
     private void renderHistory(LinearLayout target, boolean continueOnly) {
         if (target == null) return;
+        if (continueOnly) hideSourceChips();
         List<PlaybackHistoryStore.Item> allItems = continueOnly
                 ? PlaybackHistoryStore.continueWatching(this)
                 : PlaybackHistoryStore.load(this);
 
         String query = searchQuery();
         List<PlaybackHistoryStore.Item> items = new ArrayList<>();
+        LinkedHashSet<String> sources = new LinkedHashSet<>();
         for (PlaybackHistoryStore.Item item : allItems) {
-            if (LibrarySearch.matches(
+            if (!LibrarySearch.matches(
                     query,
                     item.title,
                     item.content == null ? "" : OnlyFapVideoMetadata.displayTitle(item.content),
                     item.pageUrl,
                     item.fromShows ? "shows" : ""
-            )) {
-                items.add(item);
+            )) continue;
+            items.add(item);
+            sources.add(LibraryBrowseGroups.sourceLabel(item.pageUrl));
+        }
+        if (!continueOnly) {
+            bindSourceChips(sources);
+            if (!"All".equals(sourceFilter)) {
+                items.removeIf(item -> !sourceFilter.equals(LibraryBrowseGroups.sourceLabel(item.pageUrl)));
             }
         }
         updateCount(items.size(), allItems.size(), continueOnly ? "In progress" : "Recent first");
+        if (!continueOnly && count != null && !"All".equals(sourceFilter)
+                && LibrarySearch.normalize(query).isEmpty()) {
+            String noun = items.size() == 1 ? "video" : "videos";
+            count.setText(items.size() + " " + noun + " · " + sourceFilter);
+        }
 
         if (allItems.isEmpty()) {
             showEmpty(
@@ -279,16 +310,36 @@ public class FavoritesActivity extends Activity {
             return;
         }
 
-        List<View> cards = new ArrayList<>();
-        List<String> keys = new ArrayList<>();
-        for (PlaybackHistoryStore.Item item : items) {
-            if (item.posterUrl != null && !item.posterUrl.isEmpty()
-                    && !resolvedThumbnails.containsKey(item.pageUrl))
-                resolvedThumbnails.put(item.pageUrl, item.posterUrl);
-            cards.add(makeHistoryCard(item, continueOnly));
-            keys.add(item.pageUrl);
+        if (continueOnly) {
+            List<View> cards = new ArrayList<>();
+            List<String> keys = new ArrayList<>();
+            for (PlaybackHistoryStore.Item item : items) {
+                rememberPoster(item);
+                cards.add(makeHistoryCard(item, true));
+                keys.add(item.pageUrl);
+            }
+            addMixedGallery(target, cards, keys);
+            return;
         }
-        addMixedGallery(target, cards, keys);
+
+        long now = System.currentTimeMillis();
+        LinkedHashMap<String, List<PlaybackHistoryStore.Item>> groups = new LinkedHashMap<>();
+        for (String bucket : LibraryBrowseGroups.DATE_ORDER) groups.put(bucket, new ArrayList<>());
+        for (PlaybackHistoryStore.Item item : items) {
+            rememberPoster(item);
+            groups.get(LibraryBrowseGroups.dateBucket(item.lastWatched, now)).add(item);
+        }
+        for (String bucket : LibraryBrowseGroups.DATE_ORDER) {
+            List<View> cards = new ArrayList<>();
+            for (PlaybackHistoryStore.Item item : groups.get(bucket)) cards.add(makeUniformHistoryCard(item));
+            addUniformSection(target, bucket, cards);
+        }
+    }
+
+    private void rememberPoster(PlaybackHistoryStore.Item item) {
+        if (item.posterUrl != null && !item.posterUrl.isEmpty()
+                && !resolvedThumbnails.containsKey(item.pageUrl))
+            resolvedThumbnails.put(item.pageUrl, item.posterUrl);
     }
 
     private View makeHistoryCard(PlaybackHistoryStore.Item item, boolean continueOnly) {
@@ -373,6 +424,63 @@ public class FavoritesActivity extends Activity {
         return LibraryOverlayActionCard.wrap(this, wrapper, more);
     }
 
+    private View makeUniformHistoryCard(PlaybackHistoryStore.Item item) {
+        LinearLayout wrapper = new LinearLayout(this);
+        wrapper.setOrientation(LinearLayout.VERTICAL);
+        wrapper.setClickable(true);
+        wrapper.setFocusable(true);
+        wrapper.setContentDescription("History item " + item.title);
+        wrapper.setOnClickListener(v -> LibraryPlayback.openSaved(this,
+                item.content != null ? item.content
+                        : OnlyFapVideoMetadata.basic(item.title, item.pageUrl, item.posterUrl),
+                item.complete ? 0L : item.positionMs, true));
+        ZeroChillMotion.installPressFeedback(wrapper);
+
+        MaterialCardView card = uniformMediaCard();
+        FrameLayout media = new FrameLayout(this);
+        card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
+        media.addView(makeThumbnail(item.pageUrl), new FrameLayout.LayoutParams(-1, -1));
+        if (!item.complete && item.durationMs > 0L) {
+            FrameLayout track = new FrameLayout(this);
+            track.setBackground(rounded(Color.argb(110, 255, 255, 255), dp(2)));
+            FrameLayout.LayoutParams trackParams =
+                    new FrameLayout.LayoutParams(-1, dp(3), Gravity.BOTTOM);
+            trackParams.setMargins(dp(8), 0, dp(8), dp(6));
+            media.addView(track, trackParams);
+            View fill = new View(this);
+            fill.setBackground(rounded(AppearanceTheme.accent(this), dp(2)));
+            int width = Math.max(dp(3), Math.round(dp(120) * (item.progressPercent() / 100f)));
+            track.addView(fill, new FrameLayout.LayoutParams(width, -1));
+        }
+        wrapper.addView(card, new LinearLayout.LayoutParams(-1, dp(118)));
+
+        TextView title = captionTitle(historyTitle(item));
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+        titleParams.setMargins(dp(2), dp(6), dp(2), 0);
+        wrapper.addView(title, titleParams);
+
+        String meta = item.lastWatched > 0L
+                ? (item.complete ? "Watched " : "Resume · ") + DateFormat.getDateTimeInstance(
+                        DateFormat.SHORT, DateFormat.SHORT).format(new Date(item.lastWatched))
+                : "Watched";
+        TextView detail = text(meta, 12, UiPalette.TEXT_MUTED);
+        detail.setMaxLines(1);
+        detail.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
+        detailParams.setMargins(dp(2), dp(2), dp(2), 0);
+        wrapper.addView(detail, detailParams);
+
+        TextView more = overflowButton("Options for " + item.title);
+        more.setOnClickListener(v -> showHistoryMenu(v, item, false));
+        return LibraryOverlayActionCard.wrap(this, wrapper, more);
+    }
+
+    private String historyTitle(PlaybackHistoryStore.Item item) {
+        NativeContentItem content = item.content != null ? item.content
+                : OnlyFapVideoMetadata.basic(item.title, item.pageUrl, item.posterUrl);
+        return OnlyFapVideoMetadata.displayTitle(content);
+    }
+
     private void showHistoryMenu(View anchor, PlaybackHistoryStore.Item item, boolean continueOnly) {
         ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         menu.getMenu().add(continueOnly ? "Remove from Continue Watching" : "Delete from history");
@@ -390,13 +498,22 @@ public class FavoritesActivity extends Activity {
         List<FavoriteStore.Item> allItems = mediaFavorites ? FavoriteStore.mediaFavorites(this) : FavoriteStore.watchLater(this);
         String query = searchQuery();
         List<FavoriteStore.Item> items = new ArrayList<>();
+        LinkedHashSet<String> sources = new LinkedHashSet<>();
         for (FavoriteStore.Item item : allItems) {
-            if (LibrarySearch.matches(query, item.title, item.url,
-                    item.content == null ? "" : OnlyFapVideoMetadata.displayTitle(item.content))) {
-                items.add(item);
-            }
+            if (!LibrarySearch.matches(query, item.title, item.url,
+                    item.content == null ? "" : OnlyFapVideoMetadata.displayTitle(item.content))) continue;
+            items.add(item);
+            sources.add(LibraryBrowseGroups.sourceLabel(item.url));
+        }
+        bindSourceChips(sources);
+        if (!"All".equals(sourceFilter)) {
+            items.removeIf(item -> !sourceFilter.equals(LibraryBrowseGroups.sourceLabel(item.url)));
         }
         updateCount(items.size(), allItems.size(), "Saved");
+        if (count != null && !"All".equals(sourceFilter) && LibrarySearch.normalize(query).isEmpty()) {
+            String noun = items.size() == 1 ? "video" : "videos";
+            count.setText(items.size() + " " + noun + " · " + sourceFilter);
+        }
 
         if (allItems.isEmpty()) {
             showEmpty(target, "Nothing saved yet", mediaFavorites ? "Long-press a gallery item and choose Favorite." : "Long-press a video card and choose Save to Watch Later.");
@@ -407,13 +524,17 @@ public class FavoritesActivity extends Activity {
             return;
         }
 
-        List<View> cards = new ArrayList<>();
-        List<String> keys = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        LinkedHashMap<String, List<FavoriteStore.Item>> groups = new LinkedHashMap<>();
+        for (String bucket : LibraryBrowseGroups.DATE_ORDER) groups.put(bucket, new ArrayList<>());
         for (FavoriteStore.Item item : items) {
-            cards.add(makeWatchLaterCard(item));
-            keys.add(item.url);
+            groups.get(LibraryBrowseGroups.dateBucket(item.savedAt, now)).add(item);
         }
-        addMixedGallery(target, cards, keys);
+        for (String bucket : LibraryBrowseGroups.DATE_ORDER) {
+            List<View> cards = new ArrayList<>();
+            for (FavoriteStore.Item item : groups.get(bucket)) cards.add(makeWatchLaterCard(item));
+            addUniformSection(target, bucket, cards);
+        }
     }
 
     private View makeWatchLaterCard(FavoriteStore.Item item) {
@@ -434,12 +555,7 @@ public class FavoritesActivity extends Activity {
         });
         ZeroChillMotion.installPressFeedback(wrapper);
 
-        LibraryAspectMediaCard card = new LibraryAspectMediaCard(this);
-        card.setCardBackgroundColor(UiPalette.SURFACE);
-        card.setRadius(dp(16));
-        card.setCardElevation(0f);
-        LibraryDestinationChrome.styleMediaCard(this, card);
-
+        MaterialCardView card = uniformMediaCard();
         FrameLayout media = new FrameLayout(this);
         card.addView(media, new MaterialCardView.LayoutParams(-1, -1));
         boolean retired = WikiFeetRepository.isRetiredItem(item.content)
@@ -452,32 +568,20 @@ public class FavoritesActivity extends Activity {
         if (item.content != null && item.content.isImage() && thumbnail.getChildCount() > 1)
             thumbnail.getChildAt(1).setVisibility(View.GONE);
         media.addView(thumbnail, new FrameLayout.LayoutParams(-1, -1));
+        wrapper.addView(card, new LinearLayout.LayoutParams(-1, dp(118)));
 
-        View shade = new View(this);
-        shade.setBackground(bottomShade());
-        media.addView(shade, new FrameLayout.LayoutParams(-1, -1));
-
-        TextView title = text(OnlyFapVideoMetadata.displayTitle(item.content == null
-                ? OnlyFapVideoMetadata.basic(item.title, item.url, "") : item.content), 13, Color.WHITE);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setMaxLines(2);
-        title.setEllipsize(TextUtils.TruncateAt.END);
+        String label = OnlyFapVideoMetadata.displayTitle(item.content == null
+                ? OnlyFapVideoMetadata.basic(item.title, item.url, "") : item.content);
+        TextView title = captionTitle(label);
         if (mediaFavorites && item.content != null && item.content.isImage()) {
-            title.setMinHeight(dp(48));
-            title.setGravity(Gravity.BOTTOM);
             title.setFocusable(true);
+            title.setClickable(true);
             title.setContentDescription("Open gallery for " + title.getText());
             title.setOnClickListener(v -> SavedGalleryMedia.openCreator(this, item, v));
         }
-        FrameLayout.LayoutParams titleParams =
-                new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
-        titleParams.setMargins(dp(10), 0, dp(34), dp(10));
-        media.addView(title, titleParams);
-
-        TextView more = overflowButton("Options for " + item.title);
-        more.setOnClickListener(v -> showWatchLaterMenu(v, item));
-
-        wrapper.addView(card, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+        titleParams.setMargins(dp(2), dp(6), dp(2), 0);
+        wrapper.addView(title, titleParams);
 
         String date = item.savedAt > 0L
                 ? "Saved " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
@@ -487,8 +591,11 @@ public class FavoritesActivity extends Activity {
         saved.setMaxLines(1);
         saved.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams savedParams = new LinearLayout.LayoutParams(-1, -2);
-        savedParams.setMargins(dp(3), dp(6), dp(3), dp(2));
+        savedParams.setMargins(dp(2), dp(2), dp(2), 0);
         wrapper.addView(saved, savedParams);
+
+        TextView more = overflowButton("Options for " + item.title);
+        more.setOnClickListener(v -> showWatchLaterMenu(v, item));
         return LibraryOverlayActionCard.wrap(this, wrapper, more);
     }
 
@@ -509,6 +616,90 @@ public class FavoritesActivity extends Activity {
             return true;
         });
         menu.show();
+    }
+
+    private void hideSourceChips() {
+        if (chipScroll != null) chipScroll.setVisibility(View.GONE);
+    }
+
+    private void bindSourceChips(LinkedHashSet<String> sources) {
+        if (chipScroll == null || sourceChips == null) return;
+        if (sourceFilter == null || sourceFilter.isEmpty() || (!"All".equals(sourceFilter) && !sources.contains(sourceFilter))) {
+            sourceFilter = "All";
+        }
+        if (sources.size() < 2) {
+            sourceFilter = "All";
+            sourceChips.removeAllViews();
+            chipScroll.setVisibility(View.GONE);
+            return;
+        }
+        chipScroll.setVisibility(View.VISIBLE);
+        sourceChips.removeAllViews();
+        List<String> labels = new ArrayList<>();
+        labels.add("All");
+        labels.addAll(sources);
+        for (String label : labels) {
+            boolean selected = label.equals(sourceFilter);
+            TextView chip = text(label, 12, selected ? Color.BLACK : Color.WHITE);
+            chip.setTag("library-source-chip");
+            chip.setContentDescription(label + " source");
+            chip.setGravity(Gravity.CENTER);
+            chip.setSingleLine(true);
+            chip.setPadding(dp(12), dp(6), dp(12), dp(6));
+            chip.setBackground(rounded(selected ? AppearanceTheme.accent(this) : Color.rgb(36, 36, 40), dp(14)));
+            String chosen = label;
+            chip.setOnClickListener(v -> {
+                if (chosen.equals(sourceFilter)) return;
+                sourceFilter = chosen;
+                renderAllPages();
+            });
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2);
+            params.setMargins(0, 0, dp(6), 0);
+            sourceChips.addView(chip, params);
+        }
+    }
+
+    private void addUniformSection(LinearLayout target, String heading, List<View> cards) {
+        if (cards == null || cards.isEmpty()) return;
+        TextView label = text(heading, 13, UiPalette.TEXT_SECONDARY);
+        label.setTag("library-date-heading");
+        label.setTypeface(null, android.graphics.Typeface.BOLD);
+        label.setPadding(dp(2), dp(10), dp(2), dp(6));
+        target.addView(label);
+        for (int i = 0; i < cards.size(); i += 2) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.addView(cards.get(i), uniformCell(true));
+            if (i + 1 < cards.size()) row.addView(cards.get(i + 1), uniformCell(false));
+            else row.addView(new View(this), uniformCell(false));
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+            rowParams.bottomMargin = dp(8);
+            target.addView(row, rowParams);
+        }
+    }
+
+    private LinearLayout.LayoutParams uniformCell(boolean start) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -2, 1f);
+        params.setMargins(start ? 0 : dp(4), 0, start ? dp(4) : 0, 0);
+        return params;
+    }
+
+    private MaterialCardView uniformMediaCard() {
+        MaterialCardView card = new MaterialCardView(this);
+        card.setCardElevation(0f);
+        LibraryDestinationChrome.styleMediaCard(this, card);
+        card.setRadius(dp(16));
+        card.setPreventCornerOverlap(true);
+        return card;
+    }
+
+    private TextView captionTitle(String value) {
+        TextView title = text(value, 13, Color.WHITE);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setMaxLines(2);
+        title.setMinLines(2);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        return title;
     }
 
     private void addMixedGallery(LinearLayout target, List<View> cards, List<String> keys) {
