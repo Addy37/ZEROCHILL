@@ -1443,8 +1443,7 @@ final class SearchPanel {
             appendSection(output, "Albums", SearchRelevance.prefer(activeQuery, eromeResults),
                     GlobalSearchAdapter.SOURCE_ALBUM, 180);
         } else if (scope == Scope.BADDIEHUB) {
-            appendKind(output, "Videos", SearchRelevance.prefer(activeQuery, baddieResults), false);
-            appendKind(output, "Categories", baddieResults, true);
+            appendBaddieResults(output);
         } else if (scope == Scope.LIBRARY) {
             appendSection(output, "Library", SearchRelevance.prefer(activeQuery, library),
                     GlobalSearchAdapter.SOURCE_LIBRARY, 80);
@@ -1500,6 +1499,28 @@ final class SearchPanel {
             status.setVisibility(View.GONE);
             restoreScroll();
         }
+    }
+
+    private void appendBaddieResults(List<GlobalSearchAdapter.Entry> output) {
+        boolean randomFallback = false;
+        ArrayList<NativeContentItem> items = new ArrayList<>();
+        if (baddieResults != null) {
+            for (NativeContentItem item : baddieResults) {
+                if (BaddieHubRepository.isRandomFallbackMarker(item)) {
+                    randomFallback = true;
+                    continue;
+                }
+                if (item != null) items.add(item);
+            }
+        }
+        if (!randomFallback) {
+            appendKind(output, "Videos", SearchRelevance.prefer(activeQuery, baddieResults), false);
+            appendKind(output, "Categories", baddieResults, true);
+            return;
+        }
+        output.add(GlobalSearchAdapter.Entry.section("Nothing found"));
+        appendKind(output, "Random videos", items, false);
+        appendKind(output, "Categories", items, true);
     }
 
     private void appendKind(List<GlobalSearchAdapter.Entry> out, String title,
