@@ -34,10 +34,12 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.DataSource;
+import com.bumptech.glide.load.MultiTransformation;
 import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
+import com.bumptech.glide.load.resource.bitmap.CenterCrop;
 import com.bumptech.glide.signature.ObjectKey;
 import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.Target;
@@ -1174,6 +1176,10 @@ final class ShowsHubView extends FrameLayout {
     }
 
     private void loadArtwork(ImageView view, NativeContentItem item, boolean hero) {
+        loadArtwork(view, item, hero, false);
+    }
+
+    private void loadArtwork(ImageView view, NativeContentItem item, boolean hero, boolean trimLetterbox) {
         boolean fullHeroArtwork = hero && view == heroImage;
         byte[] embedded = EmbeddedBrowseArtwork.get(getContext(), item.url);
         if (embedded != null && embedded.length >= 512) {
@@ -1188,6 +1194,7 @@ final class ShowsHubView extends FrameLayout {
                             .placeholder(artworkPlaceholder())
                             .error(artworkPlaceholder());
             if (fullHeroArtwork) request.fitCenter();
+            else if (trimLetterbox) request.transform(continueWatchingFill());
             else request.centerCrop();
             request.into(view);
             return;
@@ -1231,8 +1238,13 @@ final class ShowsHubView extends FrameLayout {
                         .placeholder(artworkPlaceholder())
                         .error(artworkPlaceholder());
         if (fullHeroArtwork) request.fitCenter();
+        else if (trimLetterbox) request.transform(continueWatchingFill());
         else request.centerCrop();
         request.into(view);
+    }
+
+    private static MultiTransformation<Bitmap> continueWatchingFill() {
+        return new MultiTransformation<>(new ShowsContinueFrameCrop(), new CenterCrop());
     }
 
     private static String artworkAgent(String imageUrl, String pageUrl) {
@@ -1280,7 +1292,7 @@ final class ShowsHubView extends FrameLayout {
     ) {
         java.io.File savedFrame = ShowsContinueFrameStore.find(getContext(), pageUrl);
         if (savedFrame == null) {
-            loadArtwork(view, item, false);
+            loadArtwork(view, item, false, true);
             return;
         }
         Glide.with(view)
@@ -1292,7 +1304,7 @@ final class ShowsHubView extends FrameLayout {
                 .diskCacheStrategy(DiskCacheStrategy.NONE)
                 .skipMemoryCache(false)
                 .disallowHardwareConfig()
-                .centerCrop()
+                .transform(continueWatchingFill())
                 .dontAnimate()
                 .transition(ThumbnailFades.thumbnail())
                 .placeholder(artworkPlaceholder())

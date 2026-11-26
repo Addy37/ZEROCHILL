@@ -85,8 +85,9 @@ final class ShowsContinueFrameStore {
 
         File target = new File(dir, key(pageUrl) + ".jpg");
         File temp = new File(dir, target.getName() + ".tmp");
+        Bitmap encoded = ShowsContinueFrameCrop.crop(bitmap);
         try (FileOutputStream out = new FileOutputStream(temp, false)) {
-            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
+            if (!encoded.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
                 temp.delete();
                 return false;
             }
@@ -94,6 +95,10 @@ final class ShowsContinueFrameStore {
         } catch (Exception ignored) {
             temp.delete();
             return false;
+        } finally {
+            if (encoded != bitmap) {
+                recycle(encoded);
+            }
         }
 
         if (target.exists() && !target.delete()) {
