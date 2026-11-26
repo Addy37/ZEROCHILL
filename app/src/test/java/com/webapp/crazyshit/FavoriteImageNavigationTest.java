@@ -57,12 +57,12 @@ public class FavoriteImageNavigationTest {
         try (ActivityController<BunkrGalleryActivity> controller = viewer(saved)) {
             controller.recreate();
             BunkrGalleryActivity activity = controller.get();
-            for (String field : new String[]{"creatorTitleView", "itemTitleView"}) {
-                TextView label = ReflectionHelpers.getField(activity, field);
-                assertEquals("View Creator", label.getText().toString());
-                assertTrue(label.performClick());
-                assertGallery(shadowOf(activity).getNextStartedActivity(), NAME, PROFILE);
-            }
+            TextView creator = ReflectionHelpers.getField(activity, "creatorTitleView");
+            TextView item = ReflectionHelpers.getField(activity, "itemTitleView");
+            assertSame(creator, item);
+            assertEquals("View Creator", creator.getText().toString());
+            assertTrue(creator.performClick());
+            assertGallery(shadowOf(activity).getNextStartedActivity(), NAME, PROFILE);
         }
     }
 
