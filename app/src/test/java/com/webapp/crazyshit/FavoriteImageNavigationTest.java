@@ -59,7 +59,7 @@ public class FavoriteImageNavigationTest {
             BunkrGalleryActivity activity = controller.get();
             for (String field : new String[]{"creatorTitleView", "itemTitleView"}) {
                 TextView label = ReflectionHelpers.getField(activity, field);
-                assertEquals(NAME, label.getText().toString());
+                assertEquals("View Creator", label.getText().toString());
                 assertTrue(label.performClick());
                 assertGallery(shadowOf(activity).getNextStartedActivity(), NAME, PROFILE);
             }

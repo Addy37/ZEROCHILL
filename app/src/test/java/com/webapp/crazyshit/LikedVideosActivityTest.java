@@ -70,10 +70,24 @@ public class LikedVideosActivityTest {
             list.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY));
             list.layout(0, 0, 600, 900);
             assertEquals(2, list.getAdapter().getItemCount());
-            list.findViewHolderForAdapterPosition(0).itemView.performClick();
-            assertEquals(Activity.RESULT_OK, shadowOf(activity).getResultCode());
-            assertEquals(item.url, shadowOf(activity).getResultIntent().getStringExtra(FavoritesActivity.EXTRA_SELECTED_URL));
-            assertEquals(FavoritesActivity.START_WATCH_LATER, shadowOf(activity).getResultIntent().getIntExtra(FavoritesActivity.EXTRA_SELECTED_TAB, -1));
+            LibraryPlayback.Playable previousPlayable = LibraryPlayback.playable;
+            java.util.concurrent.Executor previousIo = LibraryPlayback.playbackIo;
+            LibraryPlayback.playbackIo = Runnable::run;
+            LibraryPlayback.playable = (host, content) -> new CrazyShitRepository.StreamInfo(
+                    "https://fixture.invalid/media.mp4", content.url, content.title);
+            try {
+                list.findViewHolderForAdapterPosition(0).itemView.performClick();
+                shadowOf(Looper.getMainLooper()).idle();
+                assertFalse(activity.isFinishing());
+                assertNotEquals(Activity.RESULT_OK, shadowOf(activity).getResultCode());
+                android.content.Intent playback = shadowOf(activity).getNextStartedActivity();
+                assertEquals(VideoDetailActivity.class.getName(), playback.getComponent().getClassName());
+                assertEquals(item.url, playback.getStringExtra(PlayerActivity.EXTRA_PAGE_URL));
+                assertTrue(playback.getBooleanExtra(VideoDetailActivity.EXTRA_SUPPRESS_RELATED, false));
+            } finally {
+                LibraryPlayback.playable = previousPlayable;
+                LibraryPlayback.playbackIo = previousIo;
+            }
         } finally { controller.pause().stop().destroy(); }
     }
     @Test public void accountChangeDropsCachedRowsAndDiscardsOldResponse() throws Exception {

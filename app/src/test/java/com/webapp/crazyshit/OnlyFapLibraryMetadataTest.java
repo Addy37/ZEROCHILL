@@ -186,9 +186,26 @@ public class OnlyFapLibraryMetadataTest {
                 View card = find(decor, "Watch Later " + clip().title);
                 assertNotNull(card);
                 assertNotNull(findText(card, "CarrotSoki"));
-                assertTrue(card.performClick());
-                assertEquals(URL, shadowOf(saved).getResultIntent().getStringExtra(FavoritesActivity.EXTRA_SELECTED_URL));
-                assertEquals(PROFILE, OnlyFapVideoMetadata.creator(FavoriteStore.watchLater(context).get(0).content).url);
+                LibraryPlayback.Playable previousPlayable = LibraryPlayback.playable;
+                java.util.concurrent.Executor previousIo = LibraryPlayback.playbackIo;
+                LibraryPlayback.playbackIo = Runnable::run;
+                LibraryPlayback.playable = (host, item) -> new CrazyShitRepository.StreamInfo(
+                        "https://fixture.invalid/media.mp4", item.url, item.title);
+                try {
+                    assertTrue(card.performClick());
+                    shadowOf(Looper.getMainLooper()).idle();
+                    assertFalse(saved.isFinishing());
+                    Intent playback = shadowOf(saved).getNextStartedActivity();
+                    assertEquals(VideoDetailActivity.class.getName(), playback.getComponent().getClassName());
+                    assertEquals(URL, playback.getStringExtra(PlayerActivity.EXTRA_PAGE_URL));
+                    assertEquals("https://fixture.invalid/media.mp4",
+                            playback.getStringExtra(PlayerActivity.EXTRA_MEDIA_URL));
+                    assertEquals(PROFILE, OnlyFapVideoMetadata.creator(
+                            FavoriteStore.watchLater(context).get(0).content).url);
+                } finally {
+                    LibraryPlayback.playable = previousPlayable;
+                    LibraryPlayback.playbackIo = previousIo;
+                }
             }
         } finally { view.close(); }
     }

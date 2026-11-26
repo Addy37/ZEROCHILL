@@ -84,6 +84,7 @@ public class VideoDetailActivity extends Activity {
     public static final String EXTRA_POSTER_URL = "poster_url";
     public static final String EXTRA_SHOWS_ORIGIN = "shows_origin";
     public static final String EXTRA_SUPPRESS_RELATED = "suppress_related";
+    public static final String EXTRA_LIBRARY_CONTEXT = "library_context_album";
     public static final String EXTRA_PLAYBACK_IDENT = "playback_ident";
     public static final String EXTRA_SHOWS_CONTINUE_RESUME = "shows_continue_resume";
     public static final String EXTRA_DEFERRED_SHOWS_RESOLVE = "deferred_shows_resolve";
@@ -169,6 +170,11 @@ public class VideoDetailActivity extends Activity {
     private String posterUrl;
     private boolean showsOrigin;
     private boolean suppressRelated;
+    private boolean libraryContext;
+    private String libraryAlbumUrl = "";
+    private boolean libraryAlbumOpen;
+    private boolean resumeLibraryContext;
+    private boolean resumeLibraryPlaying;
     private boolean deferredShowsResolve;
     private int deferredShowsResolveGeneration;
     private boolean manualLandscapeFullscreen;
@@ -357,6 +363,8 @@ public class VideoDetailActivity extends Activity {
         posterUrl = clean(getIntent().getStringExtra(EXTRA_POSTER_URL));
         showsOrigin = getIntent().getBooleanExtra(EXTRA_SHOWS_ORIGIN, false);
         suppressRelated = !showsOrigin && getIntent().getBooleanExtra(EXTRA_SUPPRESS_RELATED, false);
+        libraryContext = getIntent().getBooleanExtra(EXTRA_LIBRARY_CONTEXT, false);
+        libraryAlbumUrl = libraryContext ? relatedFeedUrl : "";
         deferredShowsResolve = showsOrigin &&
                 getIntent().getBooleanExtra(EXTRA_DEFERRED_SHOWS_RESOLVE, false);
         showsSession = showsOrigin ? ShowsWatchSession.from(getIntent()) : null;
@@ -413,7 +421,7 @@ public class VideoDetailActivity extends Activity {
                 if (detailsScroll != null) detailsScroll.scrollTo(0, showsRestoreScrollY);
                 if (showsRailScroll != null) showsRailScroll.scrollTo(showsRestoreRailX, 0);
             });
-        } else if (suppressRelated) {
+        } else if (suppressRelated && !libraryContext) {
             if (relatedTitle != null) relatedTitle.setVisibility(View.GONE);
             if (relatedContainer != null) relatedContainer.setVisibility(View.GONE);
             if (onlyFapCreatorRow != null) onlyFapCreatorRow.setVisibility(View.GONE);
@@ -758,15 +766,17 @@ public class VideoDetailActivity extends Activity {
         onlyFapCreatorRow.setVisibility(View.GONE);
 
         relatedTitle = new TextView(this);
-        relatedTitle.setText("Related videos");
+        relatedTitle.setText(libraryContext ? "" : "Related videos");
         relatedTitle.setTextColor(Color.WHITE);
         relatedTitle.setTextSize(18);
         relatedTitle.setTypeface(null, android.graphics.Typeface.BOLD);
         relatedTitle.setPadding(dp(2), dp(18), dp(2), dp(8));
+        if (libraryContext) relatedTitle.setVisibility(View.GONE);
         detailsColumn.addView(relatedTitle, new LinearLayout.LayoutParams(-1, -2));
 
         relatedContainer = new LinearLayout(this);
         relatedContainer.setOrientation(LinearLayout.VERTICAL);
+        if (libraryContext) relatedContainer.setVisibility(View.GONE);
         detailsColumn.addView(relatedContainer, new LinearLayout.LayoutParams(-1, -2));
 
         if (showsOrigin) {
@@ -1575,13 +1585,17 @@ public class VideoDetailActivity extends Activity {
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
         onlyFapCreatorRow.addView(avatarFrame, new LinearLayout.LayoutParams(dp(44), dp(44)));
         if (!creator.imageUrl.isEmpty()) Glide.with(avatar).load(withHeaders(creator.imageUrl, creator.url)).into(avatar);
-        TextView gallery = BrowseUi.text(this, creator.title + "\nView gallery", 14, Color.WHITE);
+        TextView gallery = BrowseUi.text(this, creator.title + "\n" + creatorLine(creator), 14, Color.WHITE);
         gallery.setPadding(dp(12), 0, dp(8), 0);
         gallery.setMinHeight(dp(48));
         gallery.setGravity(Gravity.CENTER_VERTICAL);
         gallery.setContentDescription("Open " + creator.title + " gallery");
-        View.OnClickListener open = view -> {
+        View.OnClickListener open = creatorLine(creator).isEmpty() ? null : view -> {
             savePlaybackState(false);
+            resumeLibraryPlaying = player != null && player.getPlayWhenReady()
+                    && player.getPlaybackState() != Player.STATE_ENDED;
+            resumeLibraryContext = true;
+            libraryAlbumOpen = true;
             if (player != null) player.pause();
             startActivity(NativeFeedBrowserActivity.createCreatorGallery(
                     this, CreatorGallerySpec.from(creator), onlyFapSession));
@@ -1602,6 +1616,71 @@ public class VideoDetailActivity extends Activity {
         });
         onlyFapCreatorRow.addView(star, new LinearLayout.LayoutParams(dp(48), dp(48)));
         if (relatedTitle != null) relatedTitle.setText("More from " + creator.title);
+    }
+
+    private String creatorLine(NativeContentItem creator) {
+        if (creator == null) return "";
+        int count = -1;
+        if (onlyFapSession != null && !onlyFapSession.isEmpty()) {
+            BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(onlyFapSession);
+            if (snapshot != null && !snapshot.items.isEmpty()) count = snapshot.items.size();
+        }
+        return LibraryPlayback.creatorAction(count);
+    }
+
+    private void loadLibraryAlbum() {
+        if (relatedContainer == null || libraryAlbumUrl == null || libraryAlbumUrl.isEmpty()) return;
+        final int requestGeneration = ++relatedLoadGeneration;
+        final String albumUrl = libraryAlbumUrl;
+        final String excludeUrl = pageUrl;
+        io.execute(() -> {
+            List<NativeContentItem> album = null;
+            try {
+                album = bunkrRepository.fetchAlbum(this, albumUrl, 1);
+            } catch (Exception ignored) {
+            }
+            int count = album == null ? 0 : album.size();
+            ArrayList<NativeContentItem> others = new ArrayList<>();
+            if (album != null) for (NativeContentItem item : album) {
+                if (item != null && item.isVideo() && item.url != null && !item.url.equals(excludeUrl)) {
+                    others.add(item);
+                }
+            }
+            runOnUiThread(() -> {
+                if (isFinishing() || requestGeneration != relatedLoadGeneration || !excludeUrl.equals(pageUrl)) return;
+                if (!LibraryPlayback.viewAlbum(count)) {
+                    if (relatedTitle != null) relatedTitle.setVisibility(View.GONE);
+                    relatedContainer.setVisibility(View.GONE);
+                    return;
+                }
+                if (relatedTitle != null) {
+                    relatedTitle.setVisibility(View.VISIBLE);
+                    relatedTitle.setText(LibraryPlayback.albumAction(count));
+                    relatedTitle.setOnClickListener(v -> openLibraryAlbum());
+                }
+                if (others.isEmpty()) relatedContainer.setVisibility(View.GONE);
+                else {
+                    relatedContainer.setVisibility(View.VISIBLE);
+                    renderRelated(others);
+                }
+            });
+        });
+    }
+
+    private void openLibraryAlbum() {
+        if (libraryAlbumOpen || libraryAlbumUrl == null || libraryAlbumUrl.isEmpty()) return;
+        libraryAlbumOpen = true;
+        resumeLibraryContext = true;
+        resumeLibraryPlaying = player != null && player.getPlayWhenReady()
+                && player.getPlaybackState() != Player.STATE_ENDED;
+        String source = EromeRepository.isAlbumUrl(libraryAlbumUrl)
+                ? NativeFeedBrowserActivity.SOURCE_EROME
+                : NativeFeedBrowserActivity.SOURCE_BUNKR;
+        NativeContentItem album = new NativeContentItem(
+                NativeContentItem.KIND_SERIES,
+                title == null || title.isEmpty() ? "Album" : title,
+                libraryAlbumUrl, posterUrl, "", "", "", "Album");
+        startActivity(NativeFeedBrowserActivity.createShowDetails(this, album, source));
     }
 
     private void loadOnlyFapRelated() {
@@ -1663,12 +1742,17 @@ public class VideoDetailActivity extends Activity {
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed() || generation != relatedLoadGeneration || !expectedUrl.equals(pageUrl)) return;
                 onlyFapSession = gallerySession;
+                updateOnlyFapCreatorRow(false);
                 renderRelated(videos);
             });
         });
     }
 
     private void loadRelated() {
+        if (libraryContext) {
+            loadLibraryAlbum();
+            return;
+        }
         if (suppressRelated || relatedContainer == null) return;
         if (showsOrigin && showsSession != null && !showsSession.albumSession.isEmpty()) {
             maybeLoadShowsAlbum();
@@ -3782,6 +3866,11 @@ public class VideoDetailActivity extends Activity {
         if (socialNavigationPendingReturn) {
             socialNavigationPendingReturn = false;
             if (player != null) player.setPlayWhenReady(socialReturnPlayWhenReady);
+        }
+        if (resumeLibraryContext) {
+            resumeLibraryContext = false;
+            libraryAlbumOpen = false;
+            if (player != null) player.setPlayWhenReady(resumeLibraryPlaying);
         }
         updateSwipeEnabled();
         if (detailsScroll != null) applyDetailsBackground();

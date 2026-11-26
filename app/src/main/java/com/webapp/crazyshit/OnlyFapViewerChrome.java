@@ -37,6 +37,7 @@ final class OnlyFapViewerChrome extends FrameLayout {
     private String key = "";
     private String title = "";
     private int position, count;
+    private boolean contextReserved;
     private final Runnable hide = this::hideIfIdle;
     private void hideIfIdle() { if (shown && canAutoHide()) actions.hide(); }
     private final Runnable tick = new Runnable() {
@@ -164,13 +165,44 @@ final class OnlyFapViewerChrome extends FrameLayout {
         updateFavorite(favorite); updatePlayback(); restartHide();
     }
     TextView creatorLabel() { return photoName; }
+    void reserveContextLine() {
+        contextReserved = true;
+        if (photoName.getVisibility() != VISIBLE) photoName.setVisibility(INVISIBLE);
+        photoPosition.setTextSize(10);
+    }
     void setCreatorAction(String name, Runnable action) {
-        photoName.setText(name); photoName.setVisibility(name.isEmpty() ? GONE : VISIBLE);
-        photoPosition.setTextSize(name.isEmpty() ? 14 : 10);
-        photoName.setContentDescription(action == null ? name
-                : "View Album".equals(name) ? "View Album" : "Open gallery for " + name);
-        photoName.setOnClickListener(action == null ? null : v -> { interact(); action.run(); });
-        photoName.setClickable(action != null); photoName.setFocusable(action != null);
+        photoName.setText(name);
+        boolean show = name != null && !name.isEmpty() && action != null;
+        if (contextReserved) {
+            photoName.setVisibility(show ? VISIBLE : INVISIBLE);
+            photoPosition.setTextSize(10);
+        } else {
+            photoName.setVisibility(show ? VISIBLE : GONE);
+            photoPosition.setTextSize(show ? 10 : 14);
+        }
+        String description = !show ? name
+                : "View Album".equals(name) || name.startsWith("View Album") || name.startsWith("View Creator")
+                ? name : "Open gallery for " + name;
+        photoName.setContentDescription(description);
+        photoName.setOnClickListener(!show ? null : v -> { interact(); action.run(); });
+        photoName.setClickable(show);
+        photoName.setFocusable(show);
+        String countLabel = position > 0 ? position + " of " + count : "Media";
+        if (show && video) {
+            videoPosition.setText(countLabel + "  ·  " + name);
+            videoPosition.setTextColor(AppearanceTheme.accent(getContext()));
+            videoPosition.setContentDescription(description);
+            videoPosition.setOnClickListener(v -> { interact(); action.run(); });
+            videoPosition.setClickable(true);
+            videoPosition.setFocusable(true);
+        } else {
+            videoPosition.setText(countLabel);
+            videoPosition.setTextColor(0xA3FFFFFF);
+            videoPosition.setContentDescription(countLabel);
+            videoPosition.setOnClickListener(null);
+            videoPosition.setClickable(false);
+            videoPosition.setFocusable(false);
+        }
     }
     void updateFavorite(boolean value) {
         favorite = value;

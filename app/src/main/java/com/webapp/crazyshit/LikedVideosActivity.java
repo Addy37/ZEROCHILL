@@ -239,12 +239,8 @@ public final class LikedVideosActivity extends Activity {
                     })
                     .transition(ThumbnailFades.thumbnail()).into(holder.image);
             }
-            holder.itemView.setOnClickListener(v -> {
-                Intent result = new Intent().putExtra(FavoritesActivity.EXTRA_SELECTED_URL, item.url)
-                        .putExtra(FavoritesActivity.EXTRA_SELECTED_TITLE, item.title)
-                        .putExtra(FavoritesActivity.EXTRA_SELECTED_TAB, FavoritesActivity.START_WATCH_LATER);
-                setResult(RESULT_OK, result); finish();
-            });
+            holder.itemView.setOnClickListener(v ->
+                    LibraryPlayback.openSaved(LikedVideosActivity.this, item, -1L, false));
         }
         @Override public int getItemCount() { return items.size(); }
         @Override public void onViewRecycled(Holder holder) { Glide.with(holder.image).clear(holder.image); }

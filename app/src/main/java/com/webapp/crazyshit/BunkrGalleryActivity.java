@@ -127,7 +127,15 @@ public final class BunkrGalleryActivity extends Activity {
     private int pendingVideoPosition = -1;
     private boolean autoplayInitialSelection;
     private long libraryResumeMs = -1L;
+    private boolean libraryHoldPause;
     private boolean enrichEromeAlbum;
+    private boolean contextNavigationOpen;
+    private boolean returnToPlayback;
+    private long returnPositionMs = -1L;
+    private boolean returnPlaying;
+    private int creatorMediaCount = -2;
+    private boolean preservingPlayback;
+    private String preservedUrl = "";
     private String sharedElementName = "";
     private boolean sharedElementPending;
     private boolean sharedElementStarted;
@@ -301,6 +309,7 @@ public final class BunkrGalleryActivity extends Activity {
             @Override public void more(View anchor) { showMenu(anchor); }
             @Override public void hide() { setChromeVisible(false); }
         });
+        if (enrichEromeAlbum || savedCreatorGallery() != null) viewerChrome.reserveContextLine();
         root.addView(viewerChrome, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
         creatorTitleView = itemTitleView = viewerChrome.creatorLabel();
         adapter.setUnifiedVideoChrome(true);
@@ -336,6 +345,25 @@ public final class BunkrGalleryActivity extends Activity {
             public void onPageSelected(int position) {
                 if (position != requestedPhotoPosition) retriedBunkrPhoto = "";
                 requestedPhotoPosition = position;
+                NativeContentItem selected = adapter == null ? null : adapter.itemAt(position);
+                if (preservingPlayback) {
+                    if (selected != null && preservedUrl.equals(selected.url)) {
+                        if (activeVideoPosition != position) adapter.noteActiveVideo(position);
+                        activeVideoPosition = position;
+                        updateChrome(position);
+                    }
+                    return;
+                }
+                NativeContentItem playing = adapter == null ? null : adapter.itemAt(activeVideoPosition);
+                boolean keepPlaying = player != null && selected != null && playing != null
+                        && selected.url != null && selected.url.equals(playing.url);
+                if (keepPlaying) {
+                    if (activeVideoPosition != position) adapter.noteActiveVideo(position);
+                    activeVideoPosition = position;
+                    updateChrome(position);
+                    preloadNeighbors(position);
+                    return;
+                }
                 pendingVideoPosition = -1;
                 releasePlayer();
                 updateChrome(position);
@@ -1188,9 +1216,10 @@ public final class BunkrGalleryActivity extends Activity {
                 ZeroChillToast.makeText(BunkrGalleryActivity.this, "Couldn't continue this video. Tap it to retry.", ZeroChillToast.LENGTH_SHORT).show();
             }
         });
-        player.setPlayWhenReady(true);
+        player.setPlayWhenReady(!libraryHoldPause);
+        libraryHoldPause = false;
         player.prepare();
-        if (libraryResumeMs > 0L && item != null && item.url.equals(initialUrl)) {
+        if (libraryResumeMs > 0L) {
             player.seekTo(libraryResumeMs);
             libraryResumeMs = -1L;
         }
@@ -1315,7 +1344,7 @@ public final class BunkrGalleryActivity extends Activity {
                 NativeContentItem.KIND_SERIES,
                 albumTitle == null || albumTitle.isEmpty() ? "Erome album" : albumTitle,
                 album, "", "", "", "", "Erome album");
-        startActivity(NativeFeedBrowserActivity.createShowDetails(
+        openParent(NativeFeedBrowserActivity.createShowDetails(
                 this, item, NativeFeedBrowserActivity.SOURCE_EROME));
     }
 
@@ -1323,27 +1352,36 @@ public final class BunkrGalleryActivity extends Activity {
         if (!enrichEromeAlbum || !EromeRepository.isAlbumUrl(albumUrl)) return;
         enrichEromeAlbum = false;
         int requestGeneration = generation;
+        String requestedAlbum = albumUrl;
         pageIo.execute(() -> {
             List<NativeContentItem> result;
             try {
-                result = new EromeRepository().fetchAlbum(this, albumUrl);
+                result = new EromeRepository().fetchAlbum(this, requestedAlbum);
             } catch (Exception ignored) {
                 return;
             }
-            if (result == null || !LibraryPlayback.viewAlbum(result.size())) return;
+            List<NativeContentItem> album = result;
             runOnUiThread(() -> {
                 if (requestGeneration != generation || isFinishing() || isDestroyed() || adapter == null || pager == null) {
                     return;
                 }
                 NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
-                if (current != null && current.url != null && !current.url.isEmpty()) initialUrl = current.url;
-                if (player != null) {
-                    long position = Math.max(0L, player.getCurrentPosition());
-                    if (position > 0L) libraryResumeMs = position;
+                if (current == null) return;
+                List<NativeContentItem> ordered = LibraryPlayback.albumContext(current, album);
+                preservingPlayback = true;
+                preservedUrl = current.url == null ? "" : current.url;
+                int index = adapter.spliceContext(ordered, current.url);
+                if (index >= 0) {
+                    ArrayList<NativeContentItem> visible = new ArrayList<>();
+                    for (int i = 0; i < adapter.getItemCount(); i++) visible.add(adapter.itemAt(i));
+                    BunkrGallerySessionStore.replace(sessionId, visible, 1, true);
+                    if (pager.getCurrentItem() != index) pager.setCurrentItem(index, false);
+                    endReached = true;
+                } else {
+                    preservingPlayback = false;
                 }
-                BunkrGallerySessionStore.replace(sessionId, result, 1, true);
-                BunkrGallerySessionStore.Snapshot fresh = BunkrGallerySessionStore.snapshot(sessionId);
-                if (fresh != null && !fresh.items.isEmpty()) showSnapshot(fresh);
+                updateChrome(pager.getCurrentItem());
+                pager.post(() -> preservingPlayback = false);
             });
         });
     }
@@ -1355,14 +1393,13 @@ public final class BunkrGalleryActivity extends Activity {
                 item == null ? 0 : position + 1, adapter.getItemCount(), item != null && item.isVideo());
         String name = ""; Runnable open = null;
         if (EromeRepository.isAlbumUrl(albumUrl) && LibraryPlayback.viewAlbum(adapter.getItemCount())) {
-            name = "View Album";
+            name = LibraryPlayback.albumAction(adapter.getItemCount());
             open = this::openEromeAlbum;
         } else if (savedFavoriteImage(item) || (item != null && PawchiveRepository.isDirectMedia(item.url)
                 && savedCreatorGallery() != null)) {
-            Intent gallery = savedCreatorGallery();
-            name = gallery == null ? item.title : value(gallery.getStringExtra(NativeFeedBrowserActivity.EXTRA_TITLE));
-            if (name.isEmpty()) name = item.title;
-            if (gallery != null) open = this::openSavedCreatorGallery;
+            ensureCreatorCount();
+            name = LibraryPlayback.creatorAction(creatorMediaCount);
+            if (!name.isEmpty() && savedCreatorGallery() != null) open = this::openSavedCreatorGallery;
         }
         viewerChrome.setCreatorAction(name, open);
         if (adapter.hasUsableArtwork(position)) viewerChrome.artworkReady();
@@ -1531,9 +1568,35 @@ public final class BunkrGalleryActivity extends Activity {
                 ? gallery : null;
     }
 
+    private void ensureCreatorCount() {
+        if (creatorMediaCount != -2) return;
+        Intent gallery = savedCreatorGallery();
+        creatorMediaCount = -1;
+        if (gallery == null) return;
+        int requestGeneration = generation;
+        pageIo.execute(() -> {
+            int count = LibraryPlayback.cachedGalleryCount(this, gallery);
+            runOnUiThread(() -> {
+                if (requestGeneration != generation || isFinishing() || isDestroyed() || pager == null) return;
+                creatorMediaCount = count;
+                updateChrome(pager.getCurrentItem());
+            });
+        });
+    }
+
+    private void openParent(Intent intent) {
+        if (intent == null || contextNavigationOpen) return;
+        contextNavigationOpen = true;
+        returnToPlayback = true;
+        returnPositionMs = player == null ? -1L : Math.max(0L, player.getCurrentPosition());
+        returnPlaying = player != null && player.getPlayWhenReady()
+                && player.getPlaybackState() != Player.STATE_ENDED;
+        startActivity(intent);
+    }
+
     private void openSavedCreatorGallery() {
         Intent gallery = savedCreatorGallery();
-        if (gallery != null) startActivity(new Intent(gallery));
+        if (gallery != null) openParent(new Intent(gallery));
     }
 
     private void showMediaContextMenu(int position, NativeContentItem item) {
@@ -1644,8 +1707,24 @@ public final class BunkrGalleryActivity extends Activity {
     protected void onResume() {
         super.onResume();
         recoveryResumed = true;
+        contextNavigationOpen = false;
         if (viewerChrome != null) { viewerChrome.setVisible(chromeVisible && !sharedElementPending); refreshCurrentFavorite(); }
         if (videoOrientationListener != null) videoOrientationListener.enable();
+        if (returnToPlayback) {
+            returnToPlayback = false;
+            restorePlaybackAfterParent();
+        }
+    }
+
+    private void restorePlaybackAfterParent() {
+        if (pager == null || adapter == null || isFinishing()) return;
+        int position = pager.getCurrentItem();
+        NativeContentItem item = adapter.itemAt(position);
+        if (item == null || !item.isVideo()) return;
+        if (!returnPlaying && returnPositionMs <= 0L) return;
+        libraryResumeMs = Math.max(0L, returnPositionMs);
+        libraryHoldPause = !returnPlaying;
+        playVideo(position, item);
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {

@@ -700,26 +700,12 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
     private void presentLibrary(NativeContentItem item, long start) {
         if (item == null) return;
         switch (LibraryPlayback.route(item)) {
-            case EROME_ALBUM:
-                LibraryPlayback.openAlbum(activity, item);
-                return;
-            case EROME_MEDIA:
-                LibraryPlayback.openMedia(activity, item, start);
-                return;
-            case GALLERY:
-                SavedGalleryMedia.open(activity, item);
-                return;
-            case STANDALONE:
-                openShowsVideo(item, false, null, start, true);
-                return;
-            case ONLYFAP_VIDEO:
-                if (start >= 0L) openShowsResume(libraryHistory(item, start), false);
-                else openShowsVideo(item, false);
-                return;
             case SHOWS:
-            default:
                 if (start >= 0L) openShowsResume(libraryHistory(item, start), false);
                 else openShowsVideo(item, false);
+                return;
+            default:
+                LibraryPlayback.open(activity, item, start);
         }
     }
 

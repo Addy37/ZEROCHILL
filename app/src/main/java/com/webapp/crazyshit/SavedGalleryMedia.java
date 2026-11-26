@@ -12,15 +12,23 @@ final class SavedGalleryMedia {
     static final String EXTRA_CREATOR_GALLERY = "saved_media_creator_gallery";
 
     static void open(Activity activity, NativeContentItem item) {
+        open(activity, item, -1L);
+    }
+
+    static void open(Activity activity, NativeContentItem item, long startPositionMs) {
         if (item == null) return;
         if (WikiFeetRepository.isRetiredItem(item)) {
             showUnavailable(activity);
             return;
         }
-        activity.startActivity(viewer(activity, item));
+        activity.startActivity(withStart(viewer(activity, item), startPositionMs));
     }
 
     static void open(Activity activity, FavoriteStore.Item saved) {
+        open(activity, saved, -1L);
+    }
+
+    static void open(Activity activity, FavoriteStore.Item saved, long startPositionMs) {
         if (saved == null || saved.content == null) return;
         if (WikiFeetRepository.isRetiredItem(saved.content)) {
             showUnavailable(activity);
@@ -32,7 +40,12 @@ final class SavedGalleryMedia {
             Intent gallery = creatorGallery(activity, saved);
             if (gallery != null) intent.putExtra(EXTRA_CREATOR_GALLERY, gallery);
         }
-        activity.startActivity(intent);
+        activity.startActivity(withStart(intent, startPositionMs));
+    }
+
+    private static Intent withStart(Intent intent, long startPositionMs) {
+        if (startPositionMs > 0L) intent.putExtra(PlayerActivity.EXTRA_START_POSITION, startPositionMs);
+        return intent;
     }
 
     private static void showUnavailable(Activity activity) {
