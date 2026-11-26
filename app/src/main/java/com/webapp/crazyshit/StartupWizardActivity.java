@@ -136,6 +136,13 @@ public final class StartupWizardActivity extends Activity {
         if (tour != null) tour.resumeTour();
     }
 
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (tour != null) {
+            if (hasFocus) tour.resumeTour(); else tour.pauseTour();
+        }
+    }
+
     @Override protected void onPause() {
         if (tour != null) tour.pauseTour();
         cancelAmbientPulse();
@@ -410,8 +417,10 @@ public final class StartupWizardActivity extends Activity {
         column.addView(expand, new LinearLayout.LayoutParams(-1, dp(48)));
         column.addView(preferences, cardParams());
         preferences.setVisibility(preferencesExpanded ? View.VISIBLE : View.GONE);
+        expand.setContentDescription("Notification and haptic preferences, " + (preferencesExpanded ? "expanded" : "collapsed"));
         expand.setOnClickListener(v -> {
             preferencesExpanded = !preferencesExpanded;
+            expand.setContentDescription("Notification and haptic preferences, " + (preferencesExpanded ? "expanded" : "collapsed"));
             preferences.setVisibility(preferencesExpanded ? View.VISIBLE : View.GONE);
             expand.setText((preferencesExpanded ? "−  " : "+  ") + "Notification & haptic preferences");
         });
@@ -438,7 +447,7 @@ public final class StartupWizardActivity extends Activity {
         ), cardParams());
 
         TextView note = text(
-                "Android notification permission is only requested after you choose ENTER ZEROCHILL, and only when an alert option is enabled.",
+                "If alerts are on, Android may ask for notification permission when you finish.",
                 12f,
                 color(R.color.zc_text_muted),
                 false
@@ -446,8 +455,8 @@ public final class StartupWizardActivity extends Activity {
         note.setLineSpacing(0f, 1.1f);
         LinearLayout.LayoutParams noteParams = new LinearLayout.LayoutParams(-1, -2);
         noteParams.topMargin = dp(8);
-        preferences.addView(note, noteParams);
-        TextView later = text("Change anything later in Settings. Replay this tour from About ZEROCHILL.", 12f,
+        column.addView(note, noteParams);
+        TextView later = text("Change these later in Settings. Replay from About ZEROCHILL.", 12f,
                 color(R.color.zc_text_muted), false);
         later.setGravity(Gravity.CENTER);
         column.addView(later, cardParams());
@@ -800,7 +809,6 @@ public final class StartupWizardActivity extends Activity {
         backButton.setVisibility(page == PAGE_WELCOME && !preview ? View.INVISIBLE : View.VISIBLE);
         if (page == PAGE_WELCOME) nextButton.setText("GET STARTED");
         else if (page == PAGE_SETTINGS) nextButton.setText(preview ? "FINISH TOUR" : "ENTER ZEROCHILL");
-        else if (page == PAGE_MEET) nextButton.setText("CONTINUE");
         else nextButton.setText("CONTINUE");
         updateNextButtonState();
     }
@@ -891,7 +899,7 @@ public final class StartupWizardActivity extends Activity {
     }
 
     private void onPageVisible(View view) {
-        if (page == PAGE_MEET && tour != null) tour.resumeTour();
+        if (page == PAGE_MEET && tour != null && hasWindowFocus()) tour.resumeTour();
         if (page == PAGE_WELCOME && ZeroChillMotion.animationsEnabled(this)) {
             nextButton.setScaleX(.94f);
             nextButton.setScaleY(.94f);

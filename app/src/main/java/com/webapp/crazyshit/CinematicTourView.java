@@ -35,10 +35,10 @@ final class CinematicTourView extends LinearLayout {
     private final TextView title, copy;
     private final TextView[] dots = new TextView[TITLES.length];
     private int scene;
-    private boolean active, touched;
+    private boolean active, touched, manualNavigation;
     private float downX, downY;
     private ValueAnimator animation;
-    private final Runnable advance = () -> select(scene + 1);
+    private final Runnable advance = () -> changeScene(scene + 1);
 
     CinematicTourView(Context context, int accent, int initial, IntConsumer changed) {
         super(context);
@@ -104,6 +104,11 @@ final class CinematicTourView extends LinearLayout {
     int currentScene() { return scene; }
 
     void select(int index) {
+        manualNavigation = true;
+        changeScene(index);
+    }
+
+    private void changeScene(int index) {
         scene = (index + TITLES.length) % TITLES.length;
         changed.accept(scene);
         refresh();
@@ -151,7 +156,15 @@ final class CinematicTourView extends LinearLayout {
         animation.setDuration(3400L);
         animation.addUpdateListener(a -> { phone.phase = (float)a.getAnimatedValue(); phone.invalidate(); });
         animation.start();
-        if (!touched) postDelayed(advance, 4400L);
+        android.view.accessibility.AccessibilityManager accessibility =
+                (android.view.accessibility.AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
+        if (!touched && !manualNavigation && (accessibility == null || !accessibility.isTouchExplorationEnabled()))
+            postDelayed(advance, 4400L);
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (active) playScene();
     }
 
     @Override protected void onDetachedFromWindow() {
@@ -165,6 +178,10 @@ final class CinematicTourView extends LinearLayout {
         final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         final RectF r = new RectF();
         final Path path = new Path();
+        final int[] artworkColors = {0xff344c61,0xff574763,0xff26545a,0xff414d70};
+        final String[] tabs = {"Chaos","Straight","Gay","Trans","Groups"};
+        final String[] letters = {"A","F","M","S","Z"};
+        final String[] collections = {"Favorites","My picks","Watch later","Saved"};
         final RadialGradient glow = new RadialGradient(110, 162, 118,
                 new int[]{(accent & 0xffffff) | 0x52000000, (accent & 0xffffff) | 0x0c000000, Color.TRANSPARENT},
                 new float[]{0f, .72f, 1f}, Shader.TileMode.CLAMP);
@@ -198,6 +215,8 @@ final class CinematicTourView extends LinearLayout {
             c.save(); c.clipRect(44,23,176,291);
             // Contents reveal inside the retained device frame.
             float t = ease(phase);
+            int alpha = Math.round(90+165*Math.min(1,phase*7));
+            int layer = c.saveLayerAlpha(44,23,176,291,alpha);
             c.translate((1-Math.min(1,phase*7))*13,0);
             switch(scene) {
                 case 0: feed(c,t); break;
@@ -206,6 +225,7 @@ final class CinematicTourView extends LinearLayout {
                 case 3: library(c,t); break;
                 default: creators(c,t);
             }
+            c.restoreToCount(layer);
             c.restore();
             box(c,61,294,159,308,7,0xff202632);
             for(int i=0;i<5;i++) circle(c,72+i*19,301,3.5f,i==Math.min(scene,3)?accent:0xff7d8996);
@@ -219,7 +239,6 @@ final class CinematicTourView extends LinearLayout {
             art(c,44,287-shift,176,532-shift,1);
             c.restore();
             box(c,44,23,176,42,4,0xff10151c);
-            String[] tabs={"Chaos","Straight","Gay","Trans","Groups"};
             for(int i=0;i<5;i++) label(c,tabs[i],57+i*26,34,5.8f,i==(t<.45f?0:1)?accent:Color.WHITE);
             for(int i=0;i<4;i++) circle(c,164,155+i*23,7,0xffc6d1d9);
             box(c,50,256,111,261,2,Color.WHITE);
@@ -261,20 +280,24 @@ final class CinematicTourView extends LinearLayout {
                 box(c,x+7+spread*8,y-6-spread*10,x+50+spread*8,y+48,6,0xff49606e);
                 box(c,x-5-spread*5,y-2,x+39,y+54,6,0xff36485a);
                 art(c,x,y,x+46,y+56,i);
-                label(c,new String[]{"Favorites","My picks","Watch later","Saved"}[i],x+23,y+69,8,Color.WHITE);
+                label(c,collections[i],x+23,y+69,8,Color.WHITE);
             }
         }
         void creators(Canvas c,float t) {
             label(c,"Favorite creators",110,40,10.5f,Color.WHITE);
-            String[] letters={"A","F","M","S","Z"};
             int index=Math.min(4,(int)(t*5));
-            for(int i=0;i<9;i++) {
-                float x=62+i%3*38,y=75+i/3*64;
-                circle(c,x,y,14,0xff293b4c);
+            c.save();
+            c.clipRect(44,48,160,287);
+            float offset=(t*5-index)*48;
+            label(c,letters[index],51,59-offset,9,accent);
+            for(int i=0;i<12;i++) {
+                float x=62+i%3*38,y=81+i/3*64-offset;
+                circle(c,x,y,14,artworkColors[(i+index)%4]);
                 circle(c,x,y-4,5,0xff8293a4);
                 box(c,x-9,y+4,x+9,y+11,5,0xff8293a4);
                 box(c,x-10,y+20,x+10,y+23,2,0xff788794);
             }
+            c.restore();
             for(int i=0;i<5;i++) {
                 float y=60+i*46;
                 if(i==index)box(c,164,y-10,176,y+6,5,accent);
@@ -286,8 +309,7 @@ final class CinematicTourView extends LinearLayout {
         }
         float lerp(float a,float b,float t){return a+(b-a)*t;}
         void art(Canvas c,float l,float t,float rr,float b,int variant) {
-            int[] colors={0xff344c61,0xff574763,0xff26545a,0xff414d70};
-            box(c,l,t,rr,b,5,colors[variant%4]);
+            box(c,l,t,rr,b,5,artworkColors[variant%4]);
             circle(c,l+(rr-l)*.72f,t+(b-t)*.25f,(rr-l)*.095f,0xffa5b4c3);
             path.reset();path.moveTo(l+3,b-4);path.lineTo(l+(rr-l)*.32f,t+(b-t)*.38f);
             path.lineTo(l+(rr-l)*.62f,t+(b-t)*.68f);path.lineTo(l+(rr-l)*.83f,t+(b-t)*.46f);
