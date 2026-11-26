@@ -42,7 +42,7 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
         header.setPadding(dp(8), 0, dp(16), 0);
         TextView back = label("‹", 31, UiPalette.TEXT_PRIMARY);
         back.setGravity(Gravity.CENTER);
-        back.setContentDescription("Back");
+        SecondaryScreenChrome.back(back, false);
         back.setOnClickListener(v -> finish());
         ZeroChillMotion.installPressFeedback(back);
         header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -51,6 +51,7 @@ public final class ZeroChillAccountSecurityActivity extends Activity {
         title.setPadding(dp(8), dp(8), 0, dp(8));
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+        SecondaryScreenChrome.header(header, title, false);
         shell.addView(header, new LinearLayout.LayoutParams(-1, -2));
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);

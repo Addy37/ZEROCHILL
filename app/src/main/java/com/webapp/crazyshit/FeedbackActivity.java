@@ -55,25 +55,25 @@ public final class FeedbackActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(18), dp(16), dp(18), dp(36));
+        root.setPadding(dp(16), dp(4), dp(16), dp(28));
         scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        MaterialButton back = button("‹");
-        back.setTextSize(28);
-        back.setContentDescription("Back");
-        back.setOnClickListener(v -> finish());
-        header.addView(back, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        TextView back = BrowseUi.action(this, "‹", "Back", v -> finish());
+        SecondaryScreenChrome.back(back, false);
+        header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         TextView title = text("Feedback", 28, Color.WHITE, true);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1f);
-        titleParams.setMargins(dp(12), 0, 0, 0);
+        titleParams.setMargins(dp(4), 0, 0, 0);
         header.addView(title, titleParams);
-        root.addView(header);
+        SecondaryScreenChrome.header(header, title, false);
+        header.setPadding(0, 0, 0, 0);
+        root.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
         TextView intro = text("Tell me what works, what is broken, or what you want added.", 14, MUTED, false);
-        intro.setPadding(dp(8), dp(8), dp(8), dp(18));
+        intro.setPadding(dp(4), dp(4), dp(4), dp(12));
         root.addView(intro);
 
         LinearLayout tabs = new LinearLayout(this);
@@ -82,8 +82,10 @@ public final class FeedbackActivity extends Activity {
         historyTab = button("My feedback");
         sendTab.setOnClickListener(v -> showComposer());
         historyTab.setOnClickListener(v -> showHistory());
-        tabs.addView(sendTab, weighted());
-        tabs.addView(historyTab, weighted());
+        tabs.addView(sendTab, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        LinearLayout.LayoutParams historyParams = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        historyParams.setMarginStart(dp(8));
+        tabs.addView(historyTab, historyParams);
         root.addView(tabs);
 
         content = new LinearLayout(this);
@@ -318,11 +320,14 @@ public final class FeedbackActivity extends Activity {
     }
 
     private void selectTab(MaterialButton selected, MaterialButton other) {
-        selected.setTextColor(AppearanceTheme.accent(this));
-        selected.setStrokeWidth(dp(1));
-        selected.setStrokeColor(android.content.res.ColorStateList.valueOf(AppearanceTheme.accent(this)));
-        other.setTextColor(MUTED);
+        selected.setTextColor(AppearanceTheme.onAccent(this));
+        selected.setBackgroundTintList(android.content.res.ColorStateList.valueOf(AppearanceTheme.accent(this)));
+        selected.setStrokeWidth(0);
+        selected.setSelected(true);
+        other.setTextColor(AppearanceTheme.secondaryText(this));
+        other.setBackgroundTintList(android.content.res.ColorStateList.valueOf(AppearanceTheme.surface(this)));
         other.setStrokeWidth(0);
+        other.setSelected(false);
     }
 
     private void label(String value) {

@@ -68,14 +68,15 @@ public final class ZeroChillSocialSettingsActivity extends Activity {
         root.addView(header, new LinearLayout.LayoutParams(-1, -2));
         TextView back = label("‹", 31, AppearanceTheme.primaryText(this), false);
         back.setGravity(Gravity.CENTER);
-        back.setContentDescription("Back");
+        SecondaryScreenChrome.back(back, false);
         back.setOnClickListener(v -> finish());
         ZeroChillMotion.installPressFeedback(back);
-        header.addView(back, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
         TextView title = label(MODE_BLOCKED.equals(mode) ? "Blocked users" : "Notification preferences",
                 19, AppearanceTheme.primaryText(this), true);
         title.setPadding(dp(6), dp(12), 0, dp(12));
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+        SecondaryScreenChrome.header(header, title, false);
 
         FrameLayout body = new FrameLayout(this);
         root.addView(body, new LinearLayout.LayoutParams(-1, 0, 1f));

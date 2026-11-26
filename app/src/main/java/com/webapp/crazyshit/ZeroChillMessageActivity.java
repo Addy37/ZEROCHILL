@@ -166,6 +166,7 @@ public final class ZeroChillMessageActivity extends Activity {
         back.setGravity(Gravity.CENTER);
         back.setContentDescription("Back");
         headerBack=back;
+        SecondaryScreenChrome.back(back, false);
         back.setOnClickListener(v -> {if(selectedMessage!=null)clearSelection();else finish();});
         ZeroChillMotion.installPressFeedback(back);
         header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -196,13 +197,14 @@ public final class ZeroChillMessageActivity extends Activity {
         headerMore=more;
         more.setImageResource(R.drawable.ic_more_overflow);
         more.setColorFilter(AppearanceTheme.primaryText(this));
-        more.setPadding(dp(9), dp(9), dp(9), dp(9));
+        more.setPadding(dp(12), dp(12), dp(12), dp(12));
         more.setContentDescription("Conversation options");
         more.setOnClickListener(this::showOptions);
         ZeroChillMotion.installPressFeedback(more);
         header.addView(more, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
-        root.addView(header, new LinearLayout.LayoutParams(-1, dp(56)));
+        SecondaryScreenChrome.header(header, title, true);
+        root.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
         recycler = new RecyclerView(this);
         LinearLayoutManager manager = new LinearLayoutManager(this);
@@ -527,8 +529,7 @@ public final class ZeroChillMessageActivity extends Activity {
         subtitle.setVisibility(View.GONE);
         avatar.setVisibility(View.GONE);
         headerMore.setVisibility(View.GONE);
-        headerBack.setText("×");
-        headerBack.setContentDescription("Clear message selection");
+        SecondaryScreenChrome.back(headerBack, true);
         selectionActions.removeAllViews();
         selectionActions.setVisibility(View.VISIBLE);
         if (canCopy(item))
@@ -724,8 +725,7 @@ public final class ZeroChillMessageActivity extends Activity {
         }
         if (selectedMessage == null) return;
         selectedMessage = null;
-        headerBack.setText("‹");
-        headerBack.setContentDescription("Back");
+        SecondaryScreenChrome.back(headerBack, false);
         avatar.setVisibility(View.VISIBLE);
         subtitle.setVisibility(View.VISIBLE);
         headerMore.setVisibility(View.VISIBLE);
