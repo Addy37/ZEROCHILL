@@ -63,6 +63,10 @@ public final class CreatorsActivity extends Activity {
     private LinearLayout recentRow;
     private TextView stickyLetter;
     private LinearLayout letterIndex;
+    private TextView letterBubble;
+    private String activeIndexLetter;
+    private boolean indexDragging;
+    private int indexPointer = -1;
     private final Paint letterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RecyclerView.ItemDecoration letterDecoration = new RecyclerView.ItemDecoration() {
         @Override public void getItemOffsets(Rect outRect, View view, RecyclerView parent, RecyclerView.State state) {
@@ -98,7 +102,7 @@ public final class CreatorsActivity extends Activity {
         if (!stopped && adapter != null) adapter.prefetchAvatars(scrollDirection);
     };
     private final Runnable badgeRefresh = () -> {
-        if (!badgesDirty || stopped
+        if (!badgesDirty || stopped || indexDragging
                 || recycler.getScrollState() != RecyclerView.SCROLL_STATE_IDLE) return;
         if (recycler.isComputingLayout()) {
             recycler.postOnAnimation(this.badgeRefresh);
@@ -114,7 +118,7 @@ public final class CreatorsActivity extends Activity {
     };
 
     private void scheduleAvatarPrefetch() {
-        if (stopped || prefetchPosted) return;
+        if (stopped || prefetchPosted || indexDragging) return;
         prefetchPosted = true;
         recycler.postOnAnimation(avatarPrefetch);
     }
@@ -276,10 +280,32 @@ public final class CreatorsActivity extends Activity {
         FrameLayout.LayoutParams stickyParams = new FrameLayout.LayoutParams(-1, -2, Gravity.TOP);
         stickyParams.rightMargin = dp(22);
         stage.addView(stickyLetter, stickyParams);
-        letterIndex = new LinearLayout(this);
+        letterBubble = BrowseUi.text(this, "", 28, AppearanceTheme.onAccent(this));
+        letterBubble.setGravity(Gravity.CENTER);
+        letterBubble.setTypeface(null, Typeface.BOLD);
+        letterBubble.setBackground(BrowseUi.rounded(this, AppearanceTheme.accent(this), 18));
+        letterBubble.setElevation(dp(4));
+        letterBubble.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        letterBubble.setVisibility(View.GONE);
+        FrameLayout.LayoutParams bubbleParams = new FrameLayout.LayoutParams(dp(58), dp(58),
+                Gravity.TOP | Gravity.END);
+        bubbleParams.setMarginEnd(dp(42));
+        stage.addView(letterBubble, bubbleParams);
+
+        // Keep the visible letters in their original 22dp column, with a wider
+        // invisible touch target to its left. Capture the entire gesture here.
+        letterIndex = new LinearLayout(this) {
+            @Override public boolean onInterceptTouchEvent(android.view.MotionEvent event) {
+                return true;
+            }
+            @Override public boolean onTouchEvent(android.view.MotionEvent event) {
+                return handleIndexTouch(event);
+            }
+        };
         letterIndex.setOrientation(LinearLayout.VERTICAL);
         letterIndex.setGravity(Gravity.CENTER_HORIZONTAL);
-        stage.addView(letterIndex, new FrameLayout.LayoutParams(dp(22), -1, Gravity.END));
+        letterIndex.setPaddingRelative(dp(12), 0, 0, 0);
+        stage.addView(letterIndex, new FrameLayout.LayoutParams(dp(34), -1, Gravity.END));
         root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
         input.addTextChangedListener(BrowseUi.onText(value -> render()));
@@ -456,6 +482,7 @@ public final class CreatorsActivity extends Activity {
 
     private void bindLetterIndex() {
         if (letterIndex == null || adapter == null) return;
+        endIndexDrag(false);
         letterIndex.removeAllViews();
         if (adapter.getItemCount() == 0) {
             letterIndex.setVisibility(View.GONE);
@@ -470,21 +497,145 @@ public final class CreatorsActivity extends Activity {
             tick.setTextSize(9);
             tick.setGravity(Gravity.CENTER);
             tick.setIncludeFontPadding(false);
-            tick.setTextColor(present ? Color.WHITE : 0xFF44515C);
+            tick.setTextColor(present ? AppearanceTheme.primaryText(this) : 0xFF44515C);
             tick.setContentDescription(letter + " creators");
-            if (present) tick.setOnClickListener(v -> jumpToLetter(letter));
+            if (present) {
+                tick.setFocusable(true);
+                tick.setOnClickListener(v -> jumpToLetter(letter));
+            }
             letterIndex.addView(tick, new LinearLayout.LayoutParams(-1, 0, 1f));
+        }
+    }
+
+    private boolean handleIndexTouch(android.view.MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case android.view.MotionEvent.ACTION_DOWN:
+                if (adapter == null || adapter.getItemCount() == 0 || letterIndex.getHeight() <= 0) return false;
+                indexDragging = true;
+                indexPointer = event.getPointerId(0);
+                activeIndexLetter = null;
+                letterIndex.getParent().requestDisallowInterceptTouchEvent(true);
+                recycler.stopScroll();
+                recycler.removeCallbacks(avatarPrefetch);
+                prefetchPosted = false;
+                adapter.clearPrefetch();
+                updateIndexDrag(event.getY(0));
+                return true;
+            case android.view.MotionEvent.ACTION_MOVE:
+                if (!indexDragging) return false;
+                int pointer = event.findPointerIndex(indexPointer);
+                if (pointer >= 0) updateIndexDrag(event.getY(pointer));
+                return true;
+            case android.view.MotionEvent.ACTION_POINTER_UP:
+                if (indexDragging && event.getPointerId(event.getActionIndex()) == indexPointer) {
+                    endIndexDrag(true);
+                }
+                return true;
+            case android.view.MotionEvent.ACTION_UP:
+                if (indexDragging) {
+                    int last = event.findPointerIndex(indexPointer);
+                    if (last >= 0) updateIndexDrag(event.getY(last));
+                    endIndexDrag(true);
+                }
+                return true;
+            case android.view.MotionEvent.ACTION_CANCEL:
+                endIndexDrag(false);
+                return true;
+            default:
+                return indexDragging;
+        }
+    }
+
+    private void updateIndexDrag(float y) {
+        int childCount = letterIndex.getChildCount();
+        if (childCount == 0) return;
+        int requested = childCount - 1;
+        for (int i = 0; i < childCount; i++) {
+            if (y < letterIndex.getChildAt(i).getBottom()) {
+                requested = i;
+                break;
+            }
+        }
+        boolean[] available = new boolean[LETTERS.length()];
+        for (int i = 0; i < available.length; i++) {
+            available[i] = adapter.positionForLetter(String.valueOf(LETTERS.charAt(i))) >= 0;
+        }
+        int resolved = nearestAvailableIndex(requested, available);
+        if (resolved < 0) return;
+        String letter = String.valueOf(LETTERS.charAt(resolved));
+        if (!letter.equals(activeIndexLetter)) {
+            activeIndexLetter = letter;
+            jumpToLetter(letter);
+            highlightIndex(letter);
+            if (getSharedPreferences("app_prefs", MODE_PRIVATE).getBoolean("haptics_enabled", true)) {
+                letterIndex.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+            }
+        }
+        letterBubble.animate().cancel();
+        letterBubble.setAlpha(1f);
+        letterBubble.setText(letter);
+        letterBubble.setVisibility(View.VISIBLE);
+        View stage = (View) letterIndex.getParent();
+        float maxTop = Math.max(0, stage.getHeight() - dp(58));
+        letterBubble.setTranslationY(Math.max(0, Math.min(maxTop,
+                letterIndex.getTop() + y - dp(29))));
+    }
+
+    // Prefer the next letter on a tie; missing letters never jump to an empty section.
+    static int nearestAvailableIndex(int requested, boolean[] available) {
+        if (available == null || available.length == 0) return -1;
+        int index = Math.max(0, Math.min(requested, available.length - 1));
+        for (int distance = 0; distance < available.length; distance++) {
+            int next = index + distance;
+            if (next < available.length && available[next]) return next;
+            int previous = index - distance;
+            if (previous >= 0 && available[previous]) return previous;
+        }
+        return -1;
+    }
+
+    private void highlightIndex(String active) {
+        for (int i = 0; i < letterIndex.getChildCount(); i++) {
+            TextView tick = (TextView) letterIndex.getChildAt(i);
+            String letter = tick.getText().toString();
+            boolean selected = letter.equals(active);
+            boolean present = adapter.positionForLetter(letter) >= 0;
+            tick.setSelected(selected);
+            tick.setTextColor(selected ? AppearanceTheme.onAccent(this)
+                    : present ? AppearanceTheme.primaryText(this) : 0xFF44515C);
+            tick.setBackground(selected ? BrowseUi.rounded(this, AppearanceTheme.accent(this), 10) : null);
+        }
+    }
+
+    private void endIndexDrag(boolean animate) {
+        boolean wasDragging = indexDragging;
+        indexDragging = false;
+        indexPointer = -1;
+        activeIndexLetter = null;
+        if (letterIndex != null && letterIndex.getParent() != null && wasDragging) {
+            letterIndex.getParent().requestDisallowInterceptTouchEvent(false);
+            highlightIndex(null);
+        }
+        if (letterBubble != null) {
+            letterBubble.animate().cancel();
+            if (animate && wasDragging && ZeroChillMotion.animationsEnabled(this)
+                    && letterBubble.getVisibility() == View.VISIBLE) {
+                letterBubble.animate().alpha(0f).setDuration(130L).withEndAction(() -> {
+                    if (!indexDragging) letterBubble.setVisibility(View.GONE);
+                }).start();
+            } else {
+                letterBubble.setVisibility(View.GONE);
+                letterBubble.setAlpha(1f);
+            }
+        }
+        if (wasDragging && !stopped) {
+            scheduleAvatarPrefetch();
+            if (badgesDirty) recycler.post(badgeRefresh);
         }
     }
 
     private void jumpToLetter(String letter) {
         int position = adapter.positionForLetter(letter);
-        if (position < 0) {
-            int start = LETTERS.indexOf(letter);
-            for (int i = start + 1; i < LETTERS.length() && position < 0; i++) {
-                position = adapter.positionForLetter(String.valueOf(LETTERS.charAt(i)));
-            }
-        }
         if (position < 0 || !(recycler.getLayoutManager() instanceof GridLayoutManager)) return;
         ((GridLayoutManager) recycler.getLayoutManager()).scrollToPositionWithOffset(position, dp(22));
         recycler.post(this::updateStickyLetter);
@@ -1028,6 +1179,7 @@ public final class CreatorsActivity extends Activity {
     @Override protected void onStop() {
         cancelArtwork();
         stopped = true;
+        endIndexDrag(false);
         UpdateInboxStore.unregisterChangeListener(this, inboxListener);
         recycler.removeCallbacks(avatarPrefetch);
         recycler.removeCallbacks(badgeRefresh);

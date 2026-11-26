@@ -119,6 +119,54 @@ public class FavoriteCreatorsScrollTest {
         }
     }
 
+    @Test public void alphabetIndexSkipsUnavailableLettersAndClampsEdges() {
+        boolean[] available = new boolean[27];
+        assertEquals(-1, CreatorsActivity.nearestAvailableIndex(12, available));
+        available[0] = true;
+        available[12] = true;
+        available[25] = true;
+        assertEquals(0, CreatorsActivity.nearestAvailableIndex(-4, available));
+        assertEquals(12, CreatorsActivity.nearestAvailableIndex(6, available));
+        assertEquals(12, CreatorsActivity.nearestAvailableIndex(13, available));
+        assertEquals(25, CreatorsActivity.nearestAvailableIndex(28, available));
+    }
+
+    @Test public void alphabetDragShowsIndicatorAndReleasesOnCancel() {
+        seedFavorites(48);
+        try (ActivityController<CreatorsActivity> controller = Robolectric.buildActivity(CreatorsActivity.class).setup()) {
+            CreatorsActivity activity = controller.get();
+            android.widget.LinearLayout index = ReflectionHelpers.getField(activity, "letterIndex");
+            TextView bubble = ReflectionHelpers.getField(activity, "letterBubble");
+            View stage = (View) index.getParent();
+            stage.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY));
+            stage.layout(0, 0, 1080, 900);
+            assertEquals(27, index.getChildCount());
+            assertTrue(index.getWidth() > BrowseUi.dp(activity, 22));
+            long now = android.os.SystemClock.uptimeMillis();
+            android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+                    android.view.MotionEvent.ACTION_DOWN, 2f, 2f, 0);
+            android.view.MotionEvent move = android.view.MotionEvent.obtain(now, now + 16,
+                    android.view.MotionEvent.ACTION_MOVE, 2f, 899f, 0);
+            android.view.MotionEvent cancel = android.view.MotionEvent.obtain(now, now + 32,
+                    android.view.MotionEvent.ACTION_CANCEL, 2f, 899f, 0);
+            try {
+                assertTrue(index.dispatchTouchEvent(down));
+                assertEquals(View.VISIBLE, bubble.getVisibility());
+                assertEquals("T", bubble.getText().toString());
+                assertTrue(index.getChildAt(19).isSelected());
+                assertTrue(index.dispatchTouchEvent(move));
+                assertEquals("T", bubble.getText().toString());
+                assertTrue(bubble.getTranslationY() >= 0);
+                assertTrue(bubble.getTranslationY() <= stage.getHeight() - BrowseUi.dp(activity, 58));
+                assertTrue(index.dispatchTouchEvent(cancel));
+                assertEquals(View.GONE, bubble.getVisibility());
+                assertFalse(index.getChildAt(19).isSelected());
+                assertEquals(48, grid(activity).getAdapter().getItemCount());
+            } finally { down.recycle(); move.recycle(); cancel.recycle(); }
+        }
+    }
+
     @Test public void prefetchIsTwoRowsAndFollowsReversalsAndListEdges() {
         assertArrayEquals(new int[]{12, 13, 14, 15, 16, 17},
                 CreatorsActivity.avatarPrefetchPositions(3, 11, 48, 3, 1));
