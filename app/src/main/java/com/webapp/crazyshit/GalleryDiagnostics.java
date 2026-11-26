@@ -44,6 +44,10 @@ final class GalleryDiagnostics {
                 + hostLabel(actualReferer) + " result=" + reason + " http=" + status);
     }
 
+    static void blackImage(NativeContentItem item) {
+        record("grid_original_black", item, "result=omitted_for_gallery");
+    }
+
     static void missingImage(NativeContentItem item) {
         record("viewer_empty", item, "result=no_image_url");
     }

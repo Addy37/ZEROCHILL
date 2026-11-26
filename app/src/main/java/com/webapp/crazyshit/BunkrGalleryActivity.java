@@ -55,6 +55,8 @@ public final class BunkrGalleryActivity extends Activity {
     public static final String EXTRA_CREATOR_QUERY = "bunkr_gallery_creator_query";
     public static final String EXTRA_FAPELLO_PROFILE_URL = "bunkr_gallery_fapello_profile_url";
     public static final String EXTRA_MEDIA_FILTER = "bunkr_gallery_media_filter";
+    static final String EXTRA_OMITTED_BLACK_IMAGES = "gallery_omitted_black_images";
+    private final java.util.Set<String> omittedBlackImages = new java.util.HashSet<>();
     static final String EXTRA_NOTIFICATION_GALLERY_FALLBACK = "notification_gallery_fallback";
     public static final String EXTRA_INITIAL_URL = "bunkr_gallery_initial_url";
     public static final String EXTRA_INITIAL_POSITION = "bunkr_gallery_initial_position";
@@ -168,6 +170,8 @@ public final class BunkrGalleryActivity extends Activity {
         creatorSessionKey = CreatorGallerySpec.sessionKey(creatorQuery, fapelloProfileUrl,
                 favoriteKey.isEmpty() ? creatorQuery : favoriteKey,
                 creatorSeedNames, creatorSeedUrls, creatorAliases);
+        ArrayList<String> omitted = getIntent().getStringArrayListExtra(EXTRA_OMITTED_BLACK_IMAGES);
+        if (omitted != null) omittedBlackImages.addAll(omitted);
         mediaFilter = value(getIntent().getStringExtra(EXTRA_MEDIA_FILTER));
         if (!FILTER_PICTURES.equals(mediaFilter) && !FILTER_VIDEOS.equals(mediaFilter)) {
             mediaFilter = FILTER_ALL;
@@ -1745,6 +1749,7 @@ public final class BunkrGalleryActivity extends Activity {
         if (items == null) return filtered;
         for (NativeContentItem item : items) {
             if (item == null || WikiFeetRepository.isRetiredItem(item)) continue;
+            if (item.isImage() && omittedBlackImages.contains(item.url)) continue;
             if (isCreatorGallery() && PawchiveRepository.isProfile(fapelloProfileUrl)
                     && PawchiveRepository.isNativeVideo(item)) continue;
             if (FILTER_PICTURES.equals(mediaFilter) && !item.isImage()) continue;

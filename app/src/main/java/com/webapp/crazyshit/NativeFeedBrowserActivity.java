@@ -107,6 +107,7 @@ public class NativeFeedBrowserActivity extends Activity {
 
     private NativeFeedAdapter adapter;
     private BunkrGalleryAdapter bunkrGalleryAdapter;
+    private final java.util.LinkedHashSet<String> omittedBlackImages = new java.util.LinkedHashSet<>();
     private GalleryContextMenu galleryContextMenu;
     private final java.util.Set<String> mediaFavoriteUrls = new java.util.HashSet<>();
     private int favoriteReadGeneration;
@@ -1336,6 +1337,18 @@ public class NativeFeedBrowserActivity extends Activity {
                     }
 
                     @Override
+                    public void onConfirmedBlackImage(NativeContentItem item) {
+                        if (isFinishing() || isDestroyed()) return;
+                        omittedBlackImages.add(item.url);
+                        for (BunkrGalleryAdapter tab : creatorTabAdapters)
+                            if (tab != null) tab.omitBlackImage(item.url);
+                        if (bunkrGalleryAdapter != null) bunkrGalleryAdapter.omitBlackImage(item.url);
+                        if (albumGridAdapter != null) albumGridAdapter.omitBlackImage(item.url);
+                        updateCreatorTabLabels();
+                        updateCreatorEmptyState();
+                    }
+
+                    @Override
                     public void onLongPress(NativeContentItem item, View anchor) {
                         if (creatorAvatarPickerMode) return;
                         if (isCreatorGallery()) {
@@ -1480,6 +1493,11 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private void reload() {
+        omittedBlackImages.clear();
+        for (BunkrGalleryAdapter tab : creatorTabAdapters)
+            if (tab != null) tab.resetBlackImageOmissions();
+        if (bunkrGalleryAdapter != null) bunkrGalleryAdapter.resetBlackImageOmissions();
+        if (albumGridAdapter != null) albumGridAdapter.resetBlackImageOmissions();
         generation++;
         fapelloFailureShown = false;
         currentPage = 0;
@@ -2167,6 +2185,9 @@ public class NativeFeedBrowserActivity extends Activity {
                         ? BunkrGalleryActivity.FILTER_PICTURES
                         : BunkrGalleryActivity.FILTER_VIDEOS
         );
+        // Exclusions are presentation-only; never remove media from the persisted session.
+        intent.putStringArrayListExtra(BunkrGalleryActivity.EXTRA_OMITTED_BLACK_IMAGES,
+                new ArrayList<>(omittedBlackImages));
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL, item.url);
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_POSITION, position);
         GalleryMediaTransition.start(this, intent, transitionAnchor, item);
