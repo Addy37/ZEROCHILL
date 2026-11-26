@@ -115,6 +115,7 @@ final class GalleryDiagnostics {
                     || host.equals("balbum.com") || host.endsWith(".balbum.com")) return "balbums";
             if (host.equals("erome.com") || host.endsWith(".erome.com")) return "erome";
             if (host.equals("fapello.com") || host.endsWith(".fapello.com")) return "fapello";
+            if (BunkrRepository.isBalbumsUrl(value)) return "balbums";
             if (BunkrRepository.isBunkrUrl(value)) return "bunkr";
             if (OnlyHavenRepository.isOnlyHavenUrl(value)) return "onlyhaven";
             return "other";

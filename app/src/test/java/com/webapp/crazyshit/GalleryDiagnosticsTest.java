@@ -9,6 +9,32 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = android.app.Application.class, sdk = 35)
 public class GalleryDiagnosticsTest {
+    @Test public void mixedGalleryCreatorActionUsesSelectedItemProfile() {
+        String parent = "https://example.invalid/search";
+        String profile = "https://cum.st/creators/test/example";
+        NativeContentItem photo = new NativeContentItem(NativeContentItem.KIND_IMAGE, "Example",
+                "https://media.cum.st/example.jpg", "https://img.cum.st/example.jpg", "", profile, "");
+        NativeContentItem video = new NativeContentItem(NativeContentItem.KIND_MEDIA, "Example",
+                "https://media.cum.st/example.mp4", "", "", profile, "");
+        assertEquals(profile, BunkrGalleryActivity.creatorPageDestination(photo, parent));
+        assertEquals(profile, BunkrGalleryActivity.creatorPageDestination(video, parent));
+
+        NativeContentItem missing = new NativeContentItem(NativeContentItem.KIND_IMAGE, "Example",
+                photo.url, photo.imageUrl, "", "", "");
+        assertEquals("", BunkrGalleryActivity.creatorPageDestination(missing, parent));
+        NativeContentItem wrongProvider = new NativeContentItem(NativeContentItem.KIND_IMAGE, "Example",
+                photo.url, photo.imageUrl, "", "https://example.invalid/creator", "");
+        assertEquals("", BunkrGalleryActivity.creatorPageDestination(wrongProvider, parent));
+        NativeContentItem directInsteadOfProfile = new NativeContentItem(NativeContentItem.KIND_IMAGE, "Example",
+                photo.url, photo.imageUrl, "", photo.url, "");
+        assertEquals("", BunkrGalleryActivity.creatorPageDestination(directInsteadOfProfile, parent));
+
+        NativeContentItem legacy = new NativeContentItem(NativeContentItem.KIND_IMAGE, "Example",
+                "https://example.invalid/item", "", "", "", "");
+        assertEquals(parent, BunkrGalleryActivity.creatorPageDestination(legacy, parent));
+        assertEquals("", BunkrGalleryActivity.creatorPageDestination(null, parent));
+    }
+
     @Test public void reportSeparatesProviderRolesWithoutExposingUrlsAndBoundsEvents() {
         boolean enabled = ShitTokPoolDiagnostics.isEnabled();
         ShitTokPoolDiagnostics.setEnabled(true);

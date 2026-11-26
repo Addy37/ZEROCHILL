@@ -1544,12 +1544,16 @@ public final class BunkrGalleryActivity extends Activity {
                     .setOnMenuItemClickListener(item -> { setChromeVisible(false); adapter.showVideoControls(pager.getCurrentItem()); return true; });
         }
         menu.getMenu().add(Menu.NONE, 1, 1, "Open item page");
+        boolean creatorGallery = isCreatorGallery();
+        String parentDestination = PawchiveRepository.isProfile(fapelloProfileUrl) ? fapelloProfileUrl : albumUrl;
+        String galleryDestination = creatorGallery
+                ? creatorPageDestination(current, parentDestination) : parentDestination;
         menu.getMenu().add(
                 Menu.NONE,
                 2,
                 2,
-                isCreatorGallery() ? "Open creator page" : "Open album page"
-        );
+                creatorGallery ? "Open creator page" : "Open album page"
+        ).setEnabled(!galleryDestination.isEmpty());
         menu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 3) {
                 downloadCurrentVideo();
@@ -1564,9 +1568,8 @@ public final class BunkrGalleryActivity extends Activity {
                 return true;
             }
             if (item.getItemId() == 2) {
-                String destination = PawchiveRepository.isProfile(fapelloProfileUrl) ? fapelloProfileUrl : albumUrl;
-                GalleryDiagnostics.navigation(current, isCreatorGallery(), destination);
-                openPage(destination);
+                GalleryDiagnostics.navigation(current, creatorGallery, galleryDestination);
+                openPage(galleryDestination);
                 return true;
             }
             return false;
@@ -1694,6 +1697,36 @@ public final class BunkrGalleryActivity extends Activity {
         share.putExtra(Intent.EXTRA_TEXT, PawchiveRepository.pageUrl(item));
         share.putExtra(Intent.EXTRA_SUBJECT, item.title);
         startActivity(Intent.createChooser(share, "Share"));
+    }
+
+    /** Mixed creator galleries use a search URL as their parent, not the selected creator's page. */
+    static String creatorPageDestination(NativeContentItem item, String parentDestination) {
+        if (item == null) return "";
+        String profile = item.uploader.trim();
+        // OnlyHaven's repository stores the verified creator page in uploader, not the
+        // gallery's search URL. Never substitute another provider when that page is missing.
+        if (OnlyHavenRepository.isOnlyHavenUrl(profile) || OnlyHavenRepository.isOnlyHavenUrl(item.url)) {
+            if (OnlyHavenRepository.isOnlyHavenUrl(profile) && isWebPage(profile)
+                    && !profile.equals(item.url) && !profile.equals(item.imageUrl)
+                    && !OnlyHavenRepository.isDirectImageUrl(profile)) return profile;
+            return "";
+        }
+        if (FapelloRepository.isFapelloUrl(item.url) && FapelloRepository.isModelUrl(profile)
+                && isWebPage(profile)) return profile;
+        if (PawchiveRepository.isDirectMedia(item.url) && PawchiveRepository.isProfile(profile)
+                && isWebPage(profile)) return profile;
+        if (WikiFeetRepository.isXItem(item) && WikiFeetRepository.isXProfileUrl(profile)
+                && isWebPage(profile)) return profile;
+        // Keep existing album/search navigation for sources without a known item-level profile.
+        return parentDestination == null ? "" : parentDestination.trim();
+    }
+
+    private static boolean isWebPage(String url) {
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            return uri.getHost() != null && ("https".equalsIgnoreCase(uri.getScheme())
+                    || "http".equalsIgnoreCase(uri.getScheme()));
+        } catch (IllegalArgumentException ignored) { return false; }
     }
 
     private void openPage(String url) {
