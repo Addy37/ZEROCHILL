@@ -215,6 +215,7 @@ final class LibraryHubView extends ScrollView {
     }
 
     private void render(Snapshot snapshot) {
+        bindCollectionPreviews(snapshot);
         videoMetadata = snapshot.videoMetadata;
         int scrollY = getScrollY();
         Map<String, int[]> railPositions = new HashMap<>();
@@ -280,6 +281,26 @@ final class LibraryHubView extends ScrollView {
         build.run();
         View view = mediaContent.getChildCount() > before ? mediaContent.getChildAt(before) : null;
         sectionStates.put(key, new SectionState(state, view));
+    }
+
+    private void bindCollectionPreviews(Snapshot snapshot) {
+        if (collection == null || snapshot == null) return;
+        List<String> watchLater = new ArrayList<>();
+        for (FavoriteStore.Item item : snapshot.watchLater) {
+            if (item.content != null) watchLater.add(item.content.imageUrl);
+        }
+        List<String> favorites = new ArrayList<>();
+        for (FavoriteStore.Item item : snapshot.mediaFavorites) {
+            if (item.content != null) favorites.add(item.content.imageUrl);
+        }
+        List<String> history = new ArrayList<>();
+        for (PlaybackHistoryStore.Item item : snapshot.history) history.add(item.posterUrl);
+        List<String> downloads = new ArrayList<>();
+        for (VideoDownloadStore.Entry entry : snapshot.downloads) downloads.add(entry.imageUrl);
+        collection.setPreviews("watch-later", watchLater);
+        collection.setPreviews("downloads", downloads);
+        collection.setPreviews("history", history);
+        collection.setPreviews("favorites", favorites);
     }
 
     private boolean belongsToMediaContent(View view) {
@@ -377,6 +398,7 @@ final class LibraryHubView extends ScrollView {
             prefs.unregisterOnSharedPreferenceChangeListener(invalidation);
         }
         if (mediaContent != null) clearImages(mediaContent);
+        if (collection != null) collection.release();
         ShowsContinueFrameStore.removeListener(frameListener);
         if (socialHub != null) socialHub.close();
         for (RenderedThumbnailResolver resolver : thumbnailResolvers) {
