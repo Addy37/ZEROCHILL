@@ -71,6 +71,7 @@ jobs:
           if git diff --quiet "$VERIFIED_APK_SOURCE" HEAD -- . \
               ':(exclude).github/workflows/zerochill-7-5-0-candidate.yml' \
               ':(exclude)tools/test_release_7_5_upgrade.sh' \
+              ':(exclude)tools/verify_release_upgrade.py' \
               ':(exclude)RELEASE_HANDOFF_7.5.md' \
               ':(exclude)docs/ZEROCHILL_7_5_RELEASE_PREPARATION.md' \
             && gh run download 45928943983 --repo "$GITHUB_REPOSITORY" \

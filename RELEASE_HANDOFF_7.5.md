@@ -96,6 +96,11 @@ confirmed fullscreen defect left open at the source checkpoint.
   tree. This is an incomplete upgrade run. The emulator-only follow-up
   disables that launcher and reuses the exact verified APK, checking its
   checksum and source and requiring an unchanged app tree.
+  [First emulator-only retry](https://github.com/Addy37/ZEROCHILL/actions/runs/45930148966)
+  reused the APK without rebuilding and again passed installation checks.
+  UIAutomator returned a null root after the launcher was disabled. The
+  follow-up wakes/unlocks the emulator, retries the UI lookup, saves per-stage
+  evidence and continues to the remaining scenarios if an earlier one fails.
 - Follow the [latest branch run](https://github.com/Addy37/ZEROCHILL/actions/workflows/zerochill-7-5-0-candidate.yml?query=branch%3Arelease%2Fzerochill-7.5.0-preparation).
   The signed artifact contains one APK, `SHA256SUMS.txt`,
   `BUILD_LINEAGE.txt` and `VALIDATION.json`. A later emulator-only run uses the

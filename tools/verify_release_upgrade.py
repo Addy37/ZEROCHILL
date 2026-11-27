@@ -45,8 +45,15 @@ def resumed_activity():
 
 def ui_dump():
     path = '/sdcard/zc-upgrade-ui.xml'
-    shell('uiautomator', 'dump', path)
-    return shell('cat', path)
+    for _ in range(4):
+        shell('rm', '-f', path)
+        dump_status = shell('uiautomator', 'dump', path)
+        try:
+            return shell('cat', path)
+        except subprocess.CalledProcessError:
+            print(dump_status, flush=True)
+            time.sleep(2)
+    raise AssertionError('UIAutomator never returned a focused accessibility window')
 
 
 def main():
@@ -130,7 +137,13 @@ def main():
         actual = subprocess.check_output(['adb','exec-out','cat', DATA + '/' + relative])
         assert actual == data, f'Existing data changed during install: {relative}'
     assert expected_download in shell('sha256sum', download)
+    (args.output / 'install-evidence.json').write_text(json.dumps({
+        'installed_update': True, 'first_install_preserved': True, 'uid_preserved': True,
+        'seeded_bytes_preserved_before_launch': True,
+    }, indent=2))
     adb('logcat', '-c')
+    shell('input', 'keyevent', 'KEYCODE_WAKEUP')
+    shell('wm', 'dismiss-keyguard')
     if args.check_launcher:
         launch = shell('am', 'start', '-W', '-a', 'android.intent.action.MAIN',
                        '-c', 'android.intent.category.LAUNCHER',
@@ -168,8 +181,7 @@ def main():
     (args.output / 'memory-start.txt').write_text(shell('dumpsys', 'meminfo', PKG))
     shell('am', 'start', '-W', '-n', PKG + '/com.webapp.crazyshit.DownloadedActivity')
     time.sleep(2)
-    shell('uiautomator', 'dump', '/sdcard/zc-upgrade-ui.xml')
-    ui = shell('cat', '/sdcard/zc-upgrade-ui.xml')
+    ui = ui_dump()
     (args.output / 'downloads-ui.xml').write_text(ui)
     root = ET.fromstring(ui)
     actions = [n for n in root.iter('node') if n.get('content-desc') ==
