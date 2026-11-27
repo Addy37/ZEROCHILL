@@ -157,6 +157,27 @@ public class PawchiveRepositoryTest {
         assertEquals("https://n1.pawchive.pw/data/ab/cd/second.mp4", PawchiveRepository.original(second));
     }
 
+    @Test public void galleryMixedPostAppearsInCreatorGridTabs() throws Exception {
+        List<NativeContentItem> items = galleryWithAttachments(GALLERY_IMAGE + "," + GALLERY_VIDEO).items;
+        NativeFeedBrowserActivity browser =
+                org.robolectric.Robolectric.buildActivity(NativeFeedBrowserActivity.class).get();
+        org.robolectric.util.ReflectionHelpers.setField(browser, "fapelloProfileUrl",
+                "https://pawchive.pw/patreon/user/1");
+        assertEquals(items, creatorTabItems(browser, items, "CREATOR_TAB_ALL"));
+        assertEquals(java.util.Collections.singletonList(items.get(0)),
+                creatorTabItems(browser, items, "CREATOR_TAB_PICTURES"));
+        assertEquals(java.util.Collections.singletonList(items.get(1)),
+                creatorTabItems(browser, items, "CREATOR_TAB_VIDEOS"));
+    }
+
+    private static List<NativeContentItem> creatorTabItems(NativeFeedBrowserActivity browser,
+            List<NativeContentItem> items, String tab) {
+        int index = org.robolectric.util.ReflectionHelpers.getStaticField(NativeFeedBrowserActivity.class, tab);
+        return org.robolectric.util.ReflectionHelpers.callInstanceMethod(browser, "filterCreatorItems",
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(List.class, items),
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(int.class, index));
+    }
+
     @Test public void directMediaRejectsForeignHostsAndUnsupportedPaths() {
         assertTrue(PawchiveRepository.isDirectMedia("https://file.pawchive.pw/data/ab/cd/photo.jpg"));
         assertFalse(PawchiveRepository.isDirectMedia("https://file.pawchive.pw.evil.test/data/ab/cd/photo.jpg"));
