@@ -30,8 +30,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: ${{ (github.head_ref || github.ref_name) == 'fix/pawchive-mixed-media' && '7005089' || '7005011' }}
-      APP_VERSION_NAME: ${{ (github.head_ref || github.ref_name) == 'fix/pawchive-mixed-media' && '7.5.0-pawchive-thumbnails-test' || '7.5.0-pawchive-test.11' }}
+      APP_VERSION_CODE: ${{ (github.head_ref || github.ref_name) == 'fix/pawchive-mixed-media' && '7005090' || '7005011' }}
+      APP_VERSION_NAME: ${{ (github.head_ref || github.ref_name) == 'fix/pawchive-mixed-media' && '7.5.0-onlyfap-search-test' || '7.5.0-pawchive-test.11' }}
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v6
@@ -98,14 +98,16 @@ jobs:
             --tests com.webapp.crazyshit.BunkrMediaPreviewTest \
             --tests com.webapp.crazyshit.BunkrMediaPreviewLifecycleTest \
             --tests com.webapp.crazyshit.GalleryViewerLifecycleTest
-      - name: Test Pawchive posts and video thumbnails
+      - name: Test Pawchive posts, video thumbnails and OnlyFap creator search
         if: (github.head_ref || github.ref_name) == 'fix/pawchive-mixed-media'
         run: |
           gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest \
             --tests 'com.webapp.crazyshit.PawchiveRepositoryTest.gallery*Post*' \
             --tests 'com.webapp.crazyshit.PawchiveFramePreviewTest.indexed*' \
             --tests com.webapp.crazyshit.BunkrMediaPreviewLifecycleTest.pawchiveCreatorTileStartsOnlyWhenVisibleAndPausesWithGallery \
-            --tests 'com.webapp.crazyshit.BunkrMediaPreviewTest.pawchiveCreatorPreview*'
+            --tests 'com.webapp.crazyshit.BunkrMediaPreviewTest.pawchiveCreatorPreview*' \
+            --tests com.webapp.crazyshit.FapzoneCreatorSearchRepositoryTest.explicitOnlyFapSearchIncludesPawchiveAndOtherSourcesWithAnyPreference \
+            --tests com.webapp.crazyshit.SearchResultsPolishTest.livePartialAndFinalResultsShareOneListAndStaleResponsesAreRejected
       - name: Assemble and verify side-by-side APK
         run: |
           set -euo pipefail
