@@ -241,7 +241,7 @@ final class CinematicTourView extends LinearLayout {
             for(int i=0;i<4;i++) circle(c,164,155+i*23,7,0xffc6d1d9);
             box(c,50,256,111,261,2,Color.WHITE);
             box(c,50,266,92,270,2,0xffbac3cf);
-            arrow(c,106,180-t*42,106,134-t*42);
+            arrow(c,59,212-t*36,59,177-t*36);
         }
         void search(Canvas c,float t) {
             label(c,"Spotlight",110,39,13,Color.WHITE);
@@ -312,7 +312,7 @@ final class CinematicTourView extends LinearLayout {
         void art(Canvas c,float l,float t,float rr,float b,int variant) {
             if(b<42 || t>291)return;
             box(c,l,t,rr,b,5,artworkColors[variant%4]);
-            float size=Math.min((rr-l)*.96f,(b-t)*.92f);
+            float size=Math.min((rr-l)*1.06f,(b-t)*1.06f);
             c.save();c.clipRect(l,t,rr,b);
             mascot.draw(c,(l+rr-size)/2,(t+b-size)/2,size,variant%6,phase);
             c.restore();

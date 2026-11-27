@@ -4,138 +4,203 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.PorterDuff;
 import android.graphics.RectF;
-import android.graphics.drawable.Drawable;
 import android.view.View;
 
-/** Local mascot cartoons. Reuses the production face layers, with drawn bodies and props. */
+/**
+ * Full character rig based on the owner-provided round-bodied mascot reference.
+ * This is deliberately independent of the minimal launcher/splash insignia.
+ * Coordinates follow the reference's proportions; only the pose and props move.
+ */
 final class WizardMascotArt {
     static final int SWIPE=0, SEARCH=1, GALLERY=2, STACK=3, SKATE=4, POPCORN=5;
-    private final Drawable[] head = new Drawable[7];
+    private static final int FACE=0xff0b1016, BODY=0xff121920, FEET=0xff161c25;
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path path = new Path();
     private final RectF rect = new RectF();
-    private final int accent;
-    private final int dark = 0xff080d12;
-    private final int soft;
+    private final int accent, rim, soft;
+
     WizardMascotArt(Context context, int accent) {
         this.accent=accent;
-        soft=(accent & 0x00ffffff)|0x44000000;
-        int[] ids={R.drawable.zc_devil_horns,R.drawable.zc_devil_face,R.drawable.zc_devil_x_eye,
-                R.drawable.zc_devil_angry_eye,R.drawable.zc_devil_teeth,R.drawable.zc_devil_tongue,R.drawable.zc_devil_outline};
-        for(int i=0;i<ids.length;i++) {
-            head[i]=context.getDrawable(ids[i]).mutate();
-            head[i].setBounds(0,0,108,108);
-        }
-        float[] from={5,9,12}, cyan={8,146,208}, to={Color.red(accent),Color.green(accent),Color.blue(accent)};
-        float[] matrix=new float[20];
-        for(int i=0;i<3;i++){
-            float scale=(to[i]-from[i])/(cyan[i]-from[i]);
-            matrix[i*5+i]=scale;matrix[i*5+4]=from[i]*(1-scale);
-        }
-        matrix[18]=1;
-        head[0].setColorFilter(new ColorMatrixColorFilter(matrix));
-        for(int i:new int[]{2,3,5,6})head[i].setColorFilter(accent,PorterDuff.Mode.SRC_IN);
+        rim=Color.rgb((Color.red(accent)+255)/2,(Color.green(accent)+255)/2,(Color.blue(accent)+255)/2);
+        soft=(accent & 0x00ffffff)|0x24000000;
     }
+
     void draw(Canvas c,float x,float y,float size,int pose,float t) {
         if(size<=0)return;
         c.save();
-        c.translate(x,y);c.scale(size/100f,size/100f);
-        float bob=(float)Math.sin(t*Math.PI*4)*2f;
+        c.translate(x,y);c.scale(size/400f,size/400f);
+        // Leave space for moving horns, tail and props at all phases.
+        c.translate(10,22);c.scale(.94f,.94f);
         float action=(float)Math.sin(t*Math.PI*2);
+        float bob=(float)Math.sin(t*Math.PI*4)*5;
         c.translate(0,bob);
-        if(pose==SKATE)c.rotate(-9+action*5,50,65);
-        if(pose==SWIPE)c.rotate(action*4,50,60);
-        // Tail, soft halo and compact body.
-        oval(c,17,19,85,83,soft);
-        path.reset();path.moveTo(29,69);path.cubicTo(2,73,1,44,15,42);
-        strokePath(c,accent,2.3f);
-        triangle(c,8,36,21,40,13,50,accent);
-        body(c);
-        if(pose==POPCORN) {
-            oval(c,8,75,93,98,0xff14232c);
-            oval(c,17,74,80,94,soft);
-            limb(c,35,72,20,86);limb(c,63,72,80,86);
-            oval(c,12,81,35,93,dark);oval(c,70,81,92,93,dark);
-        } else if(pose==SKATE) {
-            limb(c,43,72,33,85);limb(c,61,71,71,85);
-            round(c,14,84,89,90,3,accent);
-            circle(c,28,93,4,Color.WHITE);circle(c,74,93,4,Color.WHITE);
-            line(c,4,82,23,82,accent,1.6f);line(c,1,92,16,92,soft,2);
-        } else {
-            limb(c,41,72,35,87);limb(c,60,72,67,87);
-            oval(c,25,84,43,93,dark);oval(c,59,84,77,93,dark);
+        if(pose==SKATE)c.rotate(-6+action*4,200,260);
+        else if(pose==SWIPE)c.rotate(action*3,200,240);
+
+        if(pose==POPCORN){
+            oval(c,49,252,350,342,0xff1c2c35);
+            oval(c,64,264,335,337,soft);
         }
-        // Authentic face layers, centered and scaled up from their padded viewport.
-        c.save();c.translate(50,41);c.rotate(action*5);c.translate(-50,-41);
-        c.translate(-13,-15);c.scale(1.16f,1.16f);
-        head[0].draw(c);head[1].draw(c);head[6].draw(c);head[2].draw(c);
-        if(t>.46f&&t<.51f)line(c,61,52,73,52,accent,3);else head[3].draw(c);
-        head[4].draw(c);
-        c.save();c.translate(0,(float)Math.sin(t*Math.PI*6)*1.2f);head[5].draw(c);c.restore();
+        if(pose==SKATE){
+            round(c,65,324,341,340,8,accent);
+            circle(c,108,348,9,Color.WHITE);circle(c,294,348,9,Color.WHITE);
+            line(c,10,331,51,331,accent,4);line(c,16,345,67,345,soft,5);
+        }
+
+        // Rounded body and feet, matching the supplied character silhouette.
+        path.reset();path.moveTo(105,269);
+        path.cubicTo(31,270,29,235,45,180+action*8);
+        strokePath(c,accent,8);
+        triangle(c,30,186+action*8,52,148+action*8,72,189+action*8,accent);
+        outlinedOval(c,105,205,292,326,BODY,3);
+        foot(c,126,308,pose==SKATE?-7:0);
+        foot(c,271,308,pose==SKATE?7:0);
+
+        // Head is a separate articulated layer, not the existing insignia.
+        c.save();c.rotate(action*2.5f,199,156);
+        head(c,t);
         c.restore();
-        // Distinct readable prop and exaggerated action per pose.
-        switch(pose){
+
+        // The hands are large, filled oval mitts like the reference. No stick limbs.
+        switch(pose) {
             case SWIPE:
-                limb(c,36,63,26,75);limb(c,62,65,76,57-action*8);
-                c.save();c.rotate(-12,74,68);
-                round(c,64,46,87,80,5,accent);round(c,66,48,85,78,4,0xff182a35);
-                line(c,70,72,81,58,Color.WHITE,2);
-                triangle(c,76,57,83,55,82,64,Color.WHITE);c.restore();
-                line(c,88,60,95,48,accent,2);line(c,88,50,91,42,accent,1.5f);
+                phone(c,229,198,-12);
+                hand(c,111,246,-26);
+                hand(c,258,237-action*22,24);
+                line(c,302,199,302,179,accent,4);
+                triangle(c,294,184,302,173,310,184,accent);
                 break;
             case SEARCH:
-                float lx=77+action*6,ly=43+action*5;
-                limb(c,63,63,lx-6,ly+14);limb(c,35,65,22,75);
-                line(c,lx+6,ly+7,lx+16,ly+20,accent,5);
-                circle(c,lx,ly,13,accent);circle(c,lx,ly,10,0xff294657);
-                line(c,lx-6,ly-5,lx+1,ly-8,Color.WHITE,2);
+                float lx=274+action*11,ly=151+action*8;
+                line(c,lx+22,ly+24,lx+43,ly+61,accent,16);
+                line(c,lx+22,ly+24,lx+43,ly+61,BODY,10);
+                circle(c,lx,ly,39,rim);circle(c,lx,ly,34,0xff193542);
+                line(c,lx-18,ly-15,lx-4,ly-24,Color.WHITE,5);
+                hand(c,111,246,-26);
+                hand(c,lx+34,ly+55,30);
                 break;
             case GALLERY:
-                limb(c,33,60,15,73-action*6);limb(c,65,60,85,73+action*6);
-                round(c,7,73,93,89,4,0xff1b2d39);
+                float panelY=244+action*7;
+                round(c,63,panelY,337,panelY+77,12,accent);
+                round(c,67,panelY+4,333,panelY+73,9,0xff182935);
                 for(int i=0;i<3;i++){
-                    round(c,10+i*28,76,33+i*28,86,2,accent);
-                    circle(c,21+i*28,81,3,dark);
+                    float xx=76+i*85;
+                    round(c,xx,panelY+12,xx+75,panelY+65,6,0xff2c4658);
+                    triangle(c,xx+28,panelY+22,xx+28,panelY+53,xx+51,panelY+37,Color.WHITE);
                 }
-                circle(c,16,72-action*6,5,accent);circle(c,84,72+action*6,5,accent);
+                hand(c,111,panelY+1,-26);
+                hand(c,289,panelY+1,26);
                 break;
             case STACK:
-                limb(c,34,63,22,74);limb(c,64,63,79,57-action*7);
-                for(int i=0;i<3;i++){
-                    float h=59-i*7-((i==2)?Math.abs(action)*13:0);
-                    mediaCard(c,59+i*4,h,24,19);
-                }
-                round(c,50,75,91,92,4,accent);round(c,52,77,89,90,3,0xff18313e);
-                round(c,64,80,78,87,2,accent);
+                float cardY=187-Math.max(0,action)*26;
+                mediaCard(c,232,cardY,67,47,-10);
+                mediaCard(c,261,219,65,47,12);
+                mediaCard(c,213,234,65,47,-8);
+                round(c,206,266,337,322,10,accent);
+                round(c,210,270,333,318,8,0xff172e39);
+                round(c,255,283,290,305,5,accent);
+                hand(c,111,246,-26);
+                hand(c,271,cardY+30,26);
                 break;
             case SKATE:
-                limb(c,34,64,15,55);limb(c,63,63,85,52);
-                line(c,7,44,17,44,accent,1.5f);line(c,4,51,12,51,soft,2);
+                hand(c,99,237-action*9,-37);
+                hand(c,294,218+action*11,14);
+                line(c,16,221,57,221,accent,4);
+                line(c,5,238,37,238,soft,6);
                 break;
             default:
-                limb(c,33,62,23,79);limb(c,65,62,71,42+Math.abs(action)*19);
-                round(c,54,63,82,91,4,0xffe6eff5);
-                for(int i=0;i<3;i++)round(c,57+i*9,65,61+i*9,89,1,accent);
-                for(int i=0;i<7;i++)circle(c,56+(i%4)*7,62-(i/4)*4,3,0xffffe4a1);
-                circle(c,71,49-Math.abs(action)*8,3.2f,0xffffe4a1);
+                hand(c,111,246,-26);
+                round(c,218,242,297,317,10,0xfff1f7fa);
+                for(int i=0;i<3;i++)round(c,225+i*24,247,237+i*24,312,3,accent);
+                for(int i=0;i<7;i++)circle(c,225+(i%4)*20,242-(i/4)*12,10,0xffffe6ad);
+                hand(c,289,272,30);
+                float kernelY=242-Math.max(0,action)*44;
+                circle(c,251-Math.max(0,action)*47,kernelY,7,0xffffe6ad);
                 break;
         }
         c.restore();
     }
-    private void body(Canvas c){oval(c,28,51,73,84,accent);oval(c,30,53,71,82,dark);}
-    private void limb(Canvas c,float x,float y,float xx,float yy){line(c,x,y,xx,yy,accent,8);line(c,x,y,xx,yy,dark,5);circle(c,xx,yy,4,accent);circle(c,xx,yy,2.7f,dark);}
-    private void mediaCard(Canvas c,float x,float y,float w,float h){round(c,x,y,x+w,y+h,3,accent);round(c,x+1,y+1,x+w-1,y+h-1,2,0xff25394a);triangle(c,x+w*.4f,y+h*.24f,x+w*.4f,y+h*.76f,x+w*.73f,y+h*.5f,Color.WHITE);}
+
+    private void head(Canvas c,float t){
+        // Exact visual cues from the full character: tall curved horns, round
+        // black head, white X and angry eye, oversized jagged grin and cyan tongue.
+        path.reset();path.moveTo(101,14);path.cubicTo(61,53,68,92,96,119);
+        path.lineTo(132,80);path.cubicTo(110,65,97,38,101,14);path.close();
+        fillStroke(c,accent,rim,2.5f);
+        path.reset();path.moveTo(295,17);path.cubicTo(333,49,327,88,304,119);
+        path.lineTo(267,80);path.cubicTo(289,62,304,37,295,17);path.close();
+        fillStroke(c,accent,rim,2.5f);
+        outlinedOval(c,86,57,312,254,FACE,6);
+
+        line(c,116,115,162,160,Color.WHITE,17);
+        line(c,162,115,116,160,Color.WHITE,17);
+        path.reset();
+        if(t>.46f&&t<.51f){
+            path.moveTo(213,137);path.lineTo(280,111);path.lineTo(277,126);
+            path.lineTo(239,148);path.close();
+        }else{
+            path.moveTo(212,136);path.lineTo(281,96);
+            path.cubicTo(281,139,266,159,241,162);path.close();
+        }
+        fillPath(c,Color.WHITE);
+
+        path.reset();path.moveTo(104,179);path.lineTo(131,190);path.lineTo(124,190);
+        path.lineTo(150,222);path.lineTo(171,202);path.lineTo(198,234);
+        path.lineTo(224,202);path.lineTo(249,219);path.lineTo(274,187);
+        path.lineTo(258,187);path.lineTo(296,171);
+        path.cubicTo(268,219,249,251,199,252);
+        path.cubicTo(153,247,124,219,104,179);path.close();
+        fillPath(c,Color.WHITE);
+
+        float tongueBob=(float)Math.sin(t*Math.PI*6)*3;
+        c.save();c.translate(0,tongueBob);
+        path.reset();path.moveTo(189,225);
+        path.cubicTo(207,216,228,220,230,239);
+        path.cubicTo(230,265,220,275,207,270);
+        path.lineTo(196,266);path.close();fillPath(c,accent);
+        c.restore();
+    }
+
+    private void hand(Canvas c,float x,float y,float rotation){
+        c.save();c.translate(x,y);c.rotate(rotation);
+        outlinedOval(c,-42,-26,42,26,BODY,2.6f);
+        c.restore();
+    }
+    private void foot(Canvas c,float x,float y,float rotation){
+        c.save();c.translate(x,y);c.rotate(rotation);
+        outlinedOval(c,-50,-27,50,27,FEET,2.6f);
+        c.restore();
+    }
+    private void phone(Canvas c,float x,float y,float angle){
+        c.save();c.rotate(angle,x+39,y+55);
+        round(c,x,y,x+78,y+111,13,accent);
+        round(c,x+4,y+4,x+74,y+107,10,0xff1c303c);
+        triangle(c,x+26,y+35,x+26,y+72,x+56,y+53,Color.WHITE);
+        round(c,x+28,y+97,x+50,y+100,2,accent);
+        c.restore();
+    }
+    private void mediaCard(Canvas c,float x,float y,float w,float h,float angle){
+        c.save();c.rotate(angle,x+w/2,y+h/2);
+        round(c,x,y,x+w,y+h,6,accent);
+        round(c,x+2,y+2,x+w-2,y+h-2,4,0xff25394a);
+        triangle(c,x+w*.4f,y+h*.24f,x+w*.4f,y+h*.76f,x+w*.73f,y+h*.5f,Color.WHITE);
+        c.restore();
+    }
+    private void outlinedOval(Canvas c,float l,float t,float r,float b,int color,float width){
+        oval(c,l,t,r,b,color);p.setColor(accent);p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(width);c.drawOval(rect,p);p.setStyle(Paint.Style.FILL);
+    }
     private void oval(Canvas c,float l,float t,float r,float b,int color){p.setStyle(Paint.Style.FILL);p.setColor(color);rect.set(l,t,r,b);c.drawOval(rect,p);}
     private void round(Canvas c,float l,float t,float r,float b,float radius,int color){p.setStyle(Paint.Style.FILL);p.setColor(color);rect.set(l,t,r,b);c.drawRoundRect(rect,radius,radius,p);}
     private void circle(Canvas c,float x,float y,float radius,int color){p.setStyle(Paint.Style.FILL);p.setColor(color);c.drawCircle(x,y,radius,p);}
-    private void triangle(Canvas c,float x,float y,float x2,float y2,float x3,float y3,int color){path.reset();path.moveTo(x,y);path.lineTo(x2,y2);path.lineTo(x3,y3);path.close();p.setStyle(Paint.Style.FILL);p.setColor(color);c.drawPath(path,p);}
-    private void strokePath(Canvas c,int color,float width){p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(width);p.setStrokeCap(Paint.Cap.ROUND);p.setColor(color);c.drawPath(path,p);p.setStyle(Paint.Style.FILL);}
-    private void line(Canvas c,float x,float y,float xx,float yy,int color,float width){p.setStyle(Paint.Style.FILL);p.setStrokeWidth(width);p.setStrokeCap(Paint.Cap.ROUND);p.setColor(color);c.drawLine(x,y,xx,yy,p);}
+    private void triangle(Canvas c,float x,float y,float x2,float y2,float x3,float y3,int color){path.reset();path.moveTo(x,y);path.lineTo(x2,y2);path.lineTo(x3,y3);path.close();fillPath(c,color);}
+    private void fillPath(Canvas c,int color){p.setStyle(Paint.Style.FILL);p.setColor(color);c.drawPath(path,p);}
+    private void fillStroke(Canvas c,int color,int stroke,float width){fillPath(c,color);strokePath(c,stroke,width);}
+    private void strokePath(Canvas c,int color,float width){p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(width);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);p.setColor(color);c.drawPath(path,p);p.setStyle(Paint.Style.FILL);}
+    private void line(Canvas c,float x,float y,float xx,float yy,int color,float width){p.setStyle(Paint.Style.FILL);p.setStrokeWidth(width);p.setStrokeCap(Paint.Cap.SQUARE);p.setColor(color);c.drawLine(x,y,xx,yy,p);}
 
     /** Finite welcome animation. Static pose for reduced motion and when hidden. */
     static final class Welcome extends View {

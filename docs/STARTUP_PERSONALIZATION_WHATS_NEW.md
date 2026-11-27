@@ -101,3 +101,7 @@ Manual showcase navigation takes over from automatic cycling; touch exploration 
 ## 7.5 mascot showcase (Beta 12)
 
 The approved four-step wizard and five scene navigation remain unchanged. All showcase artwork uses the existing production mascot face layers with local Canvas bodies, props and poses: swipe, magnifier, gallery, collection stack, skateboard and popcorn. Accent filters preserve the face identity and dark/white details. Motion uses existing scene timing and a finite welcome animation, with reduced-motion static poses. No external images, actual content thumbnails, network requests or new dependencies. Phone visual acceptance is required; the illustrative cartoons are native drawings, not the concept poster rendered as a video.
+
+## 7.5 full mascot character (Beta 13)
+
+Replaces the Beta 12 insignia-based cartoon rig with a dedicated vector character modeled on the owner's supplied full-body reference: round head, tall curved filled horns, white X and angry eye, wide jagged grin, accent tongue, curved arrow tail and large oval hands/feet. Independently animated pose and prop layers serve all six existing wizard cartoons; no launcher/splash drawable or personalization insignia change. The vector interpretation is local, theme-aware and retains the existing wizard layout, navigation, timing and reduced-motion policy. Phone acceptance remains required.

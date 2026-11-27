@@ -104,7 +104,7 @@ public class StartupWizardUiTest {
         }
     }
 
-    @Test public void mascotCartoonsDrawAllSixPosesWithExistingAccents() {
+    @Test public void fullCharacterCartoonsDrawAllSixPosesWithExistingAccents() {
         Context context = org.robolectric.RuntimeEnvironment.getApplication();
         android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(200, 200, android.graphics.Bitmap.Config.ARGB_8888);
         android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
