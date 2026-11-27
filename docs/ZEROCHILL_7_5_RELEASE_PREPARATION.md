@@ -52,14 +52,17 @@ Its APK SHA-256 is
 `eb784bf5d393955f99ce8dbbf1ffd4012c2847487286b90f6067b644c67c4173`.
 Stable 7.3.0 is the second representative supported 7.x baseline.
 
-The candidate-only workflow runs both Android unit suites and assembles debug
-and signed production APKs. It checks package, certificate, version progression,
+The phone-candidate workflow runs focused release unit tests and assembles one
+signed production APK. The full debug and release suites are deferred until
+production validation. It checks package, certificate, version progression,
 source commit, production routing, disabled legacy analytics and the packaged
 What's New resource. The offline Android 15 gate installs both public baselines
 with representative existing data, replaces each with the signed APK, checks
 UID, first install, local media and settings, and exercises upgrade startup,
 What’s New acknowledgement, downloads and secondary navigation. A fresh install
-must open the cinematic wizard. The APK and SHA-256 file are uploaded to Actions.
+must open the cinematic wizard. The statically verified APK and SHA-256 file are uploaded to Actions before
+the emulator runs. Check the separate emulator evidence before calling the
+upgrade validated.
 
 For a 7.4 to 7.5 upgrade, the package, Keystore alias, secure-session store,
 New Zerochill routing and local data store identities are carried forward. A

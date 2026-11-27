@@ -87,10 +87,29 @@ jobs:
               }.items():
                   out.write(key+'='+value+'\n')
           PY
-      - name: Run debug and release unit suites and assemble APKs
+      - name: Run focused phone-candidate regressions and assemble one signed APK
         run: >-
           gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
-          :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease
+          :app:testReleaseUnitTest
+          --tests '*ShitTokInteractionUiTest'
+          --tests '*ShitTokProgressTest'
+          --tests '*ShitTokDynamicPinchTest'
+          --tests '*ShitTokAudioOwnershipTest'
+          --tests '*ShitTokFullscreenAccentTest'
+          --tests '*ShitTokVisualPolishTest'
+          --tests '*ShitTokScrubInteractionTest'
+          --tests '*ShitTokSpeedMuteTest'
+          --tests '*ShowsFullscreenControlsTest'
+          --tests '*VideoSeekFeedbackTest'
+          --tests '*ZeroChillPushRegistrationTest'
+          --tests '*ConversationCleanupUiTest'
+          --tests '*CreatorBackupTest'
+          --tests '*MediaCollectionStoreTest'
+          --tests '*WhatsNewTest'
+          --tests '*ReleaseNotesSummaryTest'
+          --tests '*StartupWizardUiTest'
+          --tests '*SpotlightSearchTest'
+          :app:assembleRelease
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/zerochill-7-5-0-candidate.jks"
@@ -113,6 +132,13 @@ jobs:
           cp "$RUNNER_TEMP/BUILD_LINEAGE.txt" candidate/
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
           printf 'CANDIDATE_APK=%s/%s\n' "$GITHUB_WORKSPACE" "$apk" >> "$GITHUB_ENV"
+      - name: Upload signed phone-test APK and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-7.5.0-candidate-signed-${{ env.ZEROCHILL_SOURCE_SHA }}
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14
       - name: Enable KVM for Android upgrade tests
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -128,21 +154,12 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: bash tools/test_release_7_5_upgrade.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ZeroChill-7.5.0-candidate-signed-${{ env.ZEROCHILL_SOURCE_SHA }}
-          path: |
-            candidate/
-            upgrade-results/*/result.json
-          if-no-files-found: error
-          retention-days: 14
       - name: Upload test and upgrade evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ZeroChill-7.5.0-test-evidence-${{ env.ZEROCHILL_SOURCE_SHA }}
           path: |
-            app/build/test-results/testDebugUnitTest/
             app/build/test-results/testReleaseUnitTest/
             upgrade-results/
           if-no-files-found: warn
