@@ -52,7 +52,7 @@ final class FullscreenVideoGestures implements View.OnTouchListener {
         this(surface, player, onTap, enabled, false, () -> {});
     }
 
-    FullscreenVideoGestures(PlayerView surface, Supplier<Player> player,
+    FullscreenVideoGestures(FrameLayout surface, Supplier<Player> player,
             Runnable onTap, BooleanSupplier enabled, boolean immediateSingleTap, Runnable onSeek) {
         this(surface, delta -> seekPlayerBy(player.get(), delta), onTap, enabled, immediateSingleTap, onSeek);
     }

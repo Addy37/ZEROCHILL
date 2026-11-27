@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Base64;
 
+import com.google.firebase.FirebaseApp;
 import com.google.firebase.installations.FirebaseInstallations;
 import com.google.firebase.messaging.FirebaseMessaging;
 
@@ -114,11 +115,16 @@ final class ZeroChillPushRegistration {
         }
     }
 
-    private static void registerWithFirebase(Context app) {
-        FirebaseMessaging.getInstance().register().addOnCompleteListener(task -> {
-            if (!task.isSuccessful()) return;
-            // onRegistered() supplies the current FID and performs the authenticated upload.
-        });
+    static void registerWithFirebase(Context app) {
+        try {
+            // Android usually initializes Firebase via its provider. Recover if it did not.
+            if (FirebaseApp.initializeApp(app) != null) {
+                FirebaseMessaging.getInstance().register();
+                // onRegistered() supplies the FID and performs the authenticated upload.
+            }
+        } catch (IllegalStateException unavailable) {
+            android.util.Log.w("ZeroChillPush", "Firebase unavailable for push registration");
+        }
     }
 
     private static void queueUpsert(
@@ -257,15 +263,21 @@ final class ZeroChillPushRegistration {
         if (registerAgain && prefs.getBoolean(KEY_ROTATION_IN_PROGRESS, false)) return;
         prefs.edit().putBoolean(KEY_ROTATION_IN_PROGRESS, true).apply();
 
-        FirebaseMessaging.getInstance().unregister().addOnCompleteListener(unregisterTask ->
-                FirebaseInstallations.getInstance().delete().addOnCompleteListener(deleteTask -> {
-                    prefs.edit().putBoolean(KEY_ROTATION_IN_PROGRESS, false).apply();
-                    if (!registerAgain) return;
-                    if (prefs.getBoolean(KEY_REGISTRATION_SUSPENDED, false)) return;
-                    if (sessionCredentials(ZeroChillSessionStore.read(app)) == null) return;
-                    registerWithFirebase(app);
-                })
-        );
+        try {
+            FirebaseMessaging messaging = FirebaseMessaging.getInstance();
+            FirebaseInstallations installations = FirebaseInstallations.getInstance();
+            messaging.unregister().addOnCompleteListener(unregisterTask ->
+                    installations.delete().addOnCompleteListener(deleteTask -> {
+                        prefs.edit().putBoolean(KEY_ROTATION_IN_PROGRESS, false).apply();
+                        if (!registerAgain || prefs.getBoolean(KEY_REGISTRATION_SUSPENDED, false)) return;
+                        if (sessionCredentials(ZeroChillSessionStore.read(app)) == null) return;
+                        registerWithFirebase(app);
+                    })
+            );
+        } catch (IllegalStateException unavailable) {
+            prefs.edit().putBoolean(KEY_ROTATION_IN_PROGRESS, false).apply();
+            android.util.Log.w("ZeroChillPush", "Firebase unavailable for installation rotation");
+        }
     }
 
     private static HttpURLConnection open(String method, String path, String accessToken) throws Exception {

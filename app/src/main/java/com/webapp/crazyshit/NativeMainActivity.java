@@ -602,8 +602,7 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         boolean show = screen == Screen.CHAOS
                 && !chaosClearDisplay && !shitTokStripPinched
                 && primaryPager != null && primaryPager.getVisibility() == View.VISIBLE
-                && getResources().getConfiguration().orientation !=
-                        android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+                && (primaryPagerAdapter == null || !primaryPagerAdapter.chaosFullscreenInputLocked());
         shitTokCategoryStrip.setVisibility(show ? View.VISIBLE : View.GONE);
         if (show) {
             shitTokCategoryStrip.refresh(false);
@@ -952,10 +951,18 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
                 && primaryPager.getVisibility() == View.VISIBLE;
     }
 
+    boolean ownsChaosLandscapePlayer() {
+        return screen == Screen.CHAOS && primaryPagerAdapter != null
+                && primaryPagerAdapter.chaosLandscapePlayerVisible();
+    }
+
     private void applyChaosFullscreenChrome() {
-        boolean landscape = getResources().getConfiguration().orientation ==
-                android.content.res.Configuration.ORIENTATION_LANDSCAPE;
-        setChaosFullscreenChrome(screen == Screen.CHAOS && (landscape || chaosClearDisplay));
+        setChaosFullscreenChrome(ownsChaosLandscapePlayer() || (screen == Screen.CHAOS && chaosClearDisplay));
+    }
+
+    void onShitTokLandscapePlayerExited() {
+        applyChaosFullscreenChrome();
+        LandscapeUiController.apply(this);
     }
 
     private void setChaosClearDisplay(boolean clear) {
@@ -1541,8 +1548,10 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
         if (bottomNavigation != null) bottomNavigation.endSquareDrag(true);
         if (tabReveal != null) tabReveal.cancel();
         if (searchPanel != null) { searchPanel.back(); return; }
+        boolean hadLandscapePlayer = ownsChaosLandscapePlayer();
         if (screen == Screen.CHAOS && primaryPagerAdapter != null
                 && primaryPagerAdapter.exitChaosFullscreenForBack()) {
+            if (hadLandscapePlayer) onShitTokLandscapePlayerExited();
             return;
         }
         if (legacyContent != null && legacyContent.getVisibility() == View.VISIBLE) {
@@ -1744,6 +1753,12 @@ public class NativeMainActivity extends Activity implements NativeMiniPlayer.Hos
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
+        if (screen == Screen.CHAOS && primaryPagerAdapter != null
+                && primaryPagerAdapter.chaosFullscreenInputLocked()) {
+            contentTouchCandidate = false;
+            if (navigationMotion != null) navigationMotion.endGesture();
+            return super.dispatchTouchEvent(event);
+        }
         boolean finishGesture = false;
         if (navigationMotion != null && event != null) {
             int action = event.getActionMasked();

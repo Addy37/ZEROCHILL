@@ -44,6 +44,8 @@ public class ShitTokAudioOwnershipTest {
         androidx.media3.common.PlaybackParameters speed = new androidx.media3.common.PlaybackParameters(1f);
         boolean readyToPlay = true;
         boolean failPosition;
+        boolean seekAvailable, reflectSeeks;
+        long positionMs = 12_000L, durationMs = 60_000L;
         final ExoPlayer player = (ExoPlayer) Proxy.newProxyInstance(ExoPlayer.class.getClassLoader(),
                 new Class<?>[]{ExoPlayer.class}, (proxy, method, args) -> {
                     switch (method.getName()) {
@@ -74,12 +76,19 @@ public class ShitTokAudioOwnershipTest {
                             sources++;
                             if (args.length > 1 && args[1] instanceof Long) sourceStartPosition = (Long) args[1];
                             return null;
-                        case "seekTo": seeks++; seekPosition = (Long) args[0]; state=Player.STATE_READY; return null;
+                        case "isCommandAvailable":
+                            return seekAvailable && (Integer) args[0] == Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM;
+                        case "seekTo":
+                            seeks++;
+                            seekPosition = (Long) args[0];
+                            if (reflectSeeks) positionMs = seekPosition;
+                            state = Player.STATE_READY;
+                            return null;
                         case "getCurrentPosition":
                             positionReads++;
                             if (failPosition) throw new IllegalStateException("stale player position");
-                            return 12_000L;
-                        case "getDuration": return 60_000L;
+                            return positionMs;
+                        case "getDuration": return durationMs;
                         default:
                             if (method.getReturnType() == boolean.class) return false;
                             if (method.getReturnType() == int.class) return 0;
@@ -105,8 +114,9 @@ public class ShitTokAudioOwnershipTest {
         Fixture() {
             feed.close();
             ArrayList<NativeContentItem> items = ReflectionHelpers.getField(feed, "items");
+            // Use an eligible Chaos source with offline URLs so the real pager can change pages.
             for (int i = 0; i < 3; i++) items.add(new NativeContentItem(NativeContentItem.KIND_MEDIA,
-                    "Fixture " + i, "https://example.invalid/clip-" + i, "", "", "", ""));
+                    "Fixture " + i, "https://example.invalid/clip-" + i, "", "", "Kaotic", ""));
             ViewPager2 pager = ReflectionHelpers.getField(feed, "pager");
             RecyclerView.Adapter adapter = pager.getAdapter();
             adapter.notifyDataSetChanged();

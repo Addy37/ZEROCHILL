@@ -1,12 +1,20 @@
 package com.webapp.crazyshit;
 
 import android.app.Activity;
+import android.app.Application;
+import android.content.Context;
+
+import com.google.firebase.FirebaseApp;
 
 import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
+import org.robolectric.annotation.Config;
+import org.robolectric.annotation.Implementation;
+import org.robolectric.annotation.Implements;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -20,6 +28,25 @@ import static org.junit.Assert.assertNull;
 
 @RunWith(RobolectricTestRunner.class)
 public class ZeroChillPushRegistrationTest {
+    @Test
+    @Config(application = Application.class, shadows = UnavailableFirebase.class)
+    public void unavailableFirebaseDoesNotCrashPushStartup() {
+        UnavailableFirebase.attempted = false;
+        ZeroChillPushRegistration.registerWithFirebase(RuntimeEnvironment.getApplication());
+        assertTrue(UnavailableFirebase.attempted);
+    }
+
+    @Implements(FirebaseApp.class)
+    public static class UnavailableFirebase {
+        static boolean attempted;
+
+        @Implementation
+        protected static FirebaseApp initializeApp(Context context) {
+            attempted = true;
+            throw new IllegalStateException("Default Firebase app unavailable");
+        }
+    }
+
     @Test
     public void installationIdIsStableAndValidUuid() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();

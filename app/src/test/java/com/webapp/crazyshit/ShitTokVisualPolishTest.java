@@ -291,12 +291,16 @@ public class ShitTokVisualPolishTest {
                     "https://example.invalid/resolved.mp4", item.url, "Fixture");
             ReflectionHelpers.setField(holder, "stream", resolved);
             Downloads.requested = null;
-            assertTrue(root.findViewWithTag("shittok_landscape_download").performClick());
-            assertSame(item, Downloads.requested);
-            assertEquals(resolved.mediaUrl, Downloads.mediaUrl);
             assertTrue(root.findViewWithTag("shittok_landscape_share").performClick());
             ShitTokShareSheet landscape = ReflectionHelpers.getField(fixture.feed, "shareSheet");
             assertTrue(landscape.isShowing());
+            java.util.ArrayList<View> downloads = new java.util.ArrayList<>();
+            landscape.getWindow().getDecorView().findViewsWithText(
+                    downloads, "Download video", View.FIND_VIEWS_WITH_CONTENT_DESCRIPTION);
+            assertEquals(1, downloads.size());
+            assertTrue(downloads.get(0).performClick());
+            assertSame(item, Downloads.requested);
+            assertEquals(resolved.mediaUrl, Downloads.mediaUrl);
             assertNull(shadowOf(fixture.host.get()).getNextStartedActivity());
             landscape.dismiss();
         }

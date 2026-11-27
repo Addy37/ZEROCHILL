@@ -26,7 +26,8 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 /** ShitTok's on-demand central menu. Does not own, resize, pause or recreate a player. */
 final class ShitTokShareSheet extends BottomSheetDialog {
     static final class Actions {
-        Runnable notInterested, autoScroll, blockCreator, report, details;
+        Runnable notInterested, autoScroll, blockCreator, report, details, download, mute;
+        String muteLabel;
         boolean autoScrollOn, canBlock;
     }
     private final Activity activity;
@@ -114,16 +115,28 @@ final class ShitTokShareSheet extends BottomSheetDialog {
 
         section("VIDEO ACTIONS");
         LinearLayout actionRow = row();
-        autoScrollTile = tile(R.drawable.ic_shittok_auto_scroll, "", () -> {
-            actions.autoScroll.run();
-            actions.autoScrollOn = !actions.autoScrollOn;
+        if (actions.autoScroll != null) {
+            autoScrollTile = tile(R.drawable.ic_shittok_auto_scroll, "", () -> {
+                actions.autoScroll.run();
+                actions.autoScrollOn = !actions.autoScrollOn;
+                updateAutoScroll();
+            });
+            addTile(actionRow, autoScrollTile, 60);
             updateAutoScroll();
-        });
-        addTile(actionRow, autoScrollTile, 60);
-        updateAutoScroll();
-        addAction(actionRow, R.drawable.ic_shittok_not_interested, "Not Interested", actions.notInterested);
-        blockTile = addAction(actionRow, R.drawable.ic_shittok_block_creator, "Block Creator", actions.blockCreator);
-        updateCanBlock(actions.canBlock);
+        }
+        if (actions.notInterested != null) {
+            addAction(actionRow, R.drawable.ic_shittok_not_interested, "Not Interested", actions.notInterested);
+        }
+        if (actions.blockCreator != null) {
+            blockTile = addAction(actionRow, R.drawable.ic_shittok_block_creator, "Block Creator", actions.blockCreator);
+            updateCanBlock(actions.canBlock);
+        }
+        if (actions.download != null) {
+            addAction(actionRow, R.drawable.ic_shittok_rail_download, "Download video", actions.download);
+        }
+        if (actions.mute != null) {
+            addAction(actionRow, R.drawable.ic_shittok_rail_volume_on, actions.muteLabel, actions.mute);
+        }
         addAction(actionRow, R.drawable.ic_shittok_report, "Report", actions.report);
         addAction(actionRow, android.R.drawable.ic_menu_info_details, "Details", actions.details);
         HorizontalScrollView actionScroll = new HorizontalScrollView(activity);
@@ -223,6 +236,7 @@ final class ShitTokShareSheet extends BottomSheetDialog {
 
     void updateCanBlock(boolean canBlock) {
         actions.canBlock = canBlock;
+        if (blockTile == null) return;
         blockTile.setEnabled(canBlock && actions.blockCreator != null);
         blockTile.setAlpha(blockTile.isEnabled() ? 1f : .4f);
     }

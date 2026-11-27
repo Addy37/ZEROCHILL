@@ -54,7 +54,11 @@ public final class XMegaDriveAccessSetupActivity extends Activity {
         leaving = true;
         if (prompt != null) prompt.dismiss();
         Intent app = new Intent(this, NativeMainActivity.class);
-        String action = getIntent() == null ? null : getIntent().getAction();
+        Intent entry = getIntent();
+        if (WhatsNewPolicy.allowsAutomaticDisplay(entry)) {
+            app.putExtra(WhatsNewPolicy.EXTRA_LAUNCHER_ENTRY, true);
+        }
+        String action = entry == null ? null : entry.getAction();
         if (AppShortcuts.isShortcutAction(action)) {
             app.setAction(action);
             app.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);

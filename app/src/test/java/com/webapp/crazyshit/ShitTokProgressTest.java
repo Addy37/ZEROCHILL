@@ -1,92 +1,60 @@
 package com.webapp.crazyshit;
 
-import android.app.Activity;
 import android.app.Application;
-import android.os.Looper;
+import android.content.Context;
+import android.view.View;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import androidx.media3.exoplayer.ExoPlayer;
-import androidx.recyclerview.widget.RecyclerView;
-import java.lang.reflect.Proxy;
-import java.time.Duration;
-import java.util.concurrent.atomic.AtomicLong;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
-import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 import org.robolectric.util.ReflectionHelpers;
+
 import static org.junit.Assert.*;
-import static org.robolectric.Shadows.shadowOf;
+import static com.webapp.crazyshit.ShitTokInteractionUiTest.idle;
+import static com.webapp.crazyshit.ShitTokInteractionUiTest.root;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class, sdk = 35, qualifiers = "w740dp-h360dp-land")
+@Config(application = Application.class, sdk = 35, qualifiers = "w740dp-h360dp-land-xhdpi")
 public class ShitTokProgressTest {
-    @Test public void timesFollowPlaybackAndScrubTargetAndResetUnknownDuration() {
-        ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
-        host.get().setTheme(R.style.Theme_CrazyShit);
-        ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { }, false);
-        RecyclerView.ViewHolder holder = null;
-        try {
-            RecyclerView.Adapter<?> adapter = ReflectionHelpers.getField(feed, "adapter");
-            holder = adapter.onCreateViewHolder(new RecyclerView(host.get()), 0);
-            host.get().setContentView(holder.itemView);
-            AtomicLong position = new AtomicLong(3000L);
-            AtomicLong duration = new AtomicLong(28000L);
-            ExoPlayer player = (ExoPlayer) Proxy.newProxyInstance(ExoPlayer.class.getClassLoader(),
-                    new Class<?>[] { ExoPlayer.class }, (proxy, method, args) -> {
-                        if ("getDuration".equals(method.getName())) return duration.get();
-                        if ("getCurrentPosition".equals(method.getName())) return position.get();
-                        if ("seekTo".equals(method.getName())) position.set((Long) args[0]);
-                        if ("isPlaying".equals(method.getName())) return true;
-                        if (method.getReturnType() == boolean.class) return false;
-                        if (method.getReturnType() == int.class) return 0;
-                        if (method.getReturnType() == long.class) return 0L;
-                        if (method.getReturnType() == float.class) return 0f;
-                        return null;
-                    });
-            ReflectionHelpers.setField(holder, "player", player);
-            ReflectionHelpers.setField(holder, "boundPosition", 0);
-            ReflectionHelpers.setField(feed, "active", true);
-            ReflectionHelpers.setField(feed, "hostResumed", true);
-            ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
-            TextView elapsed = holder.itemView.findViewWithTag("shittok_elapsed");
-            TextView remaining = holder.itemView.findViewWithTag("shittok_remaining");
+    @Test public void timesFollowPlayingPositionAndResyncWhenControlsReopen() {
+        try (ShitTokAudioOwnershipTest.Fixture fixture = ShitTokInteractionUiTest.fixture()) {
+            fixture.host.get().getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                    .edit().putBoolean("immersive_motion_enabled", false).commit();
+            fixture.selectedPlayer.seekAvailable = true;
+            fixture.selectedPlayer.positionMs = 3_000L;
+            fixture.selectedPlayer.durationMs = 28_000L;
+            fixture.feed.onConfigurationChanged();
+            idle(100);
+            ReflectionHelpers.callInstanceMethod(fixture.selected, "showControlsTemporarily");
+            View holder = root(fixture.selected);
+            View overlay = holder.findViewWithTag("shittok_fullscreen_controls");
+            View surface = holder.findViewWithTag("shittok_fullscreen_surface");
+            TextView elapsed = holder.findViewWithTag("shittok_elapsed");
+            TextView duration = holder.findViewWithTag("shittok_duration");
+            SeekBar bar = ReflectionHelpers.getField(fixture.selected, "seekBar");
+
             assertEquals("0:03", elapsed.getText().toString());
-            assertEquals("-0:25", remaining.getText().toString());
-            position.set(4000L);
-            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(250));
+            assertEquals("0:28", duration.getText().toString());
+            fixture.selectedPlayer.positionMs = 4_000L;
+            idle(250);
             assertEquals("0:04", elapsed.getText().toString());
-            assertEquals("-0:24", remaining.getText().toString());
-            SeekBar bar = ReflectionHelpers.getField(holder, "seekBar");
-            SeekBar.OnSeekBarChangeListener listener = ReflectionHelpers.getField(bar, "mOnSeekBarChangeListener");
-            listener.onStartTrackingTouch(bar);
-            androidx.viewpager2.widget.ViewPager2 pager = ReflectionHelpers.getField(feed, "pager");
-            assertFalse(pager.isUserInputEnabled());
-            listener.onProgressChanged(bar, 500, true);
-            assertEquals(4000L, position.get());
+
+            assertTrue(surface.performClick());
+            assertEquals(View.INVISIBLE, overlay.getVisibility());
+            fixture.selectedPlayer.positionMs = 14_000L;
+            idle(500);
+            assertEquals("0:04", elapsed.getText().toString());
+            assertTrue(surface.performClick());
             assertEquals("0:14", elapsed.getText().toString());
-            assertEquals("-0:14", remaining.getText().toString());
-            listener.onStopTrackingTouch(bar);
-            assertTrue(pager.isUserInputEnabled());
-            duration.set(-9223372036854775807L);
-            ReflectionHelpers.callInstanceMethod(holder, "updateProgress");
+            assertEquals(500, bar.getProgress());
+
+            fixture.selectedPlayer.durationMs = androidx.media3.common.C.TIME_UNSET;
+            ReflectionHelpers.callInstanceMethod(fixture.selected, "updateProgress");
             assertFalse(bar.isEnabled());
-            assertEquals("0:00", elapsed.getText().toString());
-            assertEquals("-0:00", remaining.getText().toString());
-            feed.onHostPause();
-            position.set(20000L);
-            duration.set(28000L);
-            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500));
-            assertEquals("0:00", elapsed.getText().toString());
-        } finally {
-            if (holder != null) {
-                ReflectionHelpers.setField(holder, "player", null);
-                ReflectionHelpers.callInstanceMethod(holder, "releasePlayer");
-            }
-            feed.close();
-            host.pause().stop().destroy();
+            assertEquals("–:––", duration.getText().toString());
         }
     }
 

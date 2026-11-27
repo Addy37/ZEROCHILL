@@ -398,6 +398,14 @@ public final class MainPagerAdapter extends RecyclerView.Adapter<MainPagerAdapte
         chaosView.onConfigurationChanged();
     }
 
+    boolean chaosLandscapePlayerVisible() {
+        return chaosView.landscapePlayerVisible();
+    }
+
+    boolean chaosFullscreenInputLocked() {
+        return chaosView.fullscreenInputLocked();
+    }
+
     public boolean exitChaosFullscreenForBack() {
         return chaosView.exitSensorFullscreenForBack();
     }

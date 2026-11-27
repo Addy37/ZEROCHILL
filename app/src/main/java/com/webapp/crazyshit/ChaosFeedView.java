@@ -240,6 +240,7 @@ public final class ChaosFeedView extends FrameLayout {
     private InlineCommentsDialog commentsDialog;
     private ShitTokShareSheet shareSheet;
     private AlertDialog actionDialog;
+    private final PlayerSaveMenu saveMenu = new PlayerSaveMenu();
     private volatile boolean active;
     private volatile boolean hostResumed = true;
     private boolean poolLoading;
@@ -267,6 +268,7 @@ public final class ChaosFeedView extends FrameLayout {
     private boolean chaosMuted;
     private boolean searchCoverActive;
     private boolean manualFullscreen;
+    private boolean landscapeFullscreenDismissed;
     private boolean clearDisplay;
     private ChaosHolder pinchingHolder;
     private int autoAdvanceFrom = -1;
@@ -507,6 +509,7 @@ public final class ChaosFeedView extends FrameLayout {
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (searchCoverActive) return true;
+        if (fullscreenInputLocked()) return super.dispatchTouchEvent(event);
         // Observe the existing paging slop without consuming or changing pager gestures.
         // ViewPager2 can stay IDLE when dragged beyond its last item.
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
@@ -903,7 +906,7 @@ public final class ChaosFeedView extends FrameLayout {
                 && !pendingCategoryActivation, chaosMuted);
         if (active && hostResumed && !searchCoverActive) {
             /* Category changes are shown by the ShitTok strip, not the OnlyFap notice. */
-            pager.setUserInputEnabled(true);
+            setFeedPagingEnabled(true);
             reconcilePlaybackWindow();
             resolveAhead(selectedPosition);
             playSelected();
@@ -929,7 +932,7 @@ public final class ChaosFeedView extends FrameLayout {
     public void onHostResume() {
         if (!hostResumed) consecutiveDryLoads = 0;
         hostResumed = true;
-        pager.setUserInputEnabled(!searchCoverActive && !pendingCategoryActivation);
+        setFeedPagingEnabled(!searchCoverActive && !pendingCategoryActivation);
         if (active) { applyContentPreference(); /* Category changes are shown by the ShitTok strip, not the OnlyFap notice. */ }
         syncLoadingIndicators();
         orientationWorkAllowed = verifiedQueueEmpty || playbackOwner.allowsSpeculativeWork();
@@ -999,7 +1002,7 @@ public final class ChaosFeedView extends FrameLayout {
         resetCreatorSwipePreview();
         searchCoverActive = true;
         creatorMetadata.select(null);
-        pager.setUserInputEnabled(false);
+        setFeedPagingEnabled(false);
         cancelPendingAutoAdvance();
         cancelSwipePlayerMaintenance();
         sourceMixer.stopPreference();
@@ -1016,7 +1019,7 @@ public final class ChaosFeedView extends FrameLayout {
         if (!searchCoverActive) return;
         searchCoverActive = false;
         playbackOwner.setSearchCovered(false);
-        pager.setUserInputEnabled(active && hostResumed && !closed);
+        setFeedPagingEnabled(active && hostResumed && !closed);
         if (!active || !hostResumed || closed) return;
         reconcilePlaybackWindow();
         if (hasSelectedPage() && playbackOwner.stream(items.get(selectedPosition).url) == null)
@@ -1027,8 +1030,16 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     public void onConfigurationChanged() {
+        if (!isLandscape()) landscapeFullscreenDismissed = false;
+        if (fullscreenInputLocked()) {
+            cancelPendingAutoAdvance();
+            if (active && clearDisplay) setClearDisplay(false);
+        }
+        updateSourceControlVisibility();
+        setFeedPagingEnabled(active && hostResumed && !searchCoverActive && !pendingCategoryActivation);
         if (shareSheet != null) shareSheet.dismiss();
         if (actionDialog != null) actionDialog.dismiss();
+        saveMenu.dismiss();
         resetTemporaryPinch();
         resetCreatorSwipePreview();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
@@ -1047,7 +1058,7 @@ public final class ChaosFeedView extends FrameLayout {
         categoryWaitingVisible = false;
         categorySelectionVersion++;
         removeCallbacks(showCategoryWait);
-        pager.setUserInputEnabled(!searchCoverActive);
+        setFeedPagingEnabled(!searchCoverActive);
         beginQueueUpdate();
         try {
     resetTemporaryPinch();
@@ -1106,6 +1117,7 @@ public final class ChaosFeedView extends FrameLayout {
         removeCallbacks(showCategoryWait);
         if (shareSheet != null) shareSheet.dismiss();
         if (actionDialog != null) actionDialog.dismiss();
+        saveMenu.dismiss();
         searchCoverActive = false;
         playbackOwner.setSearchCovered(false);
         resetTemporaryPinch();
@@ -1336,7 +1348,7 @@ public final class ChaosFeedView extends FrameLayout {
             playbackOwner.cancelSilentReturnPrebuffer();
             playbackOwner.permission(false, chaosMuted);
             for (ChaosHolder holder : new ArrayList<>(playerHolders)) silencePlayer(holder.player);
-            pager.setUserInputEnabled(false);
+            setFeedPagingEnabled(false);
             if (pendingCategoryActivation) postDelayed(showCategoryWait, 160L);
             syncLoadingIndicators();
             orientationAdmission.setCreatorFocused(currentSources.creatorInventory(current));
@@ -1538,7 +1550,7 @@ public final class ChaosFeedView extends FrameLayout {
         removeCallbacks(showCategoryWait);
         categoryWaitingVisible = false;
         syncLoadingIndicators();
-        pager.setUserInputEnabled(!searchCoverActive);
+        setFeedPagingEnabled(!searchCoverActive);
         if (next == selectedPosition) {
             // Returning to the same URL requires explicit permission restoration:
             // ViewPager2 emits no selection callback for an unchanged index.
@@ -2438,7 +2450,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void requestAutoAdvance(int fromPosition) {
-        if (searchCoverActive || pendingCategoryActivation || interactionOverlayOpen()) return;
+        if (fullscreenInputLocked() || searchCoverActive || pendingCategoryActivation || interactionOverlayOpen()) return;
         if (!active || !hostResumed || fromPosition != selectedPosition) return;
         // A completion can arrive again while the pager is settling or its queue is loading.
         if (autoAdvanceIssuedFrom == fromPosition
@@ -2453,7 +2465,7 @@ public final class ChaosFeedView extends FrameLayout {
                 @Override public void run() {
                 if (generation != autoAdvanceGeneration || !autoAdvancePending
                         || !active || !hostResumed || selectedPosition != fromPosition) return;
-                if (pinchingHolder != null || interactionOverlayOpen()) return;
+                if (fullscreenInputLocked() || pinchingHolder != null || interactionOverlayOpen()) return;
                 if (fromPosition + 1 >= items.size()) return;
                 RecyclerView recycler = pagerRecycler();
                 if (queueUpdateDepth > 0 || (recycler != null && recycler.hasPendingAdapterUpdates())) {
@@ -2472,7 +2484,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void tryPendingAutoAdvance() {
-        if (searchCoverActive || interactionOverlayOpen()) return;
+        if (fullscreenInputLocked() || searchCoverActive || interactionOverlayOpen()) return;
         if (!autoAdvancePending || pinchingHolder != null) return;
         int fromPosition = autoAdvanceFrom;
         if (!active || !hostResumed || selectedPosition != fromPosition) {
@@ -3182,25 +3194,61 @@ public final class ChaosFeedView extends FrameLayout {
         image.setBackgroundColor(horizontal ? Color.TRANSPARENT : Color.rgb(20, 20, 22));
     }
 
+    private boolean isLandscape() {
+        return activity.getResources().getConfiguration().orientation
+                == Configuration.ORIENTATION_LANDSCAPE;
+    }
+
+    boolean landscapePlayerVisible() {
+        return isLandscape() && !landscapeFullscreenDismissed;
+    }
+
+    boolean fullscreenInputLocked() {
+        return manualFullscreen || landscapePlayerVisible();
+    }
+
+    private void setFeedPagingEnabled(boolean enabled) {
+        pager.setUserInputEnabled(enabled && !fullscreenInputLocked());
+    }
+
     private void enterManualFullscreen(ChaosHolder holder) {
-        resetTemporaryPinch();
-        if (manualFullscreen || holder == null || !holder.horizontalVideo) return;
+        if (manualFullscreen || holder == null || !holder.horizontalVideo || !holder.ownsPlayback()) return;
         manualFullscreen = true;
+        landscapeFullscreenDismissed = false;
+        continuityTouchTracking = false;
+        resetTemporaryPinch();
+        resetCreatorSwipePreview();
+        cancelPendingAutoAdvance();
+        setFeedPagingEnabled(false);
         updateSourceControlVisibility();
         PhoneOrientationPolicy.enterSensorFullscreen(activity);
         holder.syncOrientationChrome();
     }
 
     private void exitManualFullscreen() {
-        resetTemporaryPinch();
-        if (!manualFullscreen) return;
+        if (manualFullscreen) exitFullscreenPlayer();
+        else resetTemporaryPinch();
+    }
+
+    private void exitFullscreenPlayer() {
+        if (!fullscreenInputLocked()) return;
+        boolean requestedOrientation = manualFullscreen;
         manualFullscreen = false;
+        // Keep late rotation callbacks from reopening the player after a quick Back.
+        landscapeFullscreenDismissed = true;
+        resetTemporaryPinch();
+        setFeedPagingEnabled(active && hostResumed && !searchCoverActive
+                && !pendingCategoryActivation && !interactionOverlayOpen());
         updateSourceControlVisibility();
-        PhoneOrientationPolicy.exitFullscreenVideo(activity);
+        if (requestedOrientation) PhoneOrientationPolicy.exitFullscreenVideo(activity);
         syncVisibleChrome();
     }
 
     boolean exitSensorFullscreenForBack() {
+        if (fullscreenInputLocked()) {
+            exitFullscreenPlayer();
+            return true;
+        }
         if (pinchingHolder != null) {
             resetTemporaryPinch();
             return true;
@@ -3209,9 +3257,7 @@ public final class ChaosFeedView extends FrameLayout {
             setClearDisplay(false);
             return true;
         }
-        if (!manualFullscreen) return false;
-        exitManualFullscreen();
-        return true;
+        return false;
     }
 
     static boolean shouldEnterClearDisplay(float scale) {
@@ -3247,7 +3293,7 @@ public final class ChaosFeedView extends FrameLayout {
     }
 
     private void updateSourceControlVisibility() {
-        host.onSourceSelectorVisibilityChanged(!clearDisplay && !manualFullscreen
+        host.onSourceSelectorVisibilityChanged(!clearDisplay && !fullscreenInputLocked()
                 && (pinchingHolder == null || !pinchingHolder.pinch.suppressesFeedChrome()));
     }
 
@@ -3284,11 +3330,17 @@ public final class ChaosFeedView extends FrameLayout {
         if (holder == null || holder.item == null || !item.url.equals(holder.item.url)) return;
         final NativeContentItem selectedItem = item;
         ShitTokShareSheet.Actions actions = new ShitTokShareSheet.Actions();
-        actions.autoScrollOn = autoScrollEnabled;
-        actions.canBlock = !blockCreatorName(selectedItem).isEmpty();
-        actions.notInterested = () -> hideFromChaos(selectedItem);
-        actions.autoScroll = () -> setAutoScrollEnabled(!autoScrollEnabled);
-        actions.blockCreator = () -> confirmBlockCreator(selectedItem);
+        if (fullscreenInputLocked()) {
+            actions.download = holder::downloadCurrentVideo;
+            actions.mute = () -> setChaosMuted(!chaosMuted);
+            actions.muteLabel = chaosMuted ? "Unmute" : "Mute";
+        } else {
+            actions.autoScrollOn = autoScrollEnabled;
+            actions.canBlock = !blockCreatorName(selectedItem).isEmpty();
+            actions.notInterested = () -> hideFromChaos(selectedItem);
+            actions.autoScroll = () -> setAutoScrollEnabled(!autoScrollEnabled);
+            actions.blockCreator = () -> confirmBlockCreator(selectedItem);
+        }
         actions.report = () -> showPlaybackReport(holder);
         actions.details = holder::openCurrentDetails;
         cancelPendingAutoAdvance();
@@ -3302,6 +3354,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private boolean interactionOverlayOpen() {
         return (shareSheet != null && shareSheet.isShowing())
+                || saveMenu.isOpen()
                 || (actionDialog != null && actionDialog.isShowing())
                 || (commentsDialog != null && commentsDialog.isShowing());
     }
@@ -3312,7 +3365,9 @@ public final class ChaosFeedView extends FrameLayout {
             if (closed || interactionOverlayOpen()) return;
             ChaosHolder holder = holderAt(selectedPosition);
             if (holder == null || holder.player == null) return;
-            if (holder.failurePending) requestAutoAdvance(selectedPosition);
+            if (fullscreenInputLocked()) {
+                holder.armFullscreenAutoHide();
+            } else if (holder.failurePending) requestAutoAdvance(selectedPosition);
             else if (holder.player.getPlaybackState() == Player.STATE_ENDED)
                 holder.handleCompletion(holder.player);
         });
@@ -3458,6 +3513,12 @@ public final class ChaosFeedView extends FrameLayout {
         activity.startActivity(Intent.createChooser(share, "Share playback report"));
     }
 
+    private void showSaveOptions(NativeContentItem target) {
+        if (target == null || target.url.isEmpty() || closed || interactionOverlayOpen()) return;
+        cancelPendingAutoAdvance();
+        saveMenu.show(activity, target, () -> toggleSaved(target, null), this::resumeAutoAfterOverlay);
+    }
+
     private void toggleSaved(NativeContentItem item, TextView button) {
         if (item == null) return;
         if (FavoriteStore.contains(activity, item.url)) {
@@ -3472,6 +3533,7 @@ public final class ChaosFeedView extends FrameLayout {
         ChaosHolder selected = holderAt(selectedPosition);
         if (selected != null && selected.item != null
                 && selected.item.url.equals(item.url)) {
+            updateSaveButton(item, selected.save);
             updateSaveButton(item, selected.landscapeSave);
         }
     }
@@ -3486,7 +3548,7 @@ public final class ChaosFeedView extends FrameLayout {
                 0
         );
         button.setCompoundDrawableTintList(ColorStateList.valueOf(saved ? AppearanceTheme.accent(activity) : Color.WHITE));
-        button.setContentDescription(saved ? "Remove from Watch Later" : "Save to Watch Later");
+        button.setContentDescription(saved ? "Saved to Watch Later, save options" : "Save options");
     }
 
     private void openInlineComments(NativeContentItem item) {
@@ -3498,7 +3560,7 @@ public final class ChaosFeedView extends FrameLayout {
         pager.animate().cancel();
         pager.setScaleX(1f);
         pager.setScaleY(1f);
-        pager.setUserInputEnabled(false);
+        setFeedPagingEnabled(false);
         cancelPendingAutoAdvance();
         commentsDialog = new InlineCommentsDialog(
                 activity,
@@ -3536,11 +3598,11 @@ public final class ChaosFeedView extends FrameLayout {
         pager.setScaleY(1f);
         ChaosHolder holder = holderAt(selectedPosition);
         if (holder == null) {
-            pager.setUserInputEnabled(true);
+            setFeedPagingEnabled(true);
             return;
         }
         holder.restoreMediaAfterComments(() -> {
-            pager.setUserInputEnabled(true);
+            setFeedPagingEnabled(true);
             holder.showControlsTemporarily();
         });
     }
@@ -3660,6 +3722,15 @@ public final class ChaosFeedView extends FrameLayout {
         final TextView failure;
         final LinearLayout lower;
         final LinearLayout actionRail;
+        final FrameLayout fullscreenSurface;
+        final FrameLayout fullscreenOverlay;
+        final FullscreenVideoGestures fullscreenGestures;
+        final ImageView fullscreenPlayPause;
+        final TextView fullscreenSpeed;
+        final TextView landscapeDescription;
+        final ImageView landscapeAvatar;
+        final TextView landscapeCreator;
+        final TextView landscapeFavorite;
         final LinearLayout landscapeHeader;
         final LinearLayout landscapeActions;
         final View landscapeTopScrim;
@@ -3668,8 +3739,7 @@ public final class ChaosFeedView extends FrameLayout {
         final TextView landscapeLike;
         final TextView landscapeSave;
         final TextView landscapeComments;
-        final TextView landscapeDownload;
-        final TextView mute, landscapeMute;
+        final TextView mute;
         ImageView speedBadge;
         final TextView download;
         final TextView share;
@@ -3705,7 +3775,8 @@ public final class ChaosFeedView extends FrameLayout {
                 if (!active || !hostResumed || boundPosition != selectedPosition
                         || player == null || !player.isPlaying() || scrubbing
                         || clearDisplay || pinch.isActive()
-                        || progressRow.getVisibility() != View.VISIBLE) return;
+                        || progressRow.getVisibility() != View.VISIBLE
+                        || (landscapeFullscreen() && !controlsVisible)) return;
                 updateProgress();
                 root.postDelayed(this, 250L);
             }
@@ -3722,6 +3793,8 @@ public final class ChaosFeedView extends FrameLayout {
         int boundPosition = -1;
         float swipeAlpha = 1f;
         boolean controlsVisible = true;
+        boolean landscapeControlsMounted;
+        String landscapeAvatarKey = "";
         boolean userPaused;
         boolean scrubbing;
         ExoPlayer scrubPlayer;
@@ -4139,6 +4212,17 @@ public final class ChaosFeedView extends FrameLayout {
                 return insets;
             });
 
+            fullscreenSurface = new FrameLayout(activity);
+            fullscreenSurface.setTag("shittok_fullscreen_surface");
+            fullscreenSurface.setContentDescription("Fullscreen video");
+            fullscreenSurface.setClickable(true);
+            fullscreenSurface.setVisibility(View.GONE);
+            root.addView(fullscreenSurface, new FrameLayout.LayoutParams(-1, -1));
+            fullscreenOverlay = new FrameLayout(activity);
+            fullscreenOverlay.setTag("shittok_fullscreen_controls");
+            fullscreenOverlay.setVisibility(View.GONE);
+            root.addView(fullscreenOverlay, new FrameLayout.LayoutParams(-1, -1));
+
             landscapeTopScrim = new View(activity);
             landscapeTopScrim.setTag("shittok_landscape_top_scrim");
             landscapeTopScrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -4146,7 +4230,7 @@ public final class ChaosFeedView extends FrameLayout {
             landscapeTopScrim.setBackground(topScrimBackground);
             FrameLayout.LayoutParams topScrimParams =
                     new FrameLayout.LayoutParams(-1, dp(FullscreenPlayerStyle.TOP_SCRIM_DP), Gravity.TOP);
-            root.addView(landscapeTopScrim, topScrimParams);
+            fullscreenOverlay.addView(landscapeTopScrim, topScrimParams);
 
             landscapeBottomScrim = new View(activity);
             landscapeBottomScrim.setTag("shittok_landscape_bottom_scrim");
@@ -4155,37 +4239,96 @@ public final class ChaosFeedView extends FrameLayout {
             landscapeBottomScrim.setBackground(bottomScrimBackground);
             FrameLayout.LayoutParams bottomScrimParams =
                     new FrameLayout.LayoutParams(-1, dp(FullscreenPlayerStyle.BOTTOM_SCRIM_DP), Gravity.BOTTOM);
-            root.addView(landscapeBottomScrim, bottomScrimParams);
+            fullscreenOverlay.addView(landscapeBottomScrim, bottomScrimParams);
             landscapeTopScrim.setVisibility(View.GONE);
             landscapeBottomScrim.setVisibility(View.GONE);
 
             landscapeHeader = new LinearLayout(activity);
-            landscapeHeader.setGravity(Gravity.CENTER_VERTICAL);
-            landscapeHeader.setPadding(dp(10), dp(5), dp(10), dp(5));
+            landscapeHeader.setGravity(Gravity.TOP);
             landscapeHeader.setTag("shittok_landscape_header");
             TextView back = textIconActionButton(
                     R.drawable.ic_player_back, "Exit fullscreen", "shittok_landscape_back");
-            back.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_player_back, 0, 0, 0);
-            landscapeHeader.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
+            landscapeHeader.addView(back, new LinearLayout.LayoutParams(dp(46), dp(46)));
+
+            LinearLayout heading = new LinearLayout(activity);
+            heading.setOrientation(LinearLayout.VERTICAL);
+            heading.setPadding(dp(4), dp(3), dp(4), 0);
+            landscapeHeader.addView(heading, new LinearLayout.LayoutParams(0, -2, 1f));
+
             landscapeTitle = new TextView(activity);
             landscapeTitle.setTextColor(Color.WHITE);
-            landscapeTitle.setTextSize(14);
-            landscapeTitle.setSingleLine(true);
+            landscapeTitle.setTextSize(16);
+            landscapeTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+            landscapeTitle.setMaxLines(1);
             landscapeTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            landscapeHeader.addView(landscapeTitle, new LinearLayout.LayoutParams(0, dp(48), 1f));
-            landscapeTitle.setGravity(Gravity.CENTER_VERTICAL);
+            heading.addView(landscapeTitle, new LinearLayout.LayoutParams(-1, -2));
+
+            LinearLayout creatorRow = new LinearLayout(activity);
+            creatorRow.setGravity(Gravity.CENTER_VERTICAL);
+            creatorRow.setMinimumHeight(dp(40));
+            landscapeAvatar = new ImageView(activity);
+            landscapeAvatar.setImageResource(R.drawable.ic_more_account);
+            landscapeAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            landscapeAvatar.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            creatorRow.addView(landscapeAvatar, new LinearLayout.LayoutParams(dp(26), dp(26)));
+            landscapeCreator = new TextView(activity);
+            landscapeCreator.setTextColor(Color.WHITE);
+            landscapeCreator.setTextSize(13);
+            landscapeCreator.setMaxLines(1);
+            landscapeCreator.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            LinearLayout.LayoutParams creatorName = new LinearLayout.LayoutParams(-2, -2);
+            creatorName.setMarginStart(dp(8));
+            creatorName.weight = 1f;
+            creatorRow.addView(landscapeCreator, creatorName);
+            landscapeFavorite = new TextView(activity);
+            landscapeFavorite.setTag("shittok_landscape_favorite_creator");
+            landscapeFavorite.setGravity(Gravity.CENTER);
+            landscapeFavorite.setTextColor(Color.WHITE);
+            landscapeFavorite.setTextSize(19);
+            landscapeFavorite.setFocusable(true);
+            creatorRow.addView(landscapeFavorite, new LinearLayout.LayoutParams(dp(44), dp(44)));
+            heading.addView(creatorRow, new LinearLayout.LayoutParams(-1, -2));
+
+            landscapeDescription = new TextView(activity);
+            landscapeDescription.setTag("shittok_landscape_description");
+            landscapeDescription.setTextColor(Color.WHITE);
+            landscapeDescription.setTextSize(12);
+            landscapeDescription.setMaxLines(1);
+            landscapeDescription.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            landscapeDescription.setOnClickListener(v -> {
+                if (!interactionOverlayOpen()) {
+                    showFullscreenDialog(new ZeroChillDialog.Builder(activity)
+                            .setTitle(landscapeTitle.getText())
+                            .setMessage(landscapeDescription.getText())
+                            .setPositiveButton("Done", null).create());
+                }
+            });
+            heading.addView(landscapeDescription, new LinearLayout.LayoutParams(-1, -2));
+
             TextView landscapeShare = textIconActionButton(
-                    R.drawable.ic_shittok_rail_share,
-                    "Share video. Long press for more actions", "shittok_landscape_share");
-            landscapeShare.setCompoundDrawablesWithIntrinsicBounds(
-                    R.drawable.ic_shittok_rail_share, 0, 0, 0);
-            landscapeHeader.addView(landscapeShare,
-                    new LinearLayout.LayoutParams(dp(48), dp(48)));
-            FrameLayout.LayoutParams headerParams = new FrameLayout.LayoutParams(-1, dp(58), Gravity.TOP);
-            root.addView(landscapeHeader, headerParams);
+                    R.drawable.ic_player_more, "More video actions", "shittok_landscape_share");
+            landscapeHeader.addView(landscapeShare, new LinearLayout.LayoutParams(dp(46), dp(46)));
+            fullscreenOverlay.addView(landscapeHeader, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
+
+            fullscreenPlayPause = new ImageView(activity);
+            fullscreenPlayPause.setTag("shittok_fullscreen_play_pause");
+            fullscreenPlayPause.setImageResource(R.drawable.ic_player_play);
+            fullscreenPlayPause.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+            fullscreenPlayPause.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            fullscreenPlayPause.setPadding(dp(17), dp(17), dp(17), dp(17));
+            fullscreenPlayPause.setBackground(circleDrawable(0x66000000, AppearanceTheme.accent(activity), 1));
+            fullscreenPlayPause.setFocusable(true);
+            fullscreenPlayPause.setOnClickListener(v -> {
+                haptic(v);
+                toggleFocusPlayback();
+                showFullscreenControls(true);
+            });
+            ZeroChillMotion.installPressFeedback(fullscreenPlayPause);
+            fullscreenOverlay.addView(fullscreenPlayPause,
+                    new FrameLayout.LayoutParams(dp(64), dp(64), Gravity.CENTER));
 
             landscapeActions = new LinearLayout(activity);
-            landscapeActions.setGravity(Gravity.CENTER_VERTICAL);
+            landscapeActions.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
             landscapeActions.setPadding(dp(12), 0, dp(12), 0);
             landscapeActions.setTag("shittok_landscape_actions");
             landscapeLike = textIconActionButton(R.drawable.ic_shittok_rail_heart,
@@ -4194,31 +4337,46 @@ public final class ChaosFeedView extends FrameLayout {
                     "Open comments", "shittok_landscape_comments");
             landscapeSave = textIconActionButton(R.drawable.ic_shittok_rail_bookmark,
                     "Save to Watch Later", "shittok_landscape_save");
-            landscapeDownload = textIconActionButton(R.drawable.ic_shittok_rail_download,
-                    "Download video", "shittok_landscape_download");
-            landscapeMute = muteButton("shittok_landscape_mute");
-            for (TextView action : new TextView[] { landscapeLike, landscapeComments,
-                    landscapeSave, landscapeDownload, landscapeMute }) {
+            for (TextView action : new TextView[] {landscapeLike, landscapeComments, landscapeSave}) {
                 landscapeActions.addView(action,
                         new LinearLayout.LayoutParams(dp(48), dp(48)));
             }
-            FrameLayout.LayoutParams landscapeActionsParams =
-                    new FrameLayout.LayoutParams(-1, dp(48), Gravity.BOTTOM);
-            landscapeActionsParams.bottomMargin = dp(20);
-            root.addView(landscapeActions, landscapeActionsParams);
-            landscapeHeader.setVisibility(View.GONE);
-            landscapeActions.setVisibility(View.GONE);
-            back.setOnClickListener(v -> { haptic(v); exitManualFullscreen(); });
-            landscapeShare.setOnClickListener(v -> { haptic(v); share(item); });
-            landscapeShare.setOnLongClickListener(v -> { haptic(v); showMoreMenu(v); return true; });
-            ViewCompat.addAccessibilityAction(landscapeShare, "More video actions", (view, args) -> {
-                showMoreMenu(view);
-                return true;
+            fullscreenSpeed = new TextView(activity);
+            fullscreenSpeed.setTag("shittok_fullscreen_speed");
+            fullscreenSpeed.setText("1×");
+            fullscreenSpeed.setTextColor(Color.WHITE);
+            fullscreenSpeed.setTextSize(14);
+            fullscreenSpeed.setGravity(Gravity.CENTER);
+            fullscreenSpeed.setOnClickListener(v -> { haptic(v); showFullscreenSpeedMenu(); });
+            fullscreenSpeed.setFocusable(true);
+            landscapeActions.addView(fullscreenSpeed, new LinearLayout.LayoutParams(dp(56), dp(48)));
+            fullscreenOverlay.addView(landscapeActions,
+                    new FrameLayout.LayoutParams(-1, dp(48), Gravity.BOTTOM));
+            back.setOnClickListener(v -> {
+                haptic(v);
+                exitFullscreenPlayer();
+                if (activity instanceof NativeMainActivity) {
+                    ((NativeMainActivity) activity).onShitTokLandscapePlayerExited();
+                }
             });
+            landscapeShare.setOnClickListener(v -> { haptic(v); showMoreMenu(v); });
+            landscapeFavorite.setOnClickListener(this::favoriteCreator);
+
             landscapeLike.setOnClickListener(v -> { haptic(v); toggleVideoLike(); showControlsTemporarily(); });
-            landscapeSave.setOnClickListener(v -> { haptic(v); toggleSaved(item, save); showControlsTemporarily(); });
+            landscapeSave.setOnClickListener(v -> { haptic(v); showSaveOptions(item); showControlsTemporarily(); });
             landscapeComments.setOnClickListener(v -> { haptic(v); if (item != null) openInlineComments(item); });
-            landscapeDownload.setOnClickListener(v -> { haptic(v); downloadCurrentVideo(); });
+
+            fullscreenGestures = new FullscreenVideoGestures(fullscreenSurface, () -> player,
+                    () -> {
+                        if (controlsVisible) hideFullscreenControls();
+                        else showFullscreenControls(true);
+                    }, () -> landscapeFullscreen() && ownsPlayback() && !scrubbing, false,
+                    () -> { updateProgress(); armFullscreenAutoHide(); });
+            fullscreenSurface.setOnTouchListener(fullscreenGestures);
+            fullscreenSurface.setOnClickListener(v -> {
+                if (controlsVisible) hideFullscreenControls();
+                else showFullscreenControls(true);
+            });
 
             pausePlayOverlay = new ImageView(activity);
             pausePlayOverlay.setImageResource(R.drawable.ic_shittok_play_overlay);
@@ -4243,7 +4401,7 @@ public final class ChaosFeedView extends FrameLayout {
             progressRow.setGravity(Gravity.CENTER_VERTICAL);
             progressRow.setTag("shittok_progress_row");
             elapsedTime = progressTimeLabel("shittok_elapsed", "0:00");
-            remainingTime = progressTimeLabel("shittok_remaining", "-0:00");
+            remainingTime = progressTimeLabel("shittok_duration", "–:––");
             progressRow.addView(elapsedTime, new LinearLayout.LayoutParams(-2, -1));
             progressRow.addView(seekBar, new LinearLayout.LayoutParams(0, -1, 1f));
             progressRow.addView(remainingTime, new LinearLayout.LayoutParams(-2, -1));
@@ -4268,7 +4426,7 @@ public final class ChaosFeedView extends FrameLayout {
             pinch = new ShitTokDynamicPinchController(
                     (ShitTokDynamicPinchController.TouchFrame) root,
                     playerView.findViewById(androidx.media3.ui.R.id.exo_content_frame),
-                    () -> active && hostResumed && !closed && !isPaging() && !scrubbing
+                    () -> !fullscreenInputLocked() && active && hostResumed && !closed && !isPaging() && !scrubbing
                             && !clearDisplay && (commentsDialog == null || !commentsDialog.isShowing())
                             && player != null && player.isPlaying() && ownsPlayback()
                             && playbackOwner.isAttached(item.url, playerView),
@@ -4282,10 +4440,10 @@ public final class ChaosFeedView extends FrameLayout {
                             creatorSwipeTransitionToken = "";
                             root.removeCallbacks(hideControlsRunnable);
                             root.removeCallbacks(progressTick);
-                            pager.setUserInputEnabled(false);
+                            setFeedPagingEnabled(false);
                         } else {
                             if (pinchingHolder == this) pinchingHolder = null;
-                            pager.setUserInputEnabled(true);
+                            setFeedPagingEnabled(true);
                             showControlsTemporarily();
                             // Resume a completion-driven advance only after fingers let go.
                             pager.post(ChaosFeedView.this::tryPendingAutoAdvance);
@@ -4305,6 +4463,7 @@ public final class ChaosFeedView extends FrameLayout {
 
             playerView.setOnClickListener(v -> {
                 haptic(v);
+                if (fullscreenInputLocked()) return;
                 if (clearDisplay) {
                     setClearDisplay(false);
                     return;
@@ -4341,13 +4500,14 @@ public final class ChaosFeedView extends FrameLayout {
 
             playerView.setLongClickable(false);
             videoTaps = new ShitTokVideoTaps(activity, () -> item,
-                    () -> ownsPlayback() && !scrubbing && !pinch.ownsTouchSequence()
+                    () -> !fullscreenInputLocked() && ownsPlayback() && !scrubbing && !pinch.ownsTouchSequence()
                             && !creatorSwipeTracking,
                     () -> playerView.performClick(), this::favoriteFromDoubleTap,
                     this::beginSpeedBoost, () -> {
                         if (player != null) playbackOwner.endSpeedBoost(player);
                     });
             playerView.setOnTouchListener((v, event) -> {
+                if (fullscreenInputLocked()) return true;
                 // Let View clear its pressed/click state on the synthetic child cancel.
                 if (pinch.ownsTouchSequence()) {
                     videoTaps.cancel();
@@ -4368,7 +4528,7 @@ public final class ChaosFeedView extends FrameLayout {
                     cancelCreatorSwipePreview(root);
                     ShitTokTransitionSnapshotStore.remove(creatorSwipeTransitionToken);
                     creatorSwipeTransitionToken = "";
-                    pager.setUserInputEnabled(true);
+                    setFeedPagingEnabled(true);
                     ViewParentCompat.disallow(v, false);
                     return true;
                 }
@@ -4397,7 +4557,7 @@ public final class ChaosFeedView extends FrameLayout {
                             if (erome) beginEromeSwipePreview(item, creatorSwipeTransitionToken);
                             else beginCreatorSwipePreview(creator, creatorSwipeTransitionToken);
                         }
-                        pager.setUserInputEnabled(false);
+                        setFeedPagingEnabled(false);
                         ViewParentCompat.disallow(v, true);
                     }
                     if (creatorSwipeTracking) {
@@ -4418,7 +4578,7 @@ public final class ChaosFeedView extends FrameLayout {
                         creatorSwipeTracking = false;
                         creatorSwipeOpensErome = false;
                         creatorSwipeAlbumUrl = "";
-                        pager.setUserInputEnabled(true);
+                        setFeedPagingEnabled(true);
                         ViewParentCompat.disallow(v, false);
                         if (openGallery && (erome || creatorIdentity != null)) {
                             String creator = creatorIdentity == null ? "" : creatorIdentity.title;
@@ -4445,7 +4605,7 @@ public final class ChaosFeedView extends FrameLayout {
                         return true;
                     }
 
-                    pager.setUserInputEnabled(true);
+                    setFeedPagingEnabled(true);
                     ViewParentCompat.disallow(v, false);
                 }
                 // GestureDetector confirms a single tap only after ruling out a double tap.
@@ -4476,21 +4636,7 @@ public final class ChaosFeedView extends FrameLayout {
                 haptic(v);
                 openCreatorGallery(false, "");
             });
-            creatorFavoriteTarget.setOnClickListener(v -> {
-                if (creatorIdentity == null
-                        || CreatorFavoriteStore.contains(activity, creatorIdentity)) return;
-                haptic(v);
-                CreatorFavoriteStore.toggle(activity, creatorIdentity);
-                ShitTokSmartRanker.action(item, ShitTokSmartRanker.Action.CREATOR_FAVORITE);
-                refreshCreatorFavoriteBadge();
-                pulse(creatorFavoriteBadge, 1.15f);
-                ZeroChillToast.makeText(
-                        activity,
-                        "Added " + creatorIdentity.title + " to Favorite Creators.",
-                        ZeroChillToast.LENGTH_SHORT
-                ).show();
-                showControlsTemporarily();
-            });
+            creatorFavoriteTarget.setOnClickListener(this::favoriteCreator);
 
             fullscreen.setOnClickListener(v -> {
                 if (!horizontalVideo) return;
@@ -4507,7 +4653,7 @@ public final class ChaosFeedView extends FrameLayout {
             });
             save.setOnClickListener(v -> {
                 haptic(v);
-                toggleSaved(item, save);
+                showSaveOptions(item);
                 showControlsTemporarily();
             });
             comments.setOnClickListener(v -> {
@@ -4527,36 +4673,40 @@ public final class ChaosFeedView extends FrameLayout {
                 public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
                     if (!fromUser || player == null) return;
                     long duration = player.getDuration();
-                    if (duration <= 0L) return;
+                    if (duration <= 0L || (landscapeFullscreen() && !canSeekFullscreen())) return;
                     long target = ShitTokInteractionPolicy.targetTime(duration, progress, bar.getMax());
                     updateTimeLabels(target, duration);
                     if (scrubbing) {
                         pendingScrubPosition = target;
-                        showScrubPreview(target, duration);
+                        if (!landscapeFullscreen()) showScrubPreview(target, duration);
                     } else player.seekTo(target); // Keyboard/accessibility adjustments commit directly.
                 }
 
                 @Override
                 public void onStartTrackingTouch(SeekBar bar) {
                     if (videoTaps != null) videoTaps.cancel();
-                    if (player == null || player.getDuration() <= 0L) return;
+                    if (player == null || player.getDuration() <= 0L
+                            || (landscapeFullscreen() && !canSeekFullscreen())) return;
+                    fullscreenGestures.cancel();
                     scrubPlayer = player;
                     scrubStartPosition = Math.max(0L, player.getCurrentPosition());
                     pendingScrubPosition = scrubStartPosition;
-                    scrubWasPlaying = player.getPlayWhenReady();
+                    boolean fullscreen = landscapeFullscreen();
+                    scrubWasPlaying = !fullscreen && player.getPlayWhenReady();
                     scrubbing = true;
-                    player.pause();
-                    pager.setUserInputEnabled(false);
+                    if (!fullscreen) player.pause();
+                    setFeedPagingEnabled(false);
                     ViewParentCompat.disallow(bar, true);
                     showControlsPersistent();
-                    beginScrubPreview();
+                    if (!fullscreen) beginScrubPreview();
                 }
 
                 @Override
                 public void onStopTrackingTouch(SeekBar bar) {
                     endScrubPreview(true, true);
                     updateProgress();
-                    if (player != null && player.isPlaying()) showControlsTemporarily();
+                    if (landscapeFullscreen()) armFullscreenAutoHide();
+                    else if (player != null && player.isPlaying()) showControlsTemporarily();
                     else showControlsPersistent();
                 }
             });
@@ -4604,9 +4754,10 @@ public final class ChaosFeedView extends FrameLayout {
             if (scrubPreview != null) scrubPreview.end();
             scrubPreviewView.hide();
             ViewParentCompat.disallow(seekBar, false);
-            pager.setUserInputEnabled(true);
+            setFeedPagingEnabled(true);
             if (scrubbed != null && scrubbed == player && ownsPlayback()) {
-                if (commit) scrubbed.seekTo(Math.max(0L,
+                if (commit && (!landscapeFullscreen() || canSeekFullscreen()))
+                    scrubbed.seekTo(Math.max(0L,
                         Math.min(pendingScrubPosition, Math.max(0L, scrubbed.getDuration()))));
                 if (restorePlayback && scrubWasPlaying) scrubbed.play();
             }
@@ -4620,6 +4771,7 @@ public final class ChaosFeedView extends FrameLayout {
             }
             if (scrubbing) endScrubPreview(false, true);
             if (videoTaps != null) videoTaps.cancel();
+            if (fullscreenGestures != null) fullscreenGestures.cancel();
             root.removeCallbacks(hideHeart);
             if (heartOverlay != null) {
                 heartOverlay.animate().withEndAction(null).cancel();
@@ -4719,13 +4871,11 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void syncMuteButtons() {
-            for (TextView button : new TextView[] { mute, landscapeMute }) {
-                button.setCompoundDrawablesWithIntrinsicBounds(0, chaosMuted
-                        ? R.drawable.ic_shittok_rail_volume_off : R.drawable.ic_shittok_rail_volume_on, 0, 0);
-                button.setCompoundDrawableTintList(ColorStateList.valueOf(
-                        chaosMuted ? AppearanceTheme.accent(activity) : Color.WHITE));
-                button.setContentDescription(chaosMuted ? "Unmute video" : "Mute video");
-            }
+            mute.setCompoundDrawablesWithIntrinsicBounds(0, chaosMuted
+                    ? R.drawable.ic_shittok_rail_volume_off : R.drawable.ic_shittok_rail_volume_on, 0, 0);
+            mute.setCompoundDrawableTintList(ColorStateList.valueOf(
+                    chaosMuted ? AppearanceTheme.accent(activity) : Color.WHITE));
+            mute.setContentDescription(chaosMuted ? "Unmute video" : "Mute video");
         }
 
         private TextView textIconActionButton(int icon, String description, String tag) {
@@ -4779,6 +4929,13 @@ public final class ChaosFeedView extends FrameLayout {
             title.setText(displayTitle);
             landscapeTitle.setText(next.title == null || next.title.isEmpty()
                     ? displayTitle : next.title);
+            String description = next.description == null ? "" : next.description.trim();
+            if (description.contentEquals(landscapeTitle.getText()) || description.equals(creator)) description = "";
+            landscapeDescription.setText(description);
+            landscapeDescription.setVisibility(description.isEmpty() ? View.GONE : View.VISIBLE);
+            landscapeDescription.setContentDescription(description.isEmpty() ? null
+                    : description + ". Show full description");
+            bindFullscreenCreator();
             boolean eromeClip = !ShitTokEromeGallery.albumUrl(next).isEmpty();
             title.setClickable(creatorClip || eromeClip);
             title.setContentDescription(
@@ -4930,6 +5087,29 @@ public final class ChaosFeedView extends FrameLayout {
             }
         }
 
+        private void bindFullscreenCreator() {
+            if (!landscapeFullscreen() || item == null || boundPosition != selectedPosition) return;
+            String name = creatorIdentity == null ? item.uploader : creatorIdentity.title;
+            boolean hasCreator = name != null && !name.isBlank();
+            landscapeCreator.setText(hasCreator ? name : "");
+            ((View) landscapeCreator.getParent()).setVisibility(hasCreator ? View.VISIBLE : View.GONE);
+            landscapeAvatar.setVisibility(hasCreator ? View.VISIBLE : View.GONE);
+            landscapeFavorite.setVisibility(creatorIdentity == null ? View.GONE : View.VISIBLE);
+            String avatar = creatorIdentity == null ? "" : creatorIdentity.imageUrl;
+            String referer = creatorIdentity == null ? "" : creatorIdentity.url;
+            String key = referer + "\n" + avatar;
+            if (!key.equals(landscapeAvatarKey)) {
+                landscapeAvatarKey = key;
+                Glide.with(landscapeAvatar).clear(landscapeAvatar);
+                landscapeAvatar.setImageResource(R.drawable.ic_more_account);
+                if (avatar != null && !avatar.isBlank()) {
+                    Glide.with(landscapeAvatar).load(imageWithHeaders(avatar, referer)).circleCrop()
+                            .placeholder(R.drawable.ic_more_account).error(R.drawable.ic_more_account)
+                            .into(landscapeAvatar);
+                }
+            }
+        }
+
         private void bindCreatorAvatar(NativeContentItem media, boolean creatorClip) {
             Glide.with(creatorAvatar).clear(creatorAvatar);
             creatorAvatar.setImageResource(R.drawable.ic_more_account);
@@ -4969,6 +5149,18 @@ public final class ChaosFeedView extends FrameLayout {
             refreshCreatorFavoriteBadge();
         }
 
+        private void favoriteCreator(View view) {
+            if (creatorIdentity == null || CreatorFavoriteStore.contains(activity, creatorIdentity)) return;
+            haptic(view);
+            CreatorFavoriteStore.toggle(activity, creatorIdentity);
+            ShitTokSmartRanker.action(item, ShitTokSmartRanker.Action.CREATOR_FAVORITE);
+            refreshCreatorFavoriteBadge();
+            pulse(view == landscapeFavorite ? landscapeFavorite : creatorFavoriteBadge, 1.15f);
+            ZeroChillToast.makeText(activity,
+                    "Added " + creatorIdentity.title + " to Favorite Creators.", ZeroChillToast.LENGTH_SHORT).show();
+            showControlsTemporarily();
+        }
+
         private void refreshCreatorFavoriteBadge() {
             if (creatorIdentity == null) return;
             boolean favorite;
@@ -4977,6 +5169,9 @@ public final class ChaosFeedView extends FrameLayout {
                 favorite = CreatorFavoriteStore.contains(activity, creatorIdentity);
                 if (item != null) creatorFavoriteCache.put(item.url, favorite);
             }
+            landscapeFavorite.setText(favorite ? "✓" : "+");
+            landscapeFavorite.setTextColor(AppearanceTheme.accent(activity));
+            landscapeFavorite.setEnabled(!favorite);
             creatorFavoriteBadge.setText(favorite ? "✓" : "+");
             creatorFavoriteBadge.setTextSize(favorite ? 13 : 16);
             creatorFavoriteTarget.setClickable(!favorite);
@@ -4987,6 +5182,7 @@ public final class ChaosFeedView extends FrameLayout {
                             ? creatorIdentity.title + " is in Favorite Creators"
                             : "Add " + creatorIdentity.title + " to Favorite Creators"
             );
+            landscapeFavorite.setContentDescription(creatorFavoriteTarget.getContentDescription());
         }
 
         private void refreshFullscreenAccent(int accent) {
@@ -5001,6 +5197,8 @@ public final class ChaosFeedView extends FrameLayout {
         void refreshVisualTheme() {
             int accent = AppearanceTheme.accent(activity);
             refreshFullscreenAccent(accent);
+            fullscreenPlayPause.setBackground(circleDrawable(0x66000000, accent, 1));
+            landscapeFavorite.setTextColor(accent);
             avatarRing.setBackground(circleDrawable(Color.BLACK, accent, 2));
             creatorFavoriteBadge.setBackground(circleDrawable(accent, Color.BLACK, 2));
             creatorFavoriteBadge.setTextColor(AppearanceTheme.onAccent(activity));
@@ -5076,6 +5274,7 @@ public final class ChaosFeedView extends FrameLayout {
             everStarted = false;
             playbackSuspended = false;
             controlsVisible = true;
+            landscapeControlsMounted = false;
             userPaused = false;
             scrubbing = false;
             retryAttempted = false;
@@ -5498,6 +5697,19 @@ public final class ChaosFeedView extends FrameLayout {
                 }
 
                 @Override
+                public void onPositionDiscontinuity(Player.PositionInfo oldPosition, Player.PositionInfo newPosition,
+                                                    int reason) {
+                    if (landscapeFullscreen() && listenerGeneration == feedGeneration
+                            && validUiCallback(createdPlayer, listenerUrl, listenerToken)) updateProgress();
+                }
+
+                @Override
+                public void onPlaybackParametersChanged(androidx.media3.common.PlaybackParameters parameters) {
+                    if (landscapeFullscreen() && listenerGeneration == feedGeneration
+                            && validUiCallback(createdPlayer, listenerUrl, listenerToken)) syncFullscreenPlayback();
+                }
+
+                @Override
                 public void onIsPlayingChanged(boolean isPlaying) {
                     if (listenerGeneration == feedGeneration && validUiCallback(createdPlayer, listenerUrl, listenerToken)) {
                         if (isPlaying && ownsPlayback()) ShitTokSmartRanker.onViewed(listenerUrl);
@@ -5516,13 +5728,17 @@ public final class ChaosFeedView extends FrameLayout {
                         userPaused = false;
                         everStarted = true;
                         hidePausedChrome();
-                        showControlsTemporarily();
+                        if (!landscapeFullscreen()) showControlsTemporarily();
                     } else {
                         updateProgress();
                         if (userPaused) {
                             if (!scrubbing) showControlsPersistent();
                             syncPausedChrome();
                         } else hidePausedChrome();
+                    }
+                    if (landscapeFullscreen()) {
+                        syncFullscreenPlayback();
+                        armFullscreenAutoHide();
                     }
                 }
 
@@ -5883,7 +6099,7 @@ public final class ChaosFeedView extends FrameLayout {
             if (item != null) ShitTokSmartRanker.completion(item.url, completedPlayer.getDuration());
             ShitTokAutoScrollPolicy.Completion decision = ShitTokAutoScrollPolicy.onCompleted(
                     active, hostResumed, boundPosition == selectedPosition, userPaused,
-                    autoScrollEnabled && !interactionOverlayOpen(), userPaging);
+                    autoScrollEnabled && !fullscreenInputLocked() && !interactionOverlayOpen(), userPaging);
             if (decision == ShitTokAutoScrollPolicy.Completion.ADVANCE) {
                 requestAutoAdvance(boundPosition);
             } else if (decision == ShitTokAutoScrollPolicy.Completion.LOOP) {
@@ -5894,7 +6110,7 @@ public final class ChaosFeedView extends FrameLayout {
 
         private void syncPausedChrome() {
             if (pinch.suppressesFeedChrome()) return;
-            boolean show = shouldShowPausedChrome(userPaused, clearDisplay);
+            boolean show = !landscapeFullscreen() && shouldShowPausedChrome(userPaused, clearDisplay);
             pausePlayOverlay.animate().cancel();
             if (show) {
                 if (pausePlayOverlay.getVisibility() != View.VISIBLE) {
@@ -5924,18 +6140,25 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void syncProgressChrome(long duration) {
-            boolean interactive = scrubbing || shouldShowPausedChrome(userPaused, clearDisplay)
-                    || (landscapeFullscreen() && controlsVisible);
+            boolean landscape = landscapeFullscreen();
+            if (landscape) {
+                progressRow.animate().withEndAction(null).cancel();
+                progressRow.setAlpha(1f);
+                progressRow.setVisibility(View.VISIBLE);
+                elapsedTime.setVisibility(View.VISIBLE);
+                remainingTime.setVisibility(View.VISIBLE);
+            }
+            boolean interactive = landscape || scrubbing || shouldShowPausedChrome(userPaused, clearDisplay);
             boolean visible = !clearDisplay && !pinch.suppressesFeedChrome()
                     && (interactive || ShitTokInteractionPolicy.persistentProgress(duration));
-            if (visible && !Boolean.TRUE.equals(progressChromeVisible)) {
+            if (!landscape && visible && !Boolean.TRUE.equals(progressChromeVisible)) {
                 progressRow.animate().withEndAction(null).cancel();
                 progressRow.setVisibility(View.VISIBLE);
                 if (ZeroChillMotion.animationsEnabled(activity) && !scrubbing) {
                     progressRow.setAlpha(0f);
                     progressRow.animate().alpha(1f).setDuration(ZeroChillMotion.QUICK_MS).start();
                 } else progressRow.setAlpha(1f);
-            } else if (!visible && !Boolean.FALSE.equals(progressChromeVisible)) {
+            } else if (!landscape && !visible && !Boolean.FALSE.equals(progressChromeVisible)) {
                 progressRow.animate().withEndAction(null).cancel();
                 if (ZeroChillMotion.animationsEnabled(activity)) {
                     progressRow.animate().alpha(0f).setDuration(ZeroChillMotion.QUICK_MS)
@@ -5947,11 +6170,10 @@ public final class ChaosFeedView extends FrameLayout {
                 }
             }
             progressChromeVisible = visible;
-            int timeVisibility = landscapeFullscreen()
-                    ? (interactive ? View.VISIBLE : View.INVISIBLE) : View.GONE;
+            int timeVisibility = landscape ? View.VISIBLE : View.GONE;
             elapsedTime.setVisibility(timeVisibility);
             remainingTime.setVisibility(timeVisibility);
-            boolean portraitProgress = portrait();
+            boolean portraitProgress = !landscape;
             if (progressInteractive == null || progressInteractive != interactive
                     || progressPortrait == null || progressPortrait != portraitProgress) {
                 progressInteractive = interactive;
@@ -5971,7 +6193,8 @@ public final class ChaosFeedView extends FrameLayout {
             root.removeCallbacks(progressTick);
             if (active && hostResumed && boundPosition == selectedPosition && !clearDisplay
                     && !scrubbing && player != null && player.isPlaying()
-                    && progressRow.getVisibility() == View.VISIBLE) root.postDelayed(progressTick, 250L);
+                    && progressRow.getVisibility() == View.VISIBLE
+                    && (!landscapeFullscreen() || controlsVisible)) root.postDelayed(progressTick, 250L);
         }
 
         void showControlsTemporarily() {
@@ -5997,7 +6220,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private boolean landscapeFullscreen() {
-            return !portrait();
+            return landscapePlayerVisible();
         }
 
         private TextView progressTimeLabel(String tag, String initial) {
@@ -6037,14 +6260,29 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void layoutPlaybackControls(boolean landscape) {
-            int safeBottom = landscape ? landscapeBottomInset() + dp(4) : 0;
-            FrameLayout.LayoutParams actions = (FrameLayout.LayoutParams) landscapeActions.getLayoutParams();
-            actions.bottomMargin = safeBottom;
-            landscapeActions.setLayoutParams(actions);
+            androidx.core.view.WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(root);
+            androidx.core.graphics.Insets safe = insets == null ? androidx.core.graphics.Insets.NONE
+                    : insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                        | androidx.core.view.WindowInsetsCompat.Type.displayCutout()
+                        | androidx.core.view.WindowInsetsCompat.Type.mandatorySystemGestures());
+            int safeBottom = landscape ? Math.max(safe.bottom, landscapeBottomInset()) + dp(4) : 0;
+            int left = landscape ? safe.left + dp(12) : dp(8);
+            int right = landscape ? safe.right + dp(12) : dp(8);
+            if (landscape) {
+                layOutOverlayChild(landscapeHeader, left, safe.top + dp(4), right, 0);
+                layOutOverlayChild(landscapeActions, left, 0, right, safeBottom);
+            }
+            FrameLayout target = landscape ? fullscreenOverlay : root;
+            if (progressRow.getParent() != target) {
+                detachChrome(progressRow);
+                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, dp(48), Gravity.BOTTOM);
+                if (landscape) target.addView(progressRow, params);
+                else target.addView(progressRow, root.indexOfChild(lower), params);
+                progressChromeVisible = null;
+            }
+            // Move the portrait track's center up so its bottom meets the video edge.
+            layOutOverlayChild(progressRow, left, 0, right, landscape ? safeBottom + dp(48) : -dp(13));
             FrameLayout.LayoutParams progress = (FrameLayout.LayoutParams) progressRow.getLayoutParams();
-            // Move the 4dp portrait track's center up 2dp so its bottom meets the video edge.
-            progress.bottomMargin = landscape ? safeBottom + dp(48) : -dp(13);
-            progressRow.setLayoutParams(progress);
             elapsedTime.setVisibility(landscape ? View.VISIBLE : View.GONE);
             remainingTime.setVisibility(landscape ? View.VISIBLE : View.GONE);
             seekBar.setPadding(0, landscape ? 0 : dp(18), 0, 0);
@@ -6070,6 +6308,14 @@ public final class ChaosFeedView extends FrameLayout {
             updateFullscreenPromptPosition();
         }
 
+        private void layOutOverlayChild(View child, int left, int top, int right, int bottom) {
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) child.getLayoutParams();
+            if (params.leftMargin == left && params.topMargin == top
+                    && params.rightMargin == right && params.bottomMargin == bottom) return;
+            params.setMargins(left, top, right, bottom);
+            child.setLayoutParams(params);
+        }
+
         private void insetPlaybackViewport(int inset) {
             insetBottom(playerView, inset);
             insetBottom(poster, inset);
@@ -6089,6 +6335,11 @@ public final class ChaosFeedView extends FrameLayout {
         private void applyControlLayout() {
             boolean landscape = landscapeFullscreen();
             layoutPlaybackControls(landscape);
+            fullscreenSurface.setVisibility(landscape ? View.VISIBLE : View.GONE);
+            if (!landscape) {
+                fullscreenOverlay.animate().withEndAction(null).cancel();
+                fullscreenOverlay.setVisibility(View.GONE);
+            }
             lower.setVisibility(landscape ? View.GONE : View.VISIBLE);
             creatorAvatarControl.setVisibility(!landscape && creatorIdentity != null
                     ? View.VISIBLE : View.GONE);
@@ -6105,60 +6356,145 @@ public final class ChaosFeedView extends FrameLayout {
             if (pinch.suppressesFeedChrome()) return;
             updateAmbientBackdrop();
             applyViewportInset();
+            boolean landscape = landscapeFullscreen();
+            boolean entering = landscape && !landscapeControlsMounted;
+            if (!landscape && landscapeControlsMounted) fullscreenGestures.cancel();
+            landscapeControlsMounted = landscape;
+            if (landscape) {
+                if (boundPosition == selectedPosition) setFeedPagingEnabled(false);
+                applyControlLayout();
+                bindFullscreenCreator();
+                pausePlayOverlay.setVisibility(View.GONE);
+                if (entering) showFullscreenControls(true);
+                else syncFullscreenPlayback();
+                return;
+            }
             if (clearDisplay) {
                 applyClearDisplay(true);
                 return;
             }
-            root.removeCallbacks(hideControlsRunnable);
-            lower.animate().cancel();
-            landscapeTopScrim.animate().cancel();
-            landscapeBottomScrim.animate().cancel();
-            landscapeHeader.animate().cancel();
-            landscapeActions.animate().cancel();
-            controlsVisible = true;
-            resetEntranceOffsets();
-            applyControlLayout();
-            lower.setAlpha(1f);
-            creatorAvatarControl.setAlpha(1f);
-            fullscreen.setAlpha(1f);
-            landscapeTopScrim.setAlpha(1f);
-            landscapeBottomScrim.setAlpha(1f);
-            landscapeHeader.setAlpha(1f);
-            landscapeActions.setAlpha(1f);
-
-            syncPausedChrome();
-
-            if (!portrait() && player != null && player.isPlaying() && !scrubbing) {
-                root.postDelayed(hideControlsRunnable, FullscreenPlayerStyle.HIDE_DELAY_MS);
-            }
+            showControls(false);
         }
 
         private void showControls(boolean autoHide) {
             if (pinch.suppressesFeedChrome()) return;
+            if (landscapeFullscreen()) {
+                showFullscreenControls(autoHide);
+                return;
+            }
             if (clearDisplay) {
                 applyClearDisplay(true);
                 return;
             }
             root.removeCallbacks(hideControlsRunnable);
             lower.animate().cancel();
-            landscapeTopScrim.animate().cancel();
-            landscapeBottomScrim.animate().cancel();
-            landscapeHeader.animate().cancel();
-            landscapeActions.animate().cancel();
             controlsVisible = true;
             resetEntranceOffsets();
             applyControlLayout();
             lower.setAlpha(1f);
             creatorAvatarControl.setAlpha(1f);
             fullscreen.setAlpha(1f);
-            landscapeTopScrim.setAlpha(1f);
-            landscapeBottomScrim.setAlpha(1f);
-            landscapeHeader.setAlpha(1f);
-            landscapeActions.setAlpha(1f);
             syncPausedChrome();
-            if (autoHide && !scrubbing && !portrait()) {
-                root.postDelayed(hideControlsRunnable, FullscreenPlayerStyle.HIDE_DELAY_MS);
+        }
+
+        private void showFullscreenControls(boolean autoHide) {
+            if (!landscapeFullscreen()) return;
+            boolean reveal = fullscreenOverlay.getVisibility() != View.VISIBLE || !controlsVisible;
+            controlsVisible = true;
+            fullscreenOverlay.animate().withEndAction(null).cancel();
+            fullscreenOverlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+            fullscreenOverlay.setVisibility(View.VISIBLE);
+            if (reveal && ZeroChillMotion.animationsEnabled(activity)) {
+                fullscreenOverlay.setAlpha(0f);
+                fullscreenOverlay.animate().alpha(1f).setDuration(FullscreenPlayerStyle.FADE_MS).start();
+            } else {
+                fullscreenOverlay.setAlpha(1f);
             }
+            syncFullscreenPlayback();
+            updateProgress();
+            restartProgressTick();
+            if (autoHide) armFullscreenAutoHide();
+            else root.removeCallbacks(hideControlsRunnable);
+        }
+
+        private void hideFullscreenControls() {
+            if (!landscapeFullscreen() || !controlsVisible || scrubbing || interactionOverlayOpen()) return;
+            controlsVisible = false;
+            root.removeCallbacks(hideControlsRunnable);
+            root.removeCallbacks(progressTick);
+            fullscreenOverlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            fullscreenOverlay.animate().withEndAction(null).cancel();
+            if (ZeroChillMotion.animationsEnabled(activity)) {
+                fullscreenOverlay.animate().alpha(0f).setDuration(FullscreenPlayerStyle.FADE_MS)
+                        .withEndAction(() -> {
+                            if (!controlsVisible) fullscreenOverlay.setVisibility(View.INVISIBLE);
+                        }).start();
+            } else {
+                fullscreenOverlay.setAlpha(0f);
+                fullscreenOverlay.setVisibility(View.INVISIBLE);
+            }
+        }
+
+        private void armFullscreenAutoHide() {
+            root.removeCallbacks(hideControlsRunnable);
+            if (landscapeFullscreen() && controlsVisible && active && hostResumed && !scrubbing
+                    && !interactionOverlayOpen() && player != null && player.isPlaying()) {
+                root.postDelayed(hideControlsRunnable, 3_200L);
+            }
+        }
+
+        private boolean canSeekFullscreen() {
+            return player != null && ownsPlayback()
+                    && player.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+                    && player.getDuration() > 0L;
+        }
+
+        private void syncFullscreenPlayback() {
+            boolean playable = player != null && ownsPlayback();
+            boolean playing = playable && player.getPlayWhenReady()
+                    && player.getPlaybackState() != Player.STATE_ENDED;
+            fullscreenPlayPause.setEnabled(playable);
+            fullscreenPlayPause.setImageResource(playing ? R.drawable.ic_player_pause : R.drawable.ic_player_play);
+            fullscreenPlayPause.setContentDescription(playing ? "Pause video" : "Play video");
+            fullscreenSpeed.setEnabled(playable);
+            String speed = fullscreenSpeedLabel(playable ? player.getPlaybackParameters().speed : 1f);
+            fullscreenSpeed.setText(speed);
+            fullscreenSpeed.setContentDescription("Playback speed " + speed);
+        }
+
+        private String fullscreenSpeedLabel(float speed) {
+            return java.math.BigDecimal.valueOf((double) speed).stripTrailingZeros().toPlainString() + "×";
+        }
+
+        private void showFullscreenSpeedMenu() {
+            if (player == null || !ownsPlayback() || !landscapeFullscreen() || interactionOverlayOpen()) return;
+            ExoPlayer selected = player;
+            float[] speeds = {.5f, .75f, 1f, 1.25f, 1.5f, 2f};
+            String[] labels = new String[speeds.length];
+            int checked = -1;
+            for (int i = 0; i < speeds.length; i++) {
+                labels[i] = fullscreenSpeedLabel(speeds[i]);
+                if (speeds[i] == selected.getPlaybackParameters().speed) checked = i;
+            }
+            showFullscreenDialog(new ZeroChillDialog.Builder(activity)
+                    .setTitle("Playback speed")
+                    .setSingleChoiceItems(labels, checked, (dialog, index) -> {
+                        if (landscapeFullscreen() && player == selected && ownsPlayback()) {
+                            selected.setPlaybackSpeed(speeds[index]);
+                            syncFullscreenPlayback();
+                        }
+                        dialog.dismiss();
+                    }).create());
+        }
+
+        private void showFullscreenDialog(AlertDialog fullscreenDialog) {
+            root.removeCallbacks(hideControlsRunnable);
+            actionDialog = fullscreenDialog;
+            actionDialog.setOnDismissListener(dialog -> {
+                if (actionDialog == dialog) actionDialog = null;
+                armFullscreenAutoHide();
+            });
+            actionDialog.show();
         }
 
         void applyClearDisplay(boolean clear) {
@@ -6214,54 +6550,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         private void hideControlsNow() {
-            if (pinch.suppressesFeedChrome()) return;
-            if (portrait()) {
-                controlsVisible = true;
-                applyControlLayout();
-                lower.setAlpha(1f);
-                creatorAvatarControl.setAlpha(1f);
-                fullscreen.setAlpha(1f);
-                return;
-            }
-            if (scrubbing || player == null || !player.isPlaying()) return;
-            controlsVisible = false;
-            root.removeCallbacks(progressTick);
-            syncProgressChrome(player.getDuration());
-            restartProgressTick();
-            lower.animate()
-                    .alpha(0f)
-                    .setDuration(FullscreenPlayerStyle.FADE_MS)
-                    .withEndAction(() -> {
-                        if (!controlsVisible) lower.setVisibility(View.INVISIBLE);
-                    })
-                    .start();
-            creatorAvatarControl.animate().alpha(0f).setDuration(FullscreenPlayerStyle.FADE_MS).start();
-            fullscreen.animate().alpha(0f).setDuration(FullscreenPlayerStyle.FADE_MS).start();
-            landscapeTopScrim.animate()
-                    .alpha(0f)
-                    .setDuration(FullscreenPlayerStyle.FADE_MS)
-                    .withEndAction(() -> {
-                        if (!controlsVisible) landscapeTopScrim.setVisibility(View.INVISIBLE);
-                    })
-                    .start();
-            landscapeBottomScrim.animate()
-                    .alpha(0f)
-                    .setDuration(FullscreenPlayerStyle.FADE_MS)
-                    .withEndAction(() -> {
-                        if (!controlsVisible) landscapeBottomScrim.setVisibility(View.INVISIBLE);
-                    })
-                    .start();
-            landscapeActions.animate().alpha(0f).setDuration(FullscreenPlayerStyle.FADE_MS).start();
-            landscapeHeader.animate()
-                    .alpha(0f)
-                    .setDuration(FullscreenPlayerStyle.FADE_MS)
-                    .withEndAction(() -> {
-                        if (!controlsVisible) {
-                            landscapeHeader.setVisibility(View.INVISIBLE);
-                            landscapeActions.setVisibility(View.INVISIBLE);
-                        }
-                    })
-                    .start();
+            if (landscapeFullscreen() && player != null && player.isPlaying()) hideFullscreenControls();
         }
 
         private void updateProgress() {
@@ -6275,7 +6564,7 @@ public final class ChaosFeedView extends FrameLayout {
                 updateTimeLabels(0L, 0L);
                 return;
             }
-            seekBar.setEnabled(true);
+            seekBar.setEnabled(!landscapeFullscreen() || canSeekFullscreen());
             int progress = (int) Math.max(0L, Math.min(1000L, (position * 1000L) / duration));
             seekBar.setProgress(progress);
             updateTimeLabels(position, duration);
@@ -6283,12 +6572,12 @@ public final class ChaosFeedView extends FrameLayout {
 
         private void updateTimeLabels(long position, long duration) {
             long bounded = Math.max(0L, Math.min(position, duration));
-            long second = bounded / 1000L, remainingSecond = Math.max(0L, duration - bounded) / 1000L;
+            long second = bounded / 1000L, remainingSecond = duration > 0L ? duration / 1000L : -1L;
             if (displayedSecond == second && displayedRemainingSecond == remainingSecond) return;
             displayedSecond = second;
             displayedRemainingSecond = remainingSecond;
             elapsedTime.setText(formatPlaybackTime(bounded));
-            remainingTime.setText(FullscreenPlayerStyle.remaining(bounded, duration));
+            remainingTime.setText(duration > 0L ? formatPlaybackTime(duration) : "–:––");
         }
 
         void showRetrying() {
@@ -6337,8 +6626,10 @@ public final class ChaosFeedView extends FrameLayout {
                 unplayable.add(item.url);
                 requestContinuity();
             }
-            failure.setText("Couldn't play this one\nMoving to the next video…");
-            failure.setContentDescription("Couldn't play this video. Moving to the next video.");
+            String failureMessage = fullscreenInputLocked() ? "Couldn't play this video"
+                    : "Couldn't play this one\nMoving to the next video…";
+            failure.setText(failureMessage);
+            failure.setContentDescription(failureMessage);
             failure.setVisibility(View.VISIBLE);
             poster.setVisibility(View.VISIBLE);
             userPaused = false;
@@ -6346,7 +6637,7 @@ public final class ChaosFeedView extends FrameLayout {
             showControlsPersistent();
             root.removeCallbacks(skipFailedClipRunnable);
             root.removeCallbacks(progressTick);
-            root.postDelayed(skipFailedClipRunnable, FAILED_CLIP_SKIP_DELAY_MS);
+            if (!fullscreenInputLocked()) root.postDelayed(skipFailedClipRunnable, FAILED_CLIP_SKIP_DELAY_MS);
         }
 
         void pauseAndRecord() {
@@ -6375,6 +6666,7 @@ public final class ChaosFeedView extends FrameLayout {
         }
 
         void releasePlayer() {
+            fullscreenGestures.cancel();
             root.removeCallbacks(hideControlsRunnable);
             root.removeCallbacks(skipFailedClipRunnable);
             root.removeCallbacks(progressTick);

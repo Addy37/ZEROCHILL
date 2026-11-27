@@ -152,6 +152,35 @@ public class CreatorBackupTest {
         assertEquals("must-not-be-exported", context.getSharedPreferences("app_prefs", 0).getString("private_cookie", ""));
     }
 
+    @Test public void collectionsRoundTripAndLegacyBackupPreservesMembership() throws Exception {
+        NativeContentItem media = OnlyFapVideoMetadata.basic(
+                "Saved video", "https://bunkr.cr/f/fixture", "")
+                .withSourceMedia("https://media.example.com/video.mp4", "https://bunkr.cr/a/fixture");
+        FavoriteStore.add(context, media);
+        String collection = MediaCollectionStore.create(context, "Saved clips");
+        MediaCollectionStore.assign(context, media, "", java.util.Collections.singleton(collection));
+        JSONObject backup = AppBackupStore.export(context);
+
+        context.getSharedPreferences("watch_later", 0).edit().clear().commit();
+        AppBackupStore.restore(context, backup);
+        assertTrue(FavoriteStore.contains(context, media.url));
+        assertEquals("Saved clips", MediaCollectionStore.find(context, collection).name);
+        assertEquals(media.url, MediaCollectionStore.items(context, collection).get(0).url);
+
+        backup.remove("collections"); // The public 7.4 format has no collection field.
+        AppBackupStore.restore(context, backup);
+        assertEquals(media.url, MediaCollectionStore.items(context, collection).get(0).url);
+
+        JSONObject content = backup.getJSONArray("watchLater").getJSONObject(0).getJSONObject("content");
+        content.put("sourceMediaUrl", "file:///tmp/fixture");
+        try {
+            AppBackupStore.restore(context, backup);
+            fail("Local source links must be rejected before restore");
+        } catch (java.io.IOException expected) {
+            assertEquals(media.url, MediaCollectionStore.items(context, collection).get(0).url);
+        }
+    }
+
     @Test public void invalidImportLeavesAllExistingDataAlone() throws Exception {
         CreatorFavoriteStore.toggle(context, creator("Anna"));
         JSONObject backup = AppBackupStore.export(context);

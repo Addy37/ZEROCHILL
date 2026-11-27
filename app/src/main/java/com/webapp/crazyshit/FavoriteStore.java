@@ -31,7 +31,7 @@ public final class FavoriteStore {
                         object.optString("title", "Saved video"),
                         url,
                         object.optLong("savedAt", 0L),
-                        OnlyFapVideoMetadata.decode(object.optJSONObject("content"), url),
+                        decodeSavedContent(object, url),
                         object.optBoolean("mediaFavorite", false),
                         object.optBoolean("watchLater", !object.optBoolean("mediaFavorite", false)),
                         object.optString("galleryKey", "")
@@ -40,6 +40,17 @@ public final class FavoriteStore {
         } catch (Exception ignored) {
         }
         return items;
+    }
+
+    private static NativeContentItem decodeSavedContent(JSONObject object, String url) {
+        JSONObject encoded = object.optJSONObject("content");
+        NativeContentItem decoded = OnlyFapVideoMetadata.decode(encoded, url);
+        // Collection-backed ordinary videos need their thumbnail and source metadata too.
+        if (decoded == null && encoded != null && object.optBoolean("mediaFavorite", false)) {
+            NativeContentItem item = ContentItemCodec.decode(encoded);
+            if (item.isVideo() && url.equals(item.url)) return item;
+        }
+        return decoded;
     }
 
     public static void add(Context context, String title, String url) {
@@ -60,7 +71,7 @@ public final class FavoriteStore {
                 title == null || title.trim().isEmpty() ? "Saved video" : title.trim(),
                 url,
                 System.currentTimeMillis(),
-                OnlyFapVideoMetadata.applies(content) || LibraryPlayback.keepStored(content) ? content : null, favorite, true, galleryKey
+                favorite || OnlyFapVideoMetadata.applies(content) || LibraryPlayback.keepStored(content) ? content : null, favorite, true, galleryKey
         ));
         save(context, items);
     }

@@ -920,10 +920,7 @@ final class ZeroChillSocialRepository {
                 requireSameAccount(context, expectedUser);
                 Response response = request(
                         "GET",
-                        "/rest/v1/rpc/visible_zerochill_direct_messages?select=id,sender_id,recipient_id,body,created_at,read_at,attachment_bucket,attachment_path"
-                                + "&or=(and(sender_id.eq." + userId + ",recipient_id.eq." + other + "),"
-                                + "and(sender_id.eq." + other + ",recipient_id.eq." + userId + "))"
-                                + "&order=created_at.asc&limit=500",
+                        recentDirectMessagesPath(userId, other),
                         token,
                         null,
                         null,
@@ -931,10 +928,7 @@ final class ZeroChillSocialRepository {
                 );
                 if (!response.ok()) throw error(response, "Unable to load the conversation.");
                 JSONArray rows = response.body.isEmpty() ? new JSONArray() : new JSONArray(response.body);
-                ArrayList<DirectMessage> messages = new ClearedMessageList(cutoff);
-                for (int i = 0; i < rows.length(); i++) {
-                    messages.add(new DirectMessage(rows.getJSONObject(i)));
-                }
+                ArrayList<DirectMessage> messages = chronologicalThread(rows, cutoff);
                 requireSameAccount(context, expectedUser);
                 requireCleanupRevision(context, expectedUser, cleanupRevision);
                 callback.complete(messages, null);
@@ -942,6 +936,22 @@ final class ZeroChillSocialRepository {
                 callback.complete(null, error);
             }
         });
+    }
+
+    static String recentDirectMessagesPath(String userId, String partnerId) {
+        return "/rest/v1/rpc/visible_zerochill_direct_messages?select=id,sender_id,recipient_id,body,created_at,read_at,attachment_bucket,attachment_path"
+                + "&or=(and(sender_id.eq." + userId + ",recipient_id.eq." + partnerId + "),"
+                + "and(sender_id.eq." + partnerId + ",recipient_id.eq." + userId + "))"
+                + "&order=created_at.desc,id.desc&limit=500";
+    }
+
+    static ArrayList<DirectMessage> chronologicalThread(JSONArray newestFirst, String cutoff)
+            throws org.json.JSONException {
+        ArrayList<DirectMessage> messages = new ClearedMessageList(cutoff);
+        for (int index = newestFirst.length() - 1; index >= 0; index--) {
+            messages.add(new DirectMessage(newestFirst.getJSONObject(index)));
+        }
+        return messages;
     }
 
     static void sendDirectMessage(
