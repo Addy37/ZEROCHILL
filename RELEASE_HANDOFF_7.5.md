@@ -101,6 +101,14 @@ confirmed fullscreen defect left open at the source checkpoint.
   UIAutomator returned a null root after the launcher was disabled. The
   follow-up wakes/unlocks the emulator, retries the UI lookup, saves per-stage
   evidence and continues to the remaining scenarios if an earlier one fails.
+  [Upgrade run with diagnostics](https://github.com/Addy37/ZEROCHILL/actions/runs/45930543221/artifacts/15168991101)
+  fully passed 7.4.0 data retention, existing download visibility, upgraded
+  What's New acknowledgement and fresh install wizard launch. 7.3.0
+  passed in-place installation and seeded byte retention before launch.
+  The second emulator installation got a different UID and inherited stale
+  SELinux labels on manually pushed preferences. Logs show EACCES on those
+  fixtures before the wizard appeared. The harness now assigns and verifies
+  the fresh app-data label before rerunning the two scenarios with the same APK.
 - Follow the [latest branch run](https://github.com/Addy37/ZEROCHILL/actions/workflows/zerochill-7-5-0-candidate.yml?query=branch%3Arelease%2Fzerochill-7.5.0-preparation).
   The signed artifact contains one APK, `SHA256SUMS.txt`,
   `BUILD_LINEAGE.txt` and `VALIDATION.json`. A later emulator-only run uses the

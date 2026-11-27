@@ -123,6 +123,11 @@ def main():
         shell('chmod', '600', destination)
     shell('chown', '-R', uid + ':' + uid, DATA + '/shared_prefs', DATA + '/files')
     shell('restorecon', '-RF', DATA)
+    # A second install on the same emulator can receive a new SELinux category
+    # even though restorecon remembers the previous path. Seed with this app's label.
+    app_label = shell('ls', '-dZ', DATA).split()[0]
+    assert app_label.startswith('u:object_r:app_data_file:'), app_label
+    shell('chcon', '-R', app_label, DATA + '/shared_prefs', DATA + '/files')
     # Representative existing download bytes in public storage, never a real user file.
     download = '/sdcard/Download/ZEROCHILL-release-gate-existing.bin'
     temporary.write_bytes(b'ZEROCHILL existing download verification\n')
@@ -133,9 +138,11 @@ def main():
     assert re.search(r'firstInstallTime=(.*)', after)[1].strip() == first_install
     assert f'versionCode={args.code} ' in after and f'versionName={args.version}' in after
     assert shell('stat', '-c', '%u', DATA).strip() == uid, 'App UID changed'
+    assert shell('ls', '-dZ', DATA).split()[0] == app_label, 'App data label changed'
     for relative, data in fixtures.items():
         actual = subprocess.check_output(['adb','exec-out','cat', DATA + '/' + relative])
         assert actual == data, f'Existing data changed during install: {relative}'
+        assert shell('ls', '-dZ', DATA + '/' + relative).split()[0] == app_label, relative
     assert expected_download in shell('sha256sum', download)
     (args.output / 'install-evidence.json').write_text(json.dumps({
         'installed_update': True, 'first_install_preserved': True, 'uid_preserved': True,
