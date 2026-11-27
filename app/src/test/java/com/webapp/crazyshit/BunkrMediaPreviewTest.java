@@ -11,6 +11,8 @@ import android.media.MediaMetadataRetriever;
 import android.os.Looper;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -48,11 +50,17 @@ public class BunkrMediaPreviewTest {
     @Implements(value = PawchiveIndexedPreview.class, isInAndroidSdk = false)
     public static class IndexedPreview {
         static final AtomicInteger calls = new AtomicInteger();
+        static volatile CyclicBarrier concurrentExtracts;
         @Implementation protected static Bitmap extract(Context context, String url,
                 BunkrPreviewDataSource.Reader reader, PawchiveIndexedPreview.Check check,
                 java.util.function.Consumer<String> trace) throws Exception {
             calls.incrementAndGet();
-            assertEquals("https://n3.pawchive.pw/data/ab/cd/visible.mp4", url);
+            CyclicBarrier barrier = concurrentExtracts;
+            if (barrier == null) {
+                assertEquals("https://n3.pawchive.pw/data/ab/cd/visible.mp4", url);
+            } else {
+                barrier.await(5, TimeUnit.SECONDS);
+            }
             check.run();
             Bitmap frame = Bitmap.createBitmap(96, 54, Bitmap.Config.ARGB_8888);
             frame.eraseColor(android.graphics.Color.GREEN);
@@ -201,6 +209,36 @@ public class BunkrMediaPreviewTest {
             assertEquals(0, Repository.calls.get());
         } finally {
             file.delete();
+        }
+    }
+
+    @Test public void pawchiveCreatorPreviewsCanExtractFourAtOnce() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        ArrayList<File> posters = new ArrayList<>();
+        ArrayList<BunkrMediaPreview.Task> tasks = new ArrayList<>();
+        AtomicInteger delivered = new AtomicInteger();
+        AtomicInteger ready = new AtomicInteger();
+        IndexedPreview.concurrentExtracts = new CyclicBarrier(4);
+        try {
+            for (int i = 0; i < 4; i++) {
+                String path = "/ab/cd/parallel-" + i + ".mp4";
+                NativeContentItem item = new NativeContentItem(NativeContentItem.KIND_MEDIA, "clip",
+                        "https://file.pawchive.pw/data" + path, "", "", "", "")
+                        .withSourceMedia("https://n3.pawchive.pw/data" + path, "");
+                File poster = BunkrMediaPreview.cacheFile(context, item);
+                poster.delete();
+                posters.add(poster);
+                tasks.add(BunkrMediaPreview.requestPawchiveVideo(context, item, file -> {
+                    if (poster.equals(file)) ready.incrementAndGet();
+                    delivered.incrementAndGet();
+                }));
+            }
+            await(delivered, 4);
+            assertEquals(4, ready.get());
+        } finally {
+            tasks.forEach(BunkrMediaPreview.Task::cancel);
+            IndexedPreview.concurrentExtracts = null;
+            posters.forEach(File::delete);
         }
     }
 

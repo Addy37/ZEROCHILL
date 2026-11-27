@@ -44,7 +44,8 @@ final class BunkrMediaPreview {
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final ThreadPoolExecutor IO = new ThreadPoolExecutor(2, 2, 0L,
             TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(24));
-    private static final ThreadPoolExecutor PAWCHIVE_IO = new ThreadPoolExecutor(1, 1, 10L,
+    // Overlap frame decoding and range reads while PawchiveMediaRequests paces every request start.
+    private static final ThreadPoolExecutor PAWCHIVE_IO = new ThreadPoolExecutor(4, 4, 10L,
             TimeUnit.SECONDS, new ArrayBlockingQueue<>(12));
 
     static {
