@@ -199,7 +199,7 @@ final class BunkrMediaPreview {
         }
     }
 
-    private static boolean hasVisiblePixels(Bitmap bitmap) {
+    static boolean hasVisiblePixels(Bitmap bitmap) {
         for (int y = 1; y <= 7; y++) {
             for (int x = 1; x <= 7; x++) {
                 int color = bitmap.getPixel(bitmap.getWidth() * x / 8, bitmap.getHeight() * y / 8);

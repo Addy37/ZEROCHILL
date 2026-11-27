@@ -4,6 +4,7 @@ import android.app.Application;
 import android.net.Uri;
 import androidx.media3.common.C;
 import androidx.media3.datasource.DataSpec;
+import androidx.media3.extractor.mp4.TrackSampleTable;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -64,6 +65,32 @@ public class PawchiveFramePreviewTest {
         assertArrayEquals(moov, PawchiveIndexedPreview.locateIndex(spans));
         assertEquals(Arrays.asList(0L, (long)tail), offsets);
         assertEquals(PawchiveIndexedPreview.PREFIX + 32, spans.received);
+    }
+
+    @Test public void indexedPreviewReusesEarlyKeyframeWhenPreferredFrameNeedsAnotherRequest()
+            throws Exception {
+        int prefix = PawchiveIndexedPreview.PREFIX;
+        byte[] head = new byte[prefix];
+        java.nio.ByteBuffer.wrap(head).putInt(8).putInt(0x66747970)
+                .putInt(32).putInt(0x6d6f6f76);
+        int total = 1_000_000;
+        List<Long> requests = new ArrayList<>();
+        PawchiveIndexedPreview.Spans spans = new PawchiveIndexedPreview.Spans((pos, size) -> {
+            requests.add(pos);
+            return new BunkrPreviewDataSource.Block(Arrays.copyOfRange(head, (int) pos, (int) pos + size), total);
+        }, () -> {});
+        assertEquals(32, PawchiveIndexedPreview.locateIndex(spans).length);
+
+        int key = C.BUFFER_FLAG_KEY_FRAME;
+        TrackSampleTable table = new TrackSampleTable(null,
+                new long[]{128 * 1024, prefix - 16L, 500_000}, new int[]{1024, 32, 32}, 1024,
+                new long[]{0, 500_000, 1_500_000}, new int[]{key, key, key},
+                new int[]{0, 1, 2}, true, 2_000_000, 3);
+        int chosen = PawchiveIndexedPreview.cachedAlternative(spans, table, 2);
+        assertEquals(0, chosen);
+        assertEquals(1024, spans.read(table.offsets[chosen], table.sizes[chosen]).length);
+        assertEquals(java.util.Collections.singletonList(0L), requests);
+        assertEquals(C.INDEX_UNSET, PawchiveIndexedPreview.cachedAlternative(spans, table, 0));
     }
 
     @Test public void avcSampleRequiresIdrAndConvertsLengthPrefixes() throws Exception {
