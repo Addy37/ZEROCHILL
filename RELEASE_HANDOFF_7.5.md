@@ -1,5 +1,9 @@
 # ZEROCHILL 7.5 release handoff
 
+## Superseding candidate: 7005082
+
+Owner passed all nine phone checks on build 7005081, then approved a direct Save to menu for ShitTok and Shows. Commit `17b9310` adds one-tap Watch Later and Add to collection actions, including fullscreen, using the existing collection picker and local media-favorite storage. The previous phone-tested APK and emulator results below are historical, not approval of build 7005082. No app ID, signing, backend, schema or provider changes. The existing candidate workflow must generate and verify a new signed artifact and repeat upgrade checks. Focused `PlayerSaveMenuTest` covers explicit selection and collection membership without Watch Later; results are pending. Re-test both players, rotation, playback, existing collection membership, Watch Later independence, new collection creation, and cancel. Full production suites remain pending. Do not publish or merge without owner approval.
+
 **Phone testing is ready. Publication status — NO-GO.** The signed APK and
 both offline upgrade scenarios passed their gates. Keep the PR draft until
 the phone checks and full production suites have been reviewed. The owner
