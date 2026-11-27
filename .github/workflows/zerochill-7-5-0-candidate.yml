@@ -11,6 +11,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   candidate:
@@ -60,7 +61,42 @@ jobs:
         with:
           gradle-version: '8.11.1'
           cache-provider: basic
+      - name: Reuse verified phone APK for emulator-only changes
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFIED_APK_SOURCE: 7a28dd47ac0b0342bfba989c738211007ffe5664
+        run: |
+          set -euo pipefail
+          if git diff --quiet "$VERIFIED_APK_SOURCE" HEAD -- . \
+              ':(exclude).github/workflows/zerochill-7-5-0-candidate.yml' \
+              ':(exclude)tools/test_release_7_5_upgrade.sh' \
+              ':(exclude)RELEASE_HANDOFF_7.5.md' \
+              ':(exclude)docs/ZEROCHILL_7_5_RELEASE_PREPARATION.md' \
+            && gh run download 45928943983 --repo "$GITHUB_REPOSITORY" \
+                 --name "ZeroChill-7.5.0-candidate-signed-$VERIFIED_APK_SOURCE" --dir reused-candidate; then
+            (cd reused-candidate && sha256sum -c SHA256SUMS.txt)
+            python3 - <<'PYVERIFY'
+          import json, os, pathlib
+          report = json.loads(pathlib.Path("reused-candidate/VALIDATION.json").read_text())
+          assert report["source_sha"] == os.environ["VERIFIED_APK_SOURCE"]
+          assert report["sha256"] == "a6f5d5c9188df32204b56d520901f59ff08f58b686416f16ec2de01fb7423b35"
+          assert report["upgrade_eligible"]
+          PYVERIFY
+            apk=$(find reused-candidate -maxdepth 1 -name '*.apk' -print)
+            test -n "$apk"
+            printf 'CANDIDATE_APK=%s/%s\n' "$GITHUB_WORKSPACE" "$apk" >> "$GITHUB_ENV"
+            echo 'reused=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Download public upgrade baselines
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/7.4.0" "$RUNNER_TEMP/7.3.0"
+          gh release download v7.4.0 --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir "$RUNNER_TEMP/7.4.0"
+          gh release download v7.3.0 --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir "$RUNNER_TEMP/7.3.0"
       - name: Restore production signing credentials
+        if: steps.reuse.outputs.reused != 'true'
         env:
           SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
         run: |
@@ -88,6 +124,7 @@ jobs:
                   out.write(key+'='+value+'\n')
           PY
       - name: Run focused phone-candidate regressions and assemble one signed APK
+        if: steps.reuse.outputs.reused != 'true'
         run: >-
           gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
           :app:testReleaseUnitTest
@@ -114,13 +151,10 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/zerochill-7-5-0-candidate.jks"
       - name: Verify production identity, packaged notes, backend configuration and exact source
-        env:
-          GH_TOKEN: ${{ github.token }}
+        if: steps.reuse.outputs.reused != 'true'
         run: |
           set -euo pipefail
-          mkdir -p candidate "$RUNNER_TEMP/7.4.0" "$RUNNER_TEMP/7.3.0"
-          gh release download v7.4.0 --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir "$RUNNER_TEMP/7.4.0"
-          gh release download v7.3.0 --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir "$RUNNER_TEMP/7.3.0"
+          mkdir -p candidate
           safe_ref="${ZEROCHILL_SOURCE_BRANCH//\//-}"
           apk="candidate/ZeroChill-${APP_VERSION_NAME}-${safe_ref}-${ZEROCHILL_SOURCE_SHA:0:7}.apk"
           cp app/build/outputs/apk/release/app-release.apk "$apk"
@@ -133,6 +167,7 @@ jobs:
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
           printf 'CANDIDATE_APK=%s/%s\n' "$GITHUB_WORKSPACE" "$apk" >> "$GITHUB_ENV"
       - name: Upload signed phone-test APK and checksum
+        if: steps.reuse.outputs.reused != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ZeroChill-7.5.0-candidate-signed-${{ env.ZEROCHILL_SOURCE_SHA }}

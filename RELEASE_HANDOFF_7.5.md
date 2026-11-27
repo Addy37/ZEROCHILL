@@ -6,7 +6,7 @@ current build and phone checks have been reviewed.
 
 - Branch [release/zerochill-7.5.0-preparation](https://github.com/Addy37/ZEROCHILL/tree/release/zerochill-7.5.0-preparation)
 - Draft [PR #500](https://github.com/Addy37/ZEROCHILL/pull/500)
-- Last app implementation checkpoint [e0adb7435d284ef2170ab74ef865cac16fa7c62f](https://github.com/Addy37/ZEROCHILL/commit/e0adb7435d284ef2170ab74ef865cac16fa7c62f). The current branch tip adds this handoff and narrows the phone-build workflow. Use the Actions run's full source SHA as the APK identity.
+- Last app implementation checkpoint [e0adb7435d284ef2170ab74ef865cac16fa7c62f](https://github.com/Addy37/ZEROCHILL/commit/e0adb7435d284ef2170ab74ef865cac16fa7c62f). The branch tip includes the handoff and the follow-up for emulator-only validation. Use the APK run's full source SHA as the artifact identity.
 - Verified original base [23e3229adb7b997d66f9298988f82a4277351e7f](https://github.com/Addy37/ZEROCHILL/commit/23e3229adb7b997d66f9298988f82a4277351e7f) from merged PR #499. The app tree at that base matches the owner-approved Beta 14 source `873129316cc37c6b204a0a1657fbc8852e37df1d`.
 - [Current phone-candidate runs for this branch](https://github.com/Addy37/ZEROCHILL/actions/workflows/zerochill-7-5-0-candidate.yml?query=branch%3Arelease%2Fzerochill-7.5.0-preparation)
 
@@ -84,13 +84,23 @@ confirmed fullscreen defect left open at the source checkpoint.
   predates the fullscreen change and must not supply the test APK.
   [Original fullscreen source run](https://github.com/Addy37/ZEROCHILL/actions/runs/45928763769)
   is superseded by the focused phone-candidate workflow.
+- [Signed phone-test APK](https://github.com/Addy37/ZEROCHILL/actions/runs/45928943983/artifacts/15168070843), source `7a28dd47ac0b0342bfba989c738211007ffe5664`, APK SHA-256
+  `a6f5d5c9188df32204b56d520901f59ff08f58b686416f16ec2de01fb7423b35`.
+  The certificate, package, version, bundled notes, production routing and
+  embedded commit checks passed. The [focused release evidence](https://github.com/Addy37/ZEROCHILL/actions/runs/45928943983/artifacts/15168455434)
+  records **144 tests passed** across 18 test classes, with zero failures,
+  errors and skips.
+- The first 7.4.0 emulator upgrade installed in place, preserved UID and
+  checked seed bytes before launch. The post-launch UI check was blocked by
+  an unrelated **Pixel Launcher isn't responding** dialog in the captured UI
+  tree. This is an incomplete upgrade run. The emulator-only follow-up
+  disables that launcher and reuses the exact verified APK, checking its
+  checksum and source and requiring an unchanged app tree.
 - Follow the [latest branch run](https://github.com/Addy37/ZEROCHILL/actions/workflows/zerochill-7-5-0-candidate.yml?query=branch%3Arelease%2Fzerochill-7.5.0-preparation).
-  Download the signed artifact only from the run whose source is the
-  handoff/workflow checkpoint or a later reviewed source. The signed artifact
-  contains one APK, `SHA256SUMS.txt`, `BUILD_LINEAGE.txt` and `VALIDATION.json`.
-  At this checkpoint, production signing and emulator results for that
-  candidate are pending.
-- The same run attempts offline Android 15 upgrades from public 7.4.0 and
+  The signed artifact contains one APK, `SHA256SUMS.txt`,
+  `BUILD_LINEAGE.txt` and `VALIDATION.json`. A later emulator-only run uses the
+  same signed APK and may finish after the build run.
+- The emulator step attempts offline Android 15 upgrades from public 7.4.0 and
   7.3.0 after APK verification. Check separately uploaded evidence and
   `result.json` files. The emulator fixture checks app UID, files, downloads,
   saved media, history and settings, upgrade launch, and fresh onboarding.

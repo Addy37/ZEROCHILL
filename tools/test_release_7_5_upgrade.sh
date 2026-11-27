@@ -2,6 +2,13 @@
 set -euo pipefail
 
 package=com.addy37.crazyshitunofficial
+# Tests launch activities explicitly. The disposable emulator's home launcher
+# must not cover the app with its own startup crash or ANR dialog.
+launcher=com.google.android.apps.nexuslauncher
+if adb shell pm path "$launcher" | grep -q '^package:'; then
+    adb shell am force-stop "$launcher"
+    adb shell pm disable-user --user 0 "$launcher"
+fi
 for release in 7.4.0=7004000 7.3.0=7003000; do
     baseline="${release%=*}"
     previous_code="${release#*=}"
