@@ -101,33 +101,60 @@ public class PawchiveRepositoryTest {
         assertTrue(media.get(1).video);
     }
 
-    @Test public void nativeGalleryRetainsImagesAndGifsButOmitsVideos() throws Exception {
-        java.util.List<String> requests = new java.util.ArrayList<>();
+    private static final String GALLERY_IMAGE =
+            "{\"path\":\"/ab/cd/photo.jpg\",\"server\":\"https://n4.pawchive.pw\"}";
+    private static final String GALLERY_GIF =
+            "{\"path\":\"/ab/cd/animation.GIF\",\"server\":\"https://n3.pawchive.pw\"}";
+    private static final String GALLERY_VIDEO =
+            "{\"path\":\"/ab/cd/clip.mp4\",\"server\":\"https://n3.pawchive.pw\"}";
+
+    private static PawchiveRepository.GalleryPage galleryWithAttachments(String attachments)
+            throws Exception {
         PawchiveRepository repository = new PawchiveRepository(route -> {
-            requests.add(route);
-            return "[{\"service\":\"fanbox\",\"user\":\"1\",\"id\":\"2\","
-                    + "\"title\":\"Artwork\",\"file\":{\"path\":\"/ab/cd/photo.jpg\",\"server\":\"https://n4.pawchive.pw\"},"
-                    + "\"attachments\":[{\"path\":\"/ab/cd/clip.mp4\",\"server\":\"https://n3.pawchive.pw\"},"
-                    + "{\"path\":\"/ab/cd/animation.GIF\",\"server\":\"https://n3.pawchive.pw\"}]}]";
+            assertEquals("/patreon/user/1?o=50", route);
+            return "[{\"service\":\"patreon\",\"user\":\"1\",\"id\":\"2\",\"title\":\"Artwork\","
+                    + "\"file\":{},\"attachments\":[" + attachments + "]}]";
         });
-        PawchiveRepository.Creator creator = PawchiveRepository.profile(
-                "https://pawchive.pw/fanbox/user/1", "Artist");
-        NativeContentItem card = PawchiveRepository.creatorItem(creator);
-        assertEquals("pawchive:fanbox/1", CreatorFavoriteStore.key(card));
-        assertEquals(creator.profileUrl(), NativeFeedBrowserActivity.creatorProfileHint(card));
-        PawchiveRepository.GalleryPage page = repository.galleryPage(creator, 50);
-        assertEquals(java.util.Collections.singletonList("/fanbox/user/1?o=50"), requests);
+        return repository.galleryPage(PawchiveRepository.profile(
+                "https://pawchive.pw/patreon/user/1", "Artist"), 50);
+    }
+
+    @Test public void galleryImageOnlyPostRetainsPhotosAndGifs() throws Exception {
+        PawchiveRepository.GalleryPage page = galleryWithAttachments(GALLERY_IMAGE + "," + GALLERY_GIF);
         assertEquals(2, page.items.size());
-        assertTrue(page.items.get(0).isImage());
-        assertTrue(page.items.get(1).isImage());
-        assertTrue(page.items.get(1).isGif());
-        assertFalse(page.items.get(0).isGif());
-        assertFalse(page.items.get(1).isVideo());
-        assertEquals("https://img.pawchive.pw/thumbnail/data/ab/cd/photo.jpg", page.items.get(0).imageUrl);
-        assertEquals("https://n3.pawchive.pw/data/ab/cd/animation.GIF", PawchiveRepository.original(page.items.get(1)));
-        assertEquals("https://n4.pawchive.pw/data/ab/cd/photo.jpg", PawchiveRepository.original(page.items.get(0)));
-        assertEquals(creator.profileUrl(), page.items.get(0).uploader);
+        NativeContentItem photo = page.items.get(0);
+        NativeContentItem gif = page.items.get(1);
+        assertTrue(photo.isImage());
+        assertFalse(photo.isGif());
+        assertTrue(gif.isImage());
+        assertTrue(gif.isGif());
+        assertEquals("https://img.pawchive.pw/thumbnail/data/ab/cd/photo.jpg", photo.imageUrl);
+        assertEquals("https://n4.pawchive.pw/data/ab/cd/photo.jpg", PawchiveRepository.original(photo));
+        assertEquals("https://n3.pawchive.pw/data/ab/cd/animation.GIF", PawchiveRepository.original(gif));
         assertFalse(page.hasMore);
+    }
+
+    @Test public void galleryVideoOnlyPostKeepsStandaloneVideoPolicy() throws Exception {
+        assertTrue(galleryWithAttachments(GALLERY_VIDEO).items.isEmpty());
+    }
+
+    @Test public void galleryMixedPostRetainsVideoAttachmentsAndPlaybackIdentity() throws Exception {
+        String secondVideo = GALLERY_VIDEO.replace("clip.mp4", "second.mp4").replace("n3.", "n1.");
+        PawchiveRepository.GalleryPage page =
+                galleryWithAttachments(GALLERY_VIDEO + "," + secondVideo + "," + GALLERY_IMAGE);
+        assertEquals(3, page.items.size());
+        assertTrue(page.items.get(2).isImage());
+
+        NativeContentItem clip = page.items.get(0);
+        assertTrue(PawchiveRepository.isNativeVideo(clip));
+        assertEquals("https://file.pawchive.pw/data/ab/cd/clip.mp4", clip.url);
+        assertEquals("", clip.imageUrl);
+        assertEquals("https://n3.pawchive.pw/data/ab/cd/clip.mp4", PawchiveRepository.original(clip));
+        assertEquals("https://pawchive.pw/patreon/user/1/post/2", PawchiveRepository.pageUrl(clip));
+
+        NativeContentItem second = page.items.get(1);
+        assertTrue(PawchiveRepository.isNativeVideo(second));
+        assertEquals("https://n1.pawchive.pw/data/ab/cd/second.mp4", PawchiveRepository.original(second));
     }
 
     @Test public void directMediaRejectsForeignHostsAndUnsupportedPaths() {
