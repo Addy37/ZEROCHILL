@@ -130,24 +130,7 @@ final class LandscapeMoreDialog {
                 )
         );
 
-        TextView downloadBadge = null;
-        for (int i = 0; i < 4; i += 2) {
-            LinearLayout gridRow = new LinearLayout(activity);
-            gridRow.setOrientation(LinearLayout.HORIZONTAL);
-            gridRow.setBaselineAligned(false);
-            for (int j = i; j < i + 2; j++) {
-                TextView badge = addActionTile(activity, dialog, gridRow, actions.get(j), j == i);
-                if (j == 0) downloadBadge = badge;
-            }
-            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
-            rowParams.topMargin = dp(activity, i == 0 ? 10 : 8);
-            content.addView(gridRow, rowParams);
-        }
-        addDivider(activity, content);
-        for (int i = 4; i < actions.size(); i++) {
-            addActionRow(activity, dialog, content, actions.get(i));
-        }
-        final TextView activeBadge = downloadBadge;
+        final TextView activeBadge = populateActions(activity, dialog, content, actions);
 
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
         LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(-1, -2);
@@ -445,7 +428,30 @@ final class LandscapeMoreDialog {
         panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
     }
 
-    private static TextView addActionTile(NativeMainActivity activity, Dialog dialog,
+    // Shared layout builder, allowing focused UI tests without starting the media pager.
+    static TextView populateActions(Activity activity, Dialog dialog,
+            LinearLayout content, List<Action> actions) {
+        TextView downloadBadge = null;
+        for (int i = 0; i < 4; i += 2) {
+            LinearLayout gridRow = new LinearLayout(activity);
+            gridRow.setOrientation(LinearLayout.HORIZONTAL);
+            gridRow.setBaselineAligned(false);
+            for (int j = i; j < i + 2; j++) {
+                TextView badge = addActionTile(activity, dialog, gridRow, actions.get(j), j == i);
+                if (j == 0) downloadBadge = badge;
+            }
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+            rowParams.topMargin = dp(activity, i == 0 ? 10 : 8);
+            content.addView(gridRow, rowParams);
+        }
+        addDivider(activity, content);
+        for (int i = 4; i < actions.size(); i++) {
+            addActionRow(activity, dialog, content, actions.get(i));
+        }
+        return downloadBadge;
+    }
+
+    private static TextView addActionTile(Activity activity, Dialog dialog,
             LinearLayout row, Action action, boolean first) {
         LinearLayout tile = new LinearLayout(activity);
         tile.setOrientation(LinearLayout.VERTICAL);
@@ -490,7 +496,7 @@ final class LandscapeMoreDialog {
         badge.setVisibility(count > 0 ? View.VISIBLE : View.GONE);
     }
 
-    private static void addActionRow(NativeMainActivity activity, Dialog dialog,
+    private static void addActionRow(Activity activity, Dialog dialog,
             LinearLayout parent, Action action) {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -510,7 +516,7 @@ final class LandscapeMoreDialog {
         parent.addView(row, new LinearLayout.LayoutParams(-1, -2));
     }
 
-    private static void bindAction(NativeMainActivity activity, Dialog dialog, View view, Action action) {
+    private static void bindAction(Activity activity, Dialog dialog, View view, Action action) {
         view.setClickable(true);
         view.setFocusable(true);
         view.setContentDescription(action.title + ". " + action.subtitle);
@@ -536,7 +542,7 @@ final class LandscapeMoreDialog {
         });
     }
 
-    private static void addDivider(NativeMainActivity activity, LinearLayout parent) {
+    private static void addDivider(Activity activity, LinearLayout parent) {
         View divider = new View(activity);
         divider.setBackgroundColor(AppearanceTheme.outline(activity));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(activity, 1));
@@ -553,7 +559,7 @@ final class LandscapeMoreDialog {
     }
 
     private static ImageView iconView(
-            NativeMainActivity activity,
+            Activity activity,
             int iconRes,
             int sizeDp,
             int paddingDp
@@ -574,7 +580,7 @@ final class LandscapeMoreDialog {
     }
 
     private static TextView text(
-            NativeMainActivity activity,
+            Activity activity,
             String value,
             int size,
             int color,
@@ -617,11 +623,11 @@ final class LandscapeMoreDialog {
         return result;
     }
 
-    private static int dp(NativeMainActivity activity, int value) {
+    private static int dp(Activity activity, int value) {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 
-    private static final class Action {
+    static final class Action {
         final int iconRes;
         final String title;
         final String subtitle;
