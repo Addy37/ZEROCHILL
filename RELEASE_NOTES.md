@@ -45,6 +45,6 @@ New sources. Smarter search. Your content, your way. Explore five ShitTok feeds,
 
 ## Updating
 
-Install **ZeroChill.apk** over your existing ZEROCHILL installation to keep your saved data. Version 7.5.0 uses Android version code `7005082` and the established production package and signing identity.
+Install **ZeroChill.apk** over your existing ZEROCHILL installation to keep your saved data. Version 7.5.0 uses Android version code `7005083` and the established production package and signing identity.
 
 [Compare the changes since 7.4.0](https://github.com/Addy37/ZEROCHILL/compare/v7.4.0...23e3229adb7b997d66f9298988f82a4277351e7f)

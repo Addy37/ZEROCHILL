@@ -30,6 +30,31 @@ public class PlayerSaveMenuTest {
         assertEquals("Remove from Watch Later", PlayerSaveMenu.choices(true, () -> {}, () -> {})[0].title);
     }
 
+    @Test public void dedicatedPanelHasTwoRowsAndNoScrollAtNarrowWidth() {
+        android.app.Activity a = org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup().get();
+        a.setTheme(R.style.Theme_CrazyShit);
+        AtomicInteger watch = new AtomicInteger(), collections = new AtomicInteger();
+        android.widget.LinearLayout panel = PlayerSaveSheet.buildPanel(a, false, true,
+                PlayerSaveMenu.choices(true, watch::incrementAndGet, collections::incrementAndGet), () -> {});
+        android.view.View first = panel.findViewWithTag("save-watch-later");
+        android.view.View second = panel.findViewWithTag("save-collection");
+        assertNotNull(first);
+        assertNotNull(second);
+        assertTrue(first.getContentDescription().toString().contains("Remove from Watch Later"));
+        assertEquals(5, panel.getChildCount());
+        for (int i = 0; i < panel.getChildCount(); i++)
+            assertFalse(panel.getChildAt(i) instanceof android.widget.ScrollView);
+        int width = BrowseUi.dp(a, 320);
+        panel.measure(android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY),
+                android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED));
+        assertTrue(first.getMeasuredHeight() >= BrowseUi.dp(a, 76));
+        assertTrue(second.getMeasuredHeight() >= BrowseUi.dp(a, 76));
+        assertTrue(panel.getMeasuredHeight() >= first.getMeasuredHeight() + second.getMeasuredHeight());
+        second.performClick();
+        assertEquals(1, collections.get());
+        assertEquals(0, watch.get());
+    }
+
     @Test public void freshVideoCanJoinCollectionWithoutWatchLaterAndRetainsArtwork() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         NativeContentItem item = OnlyFapVideoMetadata.basic("Example", "https://example.com/video/one", "https://example.com/cover.jpg");

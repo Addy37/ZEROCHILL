@@ -1,5 +1,9 @@
 # ZEROCHILL 7.5 release handoff
 
+## Candidate 7005083: save sheet polish
+
+Owner confirmed build 7005082's save functionality and requested a dedicated visual treatment. The new Save to sheet uses two natural-height rows, 48dp icon tiles, an accent-colored collection action, saved checkmark, and a portrait bottom sheet or landscape side panel. It retains the existing callbacks, picker, and storage. This supersedes the old APK for acceptance. The 7005082 focused tests, signing and artifact upload passed; its emulator upgrade job failed and must not be counted as passed. Build 7005083 requires fresh signed verification and phone acceptance. No publication authorized.
+
 ## Superseding candidate: 7005082
 
 Owner passed all nine phone checks on build 7005081, then approved a direct Save to menu for ShitTok and Shows. Commit `17b9310` adds one-tap Watch Later and Add to collection actions, including fullscreen, using the existing collection picker and local media-favorite storage. The previous phone-tested APK and emulator results below are historical, not approval of build 7005082. No app ID, signing, backend, schema or provider changes. The existing candidate workflow must generate and verify a new signed artifact and repeat upgrade checks. Focused `PlayerSaveMenuTest` covers explicit selection and collection membership without Watch Later; results are pending. Re-test both players, rotation, playback, existing collection membership, Watch Later independence, new collection creation, and cancel. Full production suites remain pending. Do not publish or merge without owner approval.

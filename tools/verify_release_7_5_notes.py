@@ -8,7 +8,7 @@ version, code = sys.argv[1:]
 release = pathlib.Path("RELEASE_NOTES.md").read_text()
 bundled = pathlib.Path("app/src/main/res/raw/whats_new_7_0.md").read_text()
 assert pathlib.Path("RELEASE_VERSION").read_text().strip() == version == "7.5.0"
-assert pathlib.Path("RELEASE_VERSION_CODE").read_text().strip() == code == "7005082"
+assert pathlib.Path("RELEASE_VERSION_CODE").read_text().strip() == code == "7005083"
 assert release.splitlines()[0] == bundled.splitlines()[0] == title
 assert f"`{code}`" in release
 summary = release.split("\n\n")[1]

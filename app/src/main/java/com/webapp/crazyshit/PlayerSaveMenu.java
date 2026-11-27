@@ -33,9 +33,8 @@ final class PlayerSaveMenu {
         Runnable collections = () -> MediaCollectionPicker.show(activity, target, "", () ->
                 ZeroChillToast.makeText(activity, "Collections updated.", ZeroChillToast.LENGTH_SHORT).show(),
                 dialog -> track(dialog, closed));
-        Dialog sheet = VideoActionSheet.showCompactWithTitle(activity, target.title, "Save to",
-                VideoActionSheet.section("SAVE", choices(FavoriteStore.contains(activity, target.url),
-                        watchLater, collections)));
+        boolean saved = FavoriteStore.contains(activity, target.url);
+        Dialog sheet = PlayerSaveSheet.show(activity, saved, choices(saved, watchLater, collections));
         if (sheet != null) track(sheet, closed);
     }
 
