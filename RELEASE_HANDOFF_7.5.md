@@ -1,5 +1,9 @@
 # ZEROCHILL 7.5 release handoff
 
+## Final copy and publication authorization: 7005085
+
+Owner approved the 7005084 phone candidate and both condensed release summaries and explicitly authorized 7.5.0 publication. Candidate signed build, focused tests, and Android upgrade checks passed in run 45939140399. The final APK increments the version code to 7005085 so it updates the approved phone candidate and changes only the bundled eight highlights, update summary, and related validation/metadata. Full release validation must pass before publication. Existing eFukt and Balbums provider-audit failures remain documented and are not modified. No app ID, signing, storage, backend, source config or UI layout changes.
+
 ## Candidate 7005084: More menu redesign
 
 Owner explicitly approved the ShitTok and Shows Save To update and requested the compact More menu mockup. Incorporates PR #501's two-column grid, theme accents, active-download and unread badges, secondary actions, and anchored panel. Existing callbacks and player save behavior preserved. Production package, signing, backend, and data unchanged. Added MoreMenuLayoutTest and retained SupportZeroChillDialogTest in focused CI. Previous 7005083 signed artifact was built but its emulator upgrade test failed. New signed candidate and physical testing pending; no production merge or publication authorized.
