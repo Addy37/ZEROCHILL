@@ -17,7 +17,7 @@ public final class SplashActivity extends Activity {
     private static final int[] REVEAL_LAYERS = {
             R.id.splashMascotGlow, R.id.splashHorns, R.id.splashFace, R.id.splashOutline, R.id.splashXEye,
             R.id.splashAngryEye, R.id.splashTeeth, R.id.splashTongue,
-            R.id.splashWordmark, R.id.splashTagline
+            R.id.splashWordmark, R.id.splashTagline, R.id.splashBrandLighting, R.id.splashBrandUnderline
     };
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -46,10 +46,30 @@ public final class SplashActivity extends Activity {
         setContentView(R.layout.activity_splash);
         int accent = AppearanceTheme.accent(this);
         MascotAccent.applyGlow(findViewById(R.id.splashMascotGlow), accent);
-        MascotAccent.apply(findViewById(R.id.splashHorns),
-                findViewById(R.id.splashOutline),
-                findViewById(R.id.splashXEye), findViewById(R.id.splashAngryEye),
-                findViewById(R.id.splashTongue), accent);
+        // White facial details stay white; the new horns and tongue keep their
+        // dark contours while the cyan paths follow the saved appearance accent.
+        android.widget.ImageView horns = findViewById(R.id.splashHorns);
+        android.widget.ImageView outline = findViewById(R.id.splashOutline);
+        android.widget.ImageView tongue = findViewById(R.id.splashTongue);
+        horns.setColorFilter(accent, android.graphics.PorterDuff.Mode.SRC_IN);
+        outline.setColorFilter(accent, android.graphics.PorterDuff.Mode.SRC_IN);
+        float[] from = {5f, 9f, 12f}, source = {8f,146f,208f};
+        float[] to = {Color.red(accent),Color.green(accent),Color.blue(accent)};
+        float[] matrix = new float[20];
+        for (int i=0;i<3;i++) {
+            float scale = (to[i]-from[i])/(source[i]-from[i]);
+            matrix[i*5+i] = scale;
+            matrix[i*5+4] = from[i]*(1f-scale);
+        }
+        matrix[18]=1f;
+        tongue.setColorFilter(new android.graphics.ColorMatrixColorFilter(matrix));
+        ((SplashBrandLighting) findViewById(R.id.splashBrandLighting)).setAccent(accent);
+        android.graphics.drawable.GradientDrawable underline =
+                new android.graphics.drawable.GradientDrawable(
+                        android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                        new int[]{Color.TRANSPARENT, accent, Color.TRANSPARENT});
+        underline.setCornerRadius(3f);
+        findViewById(R.id.splashBrandUnderline).setBackground(underline);
         ((TextView) findViewById(R.id.splashChill)).setTextColor(accent);
 
         animateSplash();
@@ -68,6 +88,7 @@ public final class SplashActivity extends Activity {
             }
             return;
         }
+        reveal(R.id.splashBrandLighting, 0L, 440L);
         reveal(R.id.splashMascotGlow, 0L, 170L);
         reveal(R.id.splashHorns, 0L, 170L);
         reveal(R.id.splashFace, 130L, 170L);
@@ -78,6 +99,7 @@ public final class SplashActivity extends Activity {
         reveal(R.id.splashTongue, 565L, 75L);
         reveal(R.id.splashWordmark, 690L, 145L);
         reveal(R.id.splashTagline, 805L, 140L);
+        reveal(R.id.splashBrandUnderline, 760L, 180L);
 
         View outline = findViewById(R.id.splashOutline);
         if (outline != null && ZeroChillMotion.animationsEnabled(this)) {

@@ -38,7 +38,7 @@ public class SplashAccentTest {
         StartupWizardPolicy.markComplete(context);
     }
 
-    @Test public void splashAccentsAllCyanLayersButKeepsFaceAndTeeth() {
+    @Test public void splashAccentsNewBrandingButKeepsWhiteEyesAndTeeth() {
         AppearanceTheme.setAccent(RuntimeEnvironment.getApplication(), AppearanceTheme.Accent.PURPLE);
         try (ActivityController<SplashActivity> controller =
                      Robolectric.buildActivity(SplashActivity.class, new Intent()).setup()) {
@@ -47,10 +47,13 @@ public class SplashAccentTest {
                     ((TextView) activity.findViewById(R.id.splashChill)).getCurrentTextColor());
             assertNotNull(activity.findViewById(R.id.splashMascotGlow).getBackground());
             for (int id : new int[]{R.id.splashHorns, R.id.splashOutline,
-                    R.id.splashXEye, R.id.splashAngryEye, R.id.splashTongue}) {
+                    R.id.splashTongue}) {
                 assertNotNull(((ImageView) activity.findViewById(id)).getColorFilter());
             }
-            for (int id : new int[]{R.id.splashFace, R.id.splashTeeth}) {
+            assertEquals(AppearanceTheme.Accent.PURPLE.color,
+                    ((SplashBrandLighting) activity.findViewById(R.id.splashBrandLighting)).getAccent());
+            assertNotNull(activity.findViewById(R.id.splashBrandUnderline).getBackground());
+            for (int id : new int[]{R.id.splashFace, R.id.splashTeeth, R.id.splashXEye, R.id.splashAngryEye}) {
                 assertNull(((ImageView) activity.findViewById(id)).getColorFilter());
             }
         }
@@ -64,7 +67,8 @@ public class SplashAccentTest {
             SplashActivity activity = controller.get();
             for (int id : new int[]{R.id.splashMascotGlow, R.id.splashHorns, R.id.splashFace, R.id.splashOutline,
                     R.id.splashXEye, R.id.splashAngryEye, R.id.splashTeeth,
-                    R.id.splashTongue, R.id.splashWordmark, R.id.splashTagline}) {
+                    R.id.splashTongue, R.id.splashWordmark, R.id.splashTagline,
+                    R.id.splashBrandLighting, R.id.splashBrandUnderline}) {
                 assertEquals(1f, activity.findViewById(id).getAlpha(), 0f);
             }
             Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(959));

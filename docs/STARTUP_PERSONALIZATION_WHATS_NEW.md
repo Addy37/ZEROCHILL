@@ -105,3 +105,7 @@ The approved four-step wizard and five scene navigation remain unchanged. All sh
 ## 7.5 full mascot character (Beta 13)
 
 Replaces the Beta 12 insignia-based cartoon rig with a dedicated vector character modeled on the owner's supplied full-body reference: round head, tall curved filled horns, white X and angry eye, wide jagged grin, accent tongue, curved arrow tail and large oval hands/feet. Independently animated pose and prop layers serve all six existing wizard cartoons; no launcher/splash drawable or personalization insignia change. The vector interpretation is local, theme-aware and retains the existing wizard layout, navigation, timing and reduced-motion policy. Phone acceptance remains required.
+
+## 7.5 splash and icon polish (Beta 14)
+
+New dedicated launch mark uses curved filled horns, round face, white eyes, open grin and an off-center rounded tongue with a dark crease. Splash uses separate reveal layers, bolder italic wordmark and accent ribbons/underline. Existing 960ms deadline, startup routing and motion policy remain. Default adaptive/legacy icon and Android monochrome icon use matching geometry inside the safe area; launcher component stays unchanged. The in-app splash follows the saved accent; home-screen launcher remains default cyan or Android system-themed, as before. No activity aliases or dynamic icon switching are added. Full character wizard artwork and prior insignia users elsewhere are unchanged.

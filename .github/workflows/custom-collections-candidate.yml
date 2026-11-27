@@ -1,4 +1,4 @@
-name: Full character wizard signed phone-test candidate
+name: Splash and icon signed phone-test candidate
 on:
   pull_request:
     branches: [main]
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   signed-beta:
-    if: github.head_ref == 'feature/full-character-wizard' || github.ref_name == 'feature/full-character-wizard'
+    if: github.head_ref == 'feature/polished-splash-icon' || github.ref_name == 'feature/polished-splash-icon'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -26,8 +26,8 @@ jobs:
       SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
       ANALYTICS_ENDPOINT: ''
       ANALYTICS_V2_ENDPOINT: ''
-      APP_VERSION_CODE: '7005079'
-      APP_VERSION_NAME: '7.5.0-character.13'
+      APP_VERSION_CODE: '7005080'
+      APP_VERSION_NAME: '7.5.0-branding.14'
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v6
@@ -81,24 +81,24 @@ jobs:
                   out.write(key + "=" + value + "\n")
           PY
       - name: Focused onboarding regressions
-        run: gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest --tests com.webapp.crazyshit.StartupWizardUiTest --tests com.webapp.crazyshit.StartupWizardPolicyTest --tests com.webapp.crazyshit.WhatsNewTest --tests com.webapp.crazyshit.SettingsComposeScreenModelTest --tests com.webapp.crazyshit.SettingsCompactSwitchTest
+        run: gradle --no-daemon --console=plain --max-workers=3 :app:testDebugUnitTest --tests com.webapp.crazyshit.SplashAccentTest --tests com.webapp.crazyshit.AccentCoverageTest --tests com.webapp.crazyshit.StartupWizardUiTest --tests com.webapp.crazyshit.StartupWizardPolicyTest --tests com.webapp.crazyshit.WhatsNewTest --tests com.webapp.crazyshit.SettingsComposeScreenModelTest --tests com.webapp.crazyshit.SettingsCompactSwitchTest
       - name: Assemble and verify side-by-side APK
         run: |
           set -euo pipefail
           gradle --no-daemon --console=plain --max-workers=3 :app:assembleDebug
           mkdir -p candidate
           bash tools/verify-android-build-lineage.sh candidate/APK-LINEAGE.txt
-          apk="candidate/ZeroChill-Full-Character-$(git rev-parse --short=8 HEAD).apk"
+          apk="candidate/ZeroChill-Branding-$(git rev-parse --short=8 HEAD).apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee candidate/APK-SIGNING.txt
           grep -Fx 'Signer #1 certificate SHA-256 digest: 04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356' candidate/APK-SIGNING.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$apk" > "$RUNNER_TEMP/beta-badging.txt"
-          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005079' versionName='7.5.0-character.13-dev'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
+          grep "package: name='com.addy37.crazyshitunofficial.dev' versionCode='7005080' versionName='7.5.0-branding.14-dev'" "$RUNNER_TEMP/beta-badging.txt" | tee candidate/APK-VERSION.txt
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
       - name: Upload signed library search test APK
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-Full-Character-signed-test
+          name: ZeroChill-Branding-signed-test
           path: candidate/
           retention-days: 14
           if-no-files-found: error
