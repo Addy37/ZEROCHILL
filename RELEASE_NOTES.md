@@ -31,6 +31,7 @@ New sources. Smarter search. Your content, your way. Explore five ShitTok feeds,
 
 ## Stability and compatibility
 
+- Fixed a startup crash that could affect signed-in users when Firebase was temporarily unavailable.
 - Busy message threads now load the most recent messages inside the existing 500-message window.
 - What’s New appears after the one-time source access screen when it is shown during an ordinary upgrade launch.
 - Restoring a backup checks saved source links before applying changes. Backups from 7.4 remain compatible with 7.5 collections.

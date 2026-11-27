@@ -16,7 +16,7 @@ candidate uses 7.5.0, code 7005081.
 | Disposition | Evidence |
 | --- | --- |
 | Superseded or consolidated | #471 in #474, the approved part of #472 in #474, #483–486 in #487 and the later list-only Spotlight consolidation, the approved Pawchive discovery scope of #477 in #478, and #405 by the existing What's New implementation. |
-| Experiments or previews | #473 was explicitly excluded by #474. #477’s subsequent GIF experiments were explicitly excluded by #478. #480–481 were previews or fixtures ahead of the native Erome integration. Older installer diagnostics #382, #386–395, UI experiments #285, #320, #331 and provider probe #279 supply no approval evidence for this release. |
+| Experiments or previews | #473 was explicitly excluded by #474. #477’s subsequent GIF experiments were explicitly excluded by #478. #480–481 were previews or fixtures ahead of the native Erome integration. Older installer diagnostics #382, #386–395, UI experiments #285, #320, #331 and provider probe #279 supply no approval evidence for this release. The remaining pre-#249 PRs are historical diagnostics, app versions, provider prototypes and admin work without evidence of missing 7.5 scope. |
 | Outside the approved app scope | #249, #358, #400, #418–421, #424, #428–430, #453–456. These include admin, staging, account-migration and historical installer/playback branches. No missing owner-approved 7.5 behavior was identified in their descriptions and the consolidated lineage. |
 
 ## Stability findings
@@ -24,13 +24,14 @@ candidate uses 7.5.0, code 7005081.
 | Severity | Status and evidence |
 | --- | --- |
 | Critical | None confirmed. |
+| High | Fixed an Android 14 application-start crash recovered from public 7.4.0 diagnostics. The stack reached `FirebaseApp.getInstance()` from push registration in `Application.onCreate`. Startup now attempts standard Firebase initialization and tolerates unavailability without failing the process. Logout cleanup also tolerates an unavailable Firebase instance. Live notification delivery remains a device check. |
 | High | Fixed the oldest-first limit on DM threads. A thread over 500 messages omitted newly received messages after reloading. The same bounded query now selects the latest 500, with a stable tie-breaker, and displays them in chronological order. The existing visibility RPC and cleanup cutoff still apply. Messages outside the recent window remain on the server. |
 | High | Unconfirmed historical Samsung OOM and vivo/Android layout crash. The reports lack a heap or reproducible app frame. Bounded ShitTok player leases, gallery worker queues and activity teardown are in source. Physical low-memory, rotation and long-session checks remain necessary. |
 | Medium | Fixed the previous-version What's New copy and the launch marker dropped during one-time XMegaDrive access repair. Ordinary upgrades still skip the wizard. A normal launcher handoff after repair now remains eligible for the popup. |
 | Medium | Added validation for optional source URLs in backup items before restore can apply changes. Collection membership roundtrip and legacy format are covered by the release regression tests. |
 | Medium | Production push registration returned 362 HTTP 401s in 465 POSTs over the measured day. Logs do not establish the client version or cause. Live delivery and account switching remain release acceptance items. |
 | Medium | Active DM threads poll every 2.5 seconds while resumed. Each refresh can read cutoff state as well as messages. This traffic warrants follow-up after physical delivery and latency checks. The existing cadence, authorization and failure backoff are preserved. |
-| Medium | Provider availability varies. Prior source contract diagnostics flagged Bunkr metadata and identified eFukt probes. Bundled fallback and remote provider configuration are unchanged. |
+| Medium | Provider availability varies. PR #500’s source audit found 403s on Balbums discovery and search and no canonical eFukt links from CI. Bunkr’s active index search, album links and signed/direct resolution passed. Bundled fallback and remote provider configuration are unchanged. |
 | Low | Foreground download timeout pauses workers and stops the service while workers finish cleanup. Normal cancellation disconnects active HTTP and closes the service after the last job. A timeout/cancel race was not reproduced. |
 | Low | Spotlight cancels work on close and discards stale results. Blocking provider fetches may continue until their configured timeout if interruption is unsupported. The currently bounded work and known-good fallback remain. |
 
@@ -70,7 +71,7 @@ export and restore, including import of a version 1 backup without that field.
 ## Supabase
 
 A read-only aggregate of production New Zerochill logs for
-2026-11-26 01:52 UTC to 2026-11-27 01:52 UTC recorded 19,140 edge log events.
+2026-11-26 01:52 UTC to 2026-11-27 01:52 UTC recorded 19,140 edge log events with a request path.
 The video social summary RPC accounted for 10,790 successful calls and the
 visible-direct-messages RPC for 2,594. Source config version reads accounted for
 1,393 events, notifications preferences 450, profiles 140, and Auth token calls
