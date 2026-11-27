@@ -88,3 +88,24 @@ No APK was produced. Device acceptance remains necessary for visual
 motion quality, system permission UI, real notification delivery and process death
 on the target OnePlus/Android 16 device. Tests exercise the routing/handoff
 contract with local intents, rather than sending live notifications.
+
+## 7.5 wizard refresh (Beta 10)
+
+The existing five steps remain, including the unchanged access gate and personalization callbacks. Welcome introduces the current experience; Meet describes the five independent feeds, Shows, OnlyFap, Spotlight and Library; the gesture guide covers swiping, supported gallery actions, seeking, collections and alphabet scrubbing. Two illustrative, local-only animated UI previews respect reduced motion and stop when detached or hidden. The last page points to the new Settings hub and replay entry. No live content, network requests, storage keys, onboarding eligibility or permission changes. Existing users are not forced through the wizard again. Final release highlights are updated separately during release preparation.
+
+## 7.5 cinematic wizard (Beta 11)
+
+Four outer steps replace five: welcome, required access, cinematic showcase, personalization. The showcase retains one drawn phone frame with five animated neutral-art scenes, native captions, manual navigation and optional automatic cycling. Continue is always available on the showcase; reduced motion uses static manual previews. Landscape uses a side-by-side preview and caption. Preferences expand on demand; the final page retains optional account actions, existing accent and notification preference keys, and permission timing. Existing startup eligibility and release acknowledgement remain unchanged. The selected preview and expanded preference state survive recreation. No live media or new dependencies.
+Manual showcase navigation takes over from automatic cycling; touch exploration does not auto-advance. The device frame remains still while scene contents fade and slide inside it. Notification permission timing remains visible even when preferences are collapsed.
+
+## 7.5 mascot showcase (Beta 12)
+
+The approved four-step wizard and five scene navigation remain unchanged. All showcase artwork uses the existing production mascot face layers with local Canvas bodies, props and poses: swipe, magnifier, gallery, collection stack, skateboard and popcorn. Accent filters preserve the face identity and dark/white details. Motion uses existing scene timing and a finite welcome animation, with reduced-motion static poses. No external images, actual content thumbnails, network requests or new dependencies. Phone visual acceptance is required; the illustrative cartoons are native drawings, not the concept poster rendered as a video.
+
+## 7.5 full mascot character (Beta 13)
+
+Replaces the Beta 12 insignia-based cartoon rig with a dedicated vector character modeled on the owner's supplied full-body reference: round head, tall curved filled horns, white X and angry eye, wide jagged grin, accent tongue, curved arrow tail and large oval hands/feet. Independently animated pose and prop layers serve all six existing wizard cartoons; no launcher/splash drawable or personalization insignia change. The vector interpretation is local, theme-aware and retains the existing wizard layout, navigation, timing and reduced-motion policy. Phone acceptance remains required.
+
+## 7.5 splash and icon polish (Beta 14)
+
+New dedicated launch mark uses curved filled horns, round face, white eyes, open grin and an off-center rounded tongue with a dark crease. Splash uses separate reveal layers, bolder italic wordmark and accent ribbons/underline. Existing 960ms deadline, startup routing and motion policy remain. Default adaptive/legacy icon and Android monochrome icon use matching geometry inside the safe area; launcher component stays unchanged. The in-app splash follows the saved accent; home-screen launcher remains default cyan or Android system-themed, as before. No activity aliases or dynamic icon switching are added. Full character wizard artwork and prior insignia users elsewhere are unchanged.

@@ -55,12 +55,19 @@ public final class CreatorsActivity extends Activity {
     private java.util.concurrent.atomic.AtomicBoolean artworkCancelled = new java.util.concurrent.atomic.AtomicBoolean();
     private int artworkRun;
     private EditText input;
-    private TextView empty, count;
+    private LibraryDestinationChrome.SearchController inlineSearch;
+    private TextView empty, count, recentLabel, allFilter, updatesFilter;
+    private boolean updatesOnly, mergeMode;
     private RecyclerView recycler;
     private HorizontalScrollView recentScroll;
     private LinearLayout recentRow;
     private TextView stickyLetter;
     private LinearLayout letterIndex;
+    private TextView letterBubble;
+    private String activeIndexLetter;
+    private boolean indexDragging;
+    private int indexPointer = -1;
+    private final boolean[] availableIndexLetters = new boolean[LETTERS.length()];
     private final Paint letterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RecyclerView.ItemDecoration letterDecoration = new RecyclerView.ItemDecoration() {
         @Override public void getItemOffsets(Rect outRect, View view, RecyclerView parent, RecyclerView.State state) {
@@ -96,14 +103,14 @@ public final class CreatorsActivity extends Activity {
         if (!stopped && adapter != null) adapter.prefetchAvatars(scrollDirection);
     };
     private final Runnable badgeRefresh = () -> {
-        if (!badgesDirty || stopped
+        if (!badgesDirty || stopped || indexDragging
                 || recycler.getScrollState() != RecyclerView.SCROLL_STATE_IDLE) return;
         if (recycler.isComputingLayout()) {
             recycler.postOnAnimation(this.badgeRefresh);
             return;
         }
         badgesDirty = false;
-        adapter.refreshBadges();
+        if (updatesOnly) render(); else adapter.refreshBadges();
     };
     private final SharedPreferences.OnSharedPreferenceChangeListener inboxListener = (prefs, key) -> {
         badgesDirty = true;
@@ -112,7 +119,7 @@ public final class CreatorsActivity extends Activity {
     };
 
     private void scheduleAvatarPrefetch() {
-        if (stopped || prefetchPosted) return;
+        if (stopped || prefetchPosted || indexDragging) return;
         prefetchPosted = true;
         recycler.postOnAnimation(avatarPrefetch);
     }
@@ -132,8 +139,16 @@ public final class CreatorsActivity extends Activity {
                 new LinearLayout.LayoutParams(dp(48), dp(48)));
         header.addView(BrowseUi.action(this, "⋮", "Favorite creators menu", v -> {
             ZeroChillMenu menu = new ZeroChillMenu(this, v);
-            menu.getMenu().add("Fetch missing artwork");
-            menu.setOnMenuItemClickListener(item -> { fetchMissingArtwork(); return true; });
+            menu.getMenu().add("Fetch missing artwork").setOnMenuItemClickListener(item -> {
+                fetchMissingArtwork(); return true;
+            });
+            menu.getMenu().add(mergeMode ? "Exit merge mode" : "Merge creators").setOnMenuItemClickListener(item -> {
+                mergeMode = !mergeMode;
+                if (mergeMode) updatesOnly = false;
+                if (mergeMode) ZeroChillToast.makeText(this, "Hold a creator and drag onto another to merge.", ZeroChillToast.LENGTH_LONG).show();
+                render();
+                return true;
+            });
             menu.show();
         }), new LinearLayout.LayoutParams(dp(48), dp(48)));
         LibraryDestinationChrome.attachHeader(root, header, title);
@@ -145,13 +160,20 @@ public final class CreatorsActivity extends Activity {
         input.setSingleLine(true);
         input.setPadding(dp(14), 0, dp(14), 0);
         LibraryDestinationChrome.styleSearch(this, input);
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
-        inputParams.setMargins(dp(12), 0, dp(12), dp(8));
-        root.addView(input, inputParams);
+        inlineSearch = LibraryDestinationChrome.attachInlineSearch(this, header, title, input);
+        header.getChildAt(0).setOnClickListener(v -> onBackPressed());
         count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
         count.setPadding(dp(16), dp(4), dp(16), dp(8));
         LibraryDestinationChrome.styleSummary(this, count);
         root.addView(count);
+        LinearLayout filters = new LinearLayout(this);
+        filters.setPadding(dp(12), 0, dp(12), dp(8));
+        filters.setGravity(Gravity.CENTER_VERTICAL);
+        allFilter = creatorFilter("All creators", false);
+        updatesFilter = creatorFilter("New updates", true);
+        filters.addView(allFilter);
+        filters.addView(updatesFilter);
+        root.addView(filters, new LinearLayout.LayoutParams(-1, -2));
         empty = BrowseUi.text(this, "", 15, BrowseUi.MUTED);
         empty.setGravity(Gravity.CENTER);
         empty.setPadding(dp(24), dp(32), dp(24), dp(24));
@@ -186,7 +208,7 @@ public final class CreatorsActivity extends Activity {
         });
         dragHelper = new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(
                 ItemTouchHelper.UP | ItemTouchHelper.DOWN | ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT, 0) {
-            @Override public boolean isLongPressDragEnabled() { return true; }
+            @Override public boolean isLongPressDragEnabled() { return mergeMode; }
             @Override public boolean onMove(RecyclerView list, RecyclerView.ViewHolder source,
                                             RecyclerView.ViewHolder target) { return false; }
             @Override public void onSwiped(RecyclerView.ViewHolder holder, int direction) { }
@@ -236,6 +258,10 @@ public final class CreatorsActivity extends Activity {
         });
         dragHelper.attachToRecyclerView(recycler);
 
+        recentLabel = BrowseUi.text(this, "Recently visited", 12, AppearanceTheme.secondaryText(this));
+        recentLabel.setPadding(dp(16), dp(2), dp(16), dp(6));
+        recentLabel.setVisibility(View.GONE);
+        root.addView(recentLabel);
         recentScroll = new HorizontalScrollView(this);
         recentScroll.setHorizontalScrollBarEnabled(false);
         recentScroll.setVisibility(View.GONE);
@@ -255,15 +281,40 @@ public final class CreatorsActivity extends Activity {
         FrameLayout.LayoutParams stickyParams = new FrameLayout.LayoutParams(-1, -2, Gravity.TOP);
         stickyParams.rightMargin = dp(22);
         stage.addView(stickyLetter, stickyParams);
-        letterIndex = new LinearLayout(this);
+        letterBubble = BrowseUi.text(this, "", 28, AppearanceTheme.onAccent(this));
+        letterBubble.setGravity(Gravity.CENTER);
+        letterBubble.setTypeface(null, Typeface.BOLD);
+        letterBubble.setBackground(BrowseUi.rounded(this, AppearanceTheme.accent(this), 18));
+        letterBubble.setElevation(dp(4));
+        letterBubble.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        letterBubble.setVisibility(View.GONE);
+        FrameLayout.LayoutParams bubbleParams = new FrameLayout.LayoutParams(dp(58), dp(58),
+                Gravity.TOP | Gravity.END);
+        bubbleParams.setMarginEnd(dp(42));
+        stage.addView(letterBubble, bubbleParams);
+
+        // Keep the visible letters in their original 22dp column, with a wider
+        // invisible touch target to its left. Capture the entire gesture here.
+        letterIndex = new LinearLayout(this) {
+            @Override public boolean onInterceptTouchEvent(android.view.MotionEvent event) {
+                return true;
+            }
+            @Override public boolean onTouchEvent(android.view.MotionEvent event) {
+                return handleIndexTouch(event);
+            }
+        };
         letterIndex.setOrientation(LinearLayout.VERTICAL);
         letterIndex.setGravity(Gravity.CENTER_HORIZONTAL);
-        stage.addView(letterIndex, new FrameLayout.LayoutParams(dp(22), -1, Gravity.END));
+        letterIndex.setPaddingRelative(dp(12), 0, 0, 0);
+        stage.addView(letterIndex, new FrameLayout.LayoutParams(dp(34), -1, Gravity.END));
         root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
         input.addTextChangedListener(BrowseUi.onText(value -> render()));
         if (state != null) {
+            updatesOnly = state.getBoolean("updates_only", false);
+            mergeMode = state.getBoolean("merge_mode", false);
             input.setText(state.getString("query", ""));
+            inlineSearch.restore(state);
             pendingScroll = state.getParcelable("scroll");
             pendingAvatarKeys = state.getStringArrayList("pending_avatar_keys");
         }
@@ -311,24 +362,66 @@ public final class CreatorsActivity extends Activity {
         artworkDialog = null;
     }
 
+    private TextView creatorFilter(String title, boolean updates) {
+        TextView chip = BrowseUi.text(this, title, 13, AppearanceTheme.primaryText(this));
+        chip.setGravity(Gravity.CENTER);
+        chip.setPadding(dp(12), 0, dp(12), 0);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(44));
+        params.setMarginEnd(dp(6));
+        chip.setLayoutParams(params);
+        chip.setOnClickListener(v -> {
+            if (updatesOnly == updates) return;
+            updatesOnly = updates;
+            if (updates) mergeMode = false;
+            render();
+            recycler.scrollToPosition(0);
+        });
+        ZeroChillMotion.installPressFeedback(chip);
+        return chip;
+    }
+
+    static String creatorLetter(String title) {
+        String normalized = CreatorNameMatcher.normalized(title == null ? "" : title);
+        return LibraryBrowseGroups.letter(normalized);
+    }
+
     private void render() {
         List<CreatorCatalog.FavoriteGroup> creators = CreatorCatalog.favoriteGroups(this);
         String query = input.getText().toString();
         creators.removeIf(group -> CreatorNameMatcher.rank(group.item.title, query) == Integer.MAX_VALUE
                 && group.members.values().stream().noneMatch(member ->
                 CreatorNameMatcher.rank(member.title, query) != Integer.MAX_VALUE));
-        adapter.replace(creators);
+        // Keep each letter contiguous; symbols belong at the end of the index.
+        creators.sort(java.util.Comparator.comparingInt((CreatorCatalog.FavoriteGroup group) ->
+                LETTERS.indexOf(creatorLetter(group.item.title)))
+                .thenComparing(group -> CreatorNameMatcher.normalized(group.item.title)));
         bindRecent(creators);
+        if (updatesOnly) {
+            Map<String, Integer> counts = UpdateInboxStore.unreadCreatorContentCounts(this);
+            creators.removeIf(group -> UpdateInboxStore.unreadCreatorContentCount(counts, creatorAliases(group)) == 0);
+        }
+        ZeroChillUi.styleSourceRailChip(allFilter, !updatesOnly);
+        ZeroChillUi.styleSourceRailChip(updatesFilter, updatesOnly);
+        allFilter.setSelected(!updatesOnly);
+        updatesFilter.setSelected(updatesOnly);
+        adapter.replace(creators);
         bindLetterIndex();
         updateStickyLetter();
-        count.setText(creators.size() + (creators.size() == 1 ? " creator · A–Z" : " creators · A–Z"));
+        count.setText(creators.size() + (creators.size() == 1 ? " creator" : " creators")
+                + (mergeMode ? " · Merge mode" : updatesOnly ? " · New updates" : " · A–Z"));
         empty.setVisibility(creators.isEmpty() ? View.VISIBLE : View.GONE);
-        empty.setText(input.length() == 0 ? "No favorite creators yet\n\nTap + to find creators, then tap ☆ to save them here."
+        empty.setText(updatesOnly ? "No creators with new updates." : input.length() == 0 ? "No favorite creators yet\n\nTap + to find creators, then tap ☆ to save them here."
                 : "No favorite creators match your search.");
         if (pendingScroll != null) {
             recycler.getLayoutManager().onRestoreInstanceState(pendingScroll);
             pendingScroll = null;
         }
+    }
+
+    @Override public void onBackPressed() {
+        if (inlineSearch != null && inlineSearch.close()) return;
+        if (mergeMode) { mergeMode = false; render(); return; }
+        super.onBackPressed();
     }
 
     @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
@@ -390,7 +483,9 @@ public final class CreatorsActivity extends Activity {
 
     private void bindLetterIndex() {
         if (letterIndex == null || adapter == null) return;
+        endIndexDrag(false);
         letterIndex.removeAllViews();
+        java.util.Arrays.fill(availableIndexLetters, false);
         if (adapter.getItemCount() == 0) {
             letterIndex.setVisibility(View.GONE);
             return;
@@ -399,26 +494,149 @@ public final class CreatorsActivity extends Activity {
         for (int i = 0; i < LETTERS.length(); i++) {
             String letter = String.valueOf(LETTERS.charAt(i));
             boolean present = adapter.positionForLetter(letter) >= 0;
+            availableIndexLetters[i] = present;
             TextView tick = new TextView(this);
             tick.setText(letter);
             tick.setTextSize(9);
             tick.setGravity(Gravity.CENTER);
             tick.setIncludeFontPadding(false);
-            tick.setTextColor(present ? Color.WHITE : 0xFF44515C);
+            tick.setTextColor(present ? AppearanceTheme.primaryText(this) : 0xFF44515C);
             tick.setContentDescription(letter + " creators");
-            if (present) tick.setOnClickListener(v -> jumpToLetter(letter));
+            if (present) {
+                tick.setFocusable(true);
+                tick.setOnClickListener(v -> jumpToLetter(letter));
+            }
             letterIndex.addView(tick, new LinearLayout.LayoutParams(-1, 0, 1f));
+        }
+    }
+
+    private boolean handleIndexTouch(android.view.MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case android.view.MotionEvent.ACTION_DOWN:
+                if (adapter == null || adapter.getItemCount() == 0 || letterIndex.getHeight() <= 0) return false;
+                indexDragging = true;
+                indexPointer = event.getPointerId(0);
+                activeIndexLetter = null;
+                letterIndex.getParent().requestDisallowInterceptTouchEvent(true);
+                recycler.stopScroll();
+                recycler.removeCallbacks(avatarPrefetch);
+                prefetchPosted = false;
+                adapter.clearPrefetch();
+                updateIndexDrag(event.getY(0));
+                return true;
+            case android.view.MotionEvent.ACTION_MOVE:
+                if (!indexDragging) return false;
+                int pointer = event.findPointerIndex(indexPointer);
+                if (pointer >= 0) updateIndexDrag(event.getY(pointer));
+                return true;
+            case android.view.MotionEvent.ACTION_POINTER_UP:
+                if (indexDragging && event.getPointerId(event.getActionIndex()) == indexPointer) {
+                    endIndexDrag(true);
+                }
+                return true;
+            case android.view.MotionEvent.ACTION_UP:
+                if (indexDragging) {
+                    int last = event.findPointerIndex(indexPointer);
+                    if (last >= 0) updateIndexDrag(event.getY(last));
+                    endIndexDrag(true);
+                }
+                return true;
+            case android.view.MotionEvent.ACTION_CANCEL:
+                endIndexDrag(false);
+                return true;
+            default:
+                return indexDragging;
+        }
+    }
+
+    private void updateIndexDrag(float y) {
+        int childCount = letterIndex.getChildCount();
+        if (childCount == 0) return;
+        int requested = childCount - 1;
+        for (int i = 0; i < childCount; i++) {
+            if (y < letterIndex.getChildAt(i).getBottom()) {
+                requested = i;
+                break;
+            }
+        }
+        int resolved = nearestAvailableIndex(requested, availableIndexLetters);
+        if (resolved < 0) return;
+        String letter = String.valueOf(LETTERS.charAt(resolved));
+        if (!letter.equals(activeIndexLetter)) {
+            activeIndexLetter = letter;
+            jumpToLetter(letter);
+            highlightIndex(letter);
+            if (getSharedPreferences("app_prefs", MODE_PRIVATE).getBoolean("haptics_enabled", true)) {
+                letterIndex.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+            }
+        }
+        if (letterBubble.getVisibility() != View.VISIBLE || letterBubble.getAlpha() != 1f) {
+            letterBubble.animate().cancel();
+            letterBubble.setAlpha(1f);
+            letterBubble.setVisibility(View.VISIBLE);
+        }
+        if (!letter.contentEquals(letterBubble.getText())) letterBubble.setText(letter);
+        View stage = (View) letterIndex.getParent();
+        float maxTop = Math.max(0, stage.getHeight() - dp(58));
+        letterBubble.setTranslationY(Math.max(0, Math.min(maxTop,
+                letterIndex.getTop() + y - dp(29))));
+    }
+
+    // Prefer the next letter on a tie; missing letters never jump to an empty section.
+    static int nearestAvailableIndex(int requested, boolean[] available) {
+        if (available == null || available.length == 0) return -1;
+        int index = Math.max(0, Math.min(requested, available.length - 1));
+        for (int distance = 0; distance < available.length; distance++) {
+            int next = index + distance;
+            if (next < available.length && available[next]) return next;
+            int previous = index - distance;
+            if (previous >= 0 && available[previous]) return previous;
+        }
+        return -1;
+    }
+
+    private void highlightIndex(String active) {
+        for (int i = 0; i < letterIndex.getChildCount(); i++) {
+            TextView tick = (TextView) letterIndex.getChildAt(i);
+            String letter = tick.getText().toString();
+            boolean selected = letter.equals(active);
+            boolean present = availableIndexLetters[i];
+            tick.setSelected(selected);
+            tick.setTextColor(selected ? AppearanceTheme.onAccent(this)
+                    : present ? AppearanceTheme.primaryText(this) : 0xFF44515C);
+            tick.setBackground(selected ? BrowseUi.rounded(this, AppearanceTheme.accent(this), 10) : null);
+        }
+    }
+
+    private void endIndexDrag(boolean animate) {
+        boolean wasDragging = indexDragging;
+        indexDragging = false;
+        indexPointer = -1;
+        activeIndexLetter = null;
+        if (letterIndex != null && letterIndex.getParent() != null && wasDragging) {
+            letterIndex.getParent().requestDisallowInterceptTouchEvent(false);
+            highlightIndex(null);
+        }
+        if (letterBubble != null) {
+            letterBubble.animate().cancel();
+            if (animate && wasDragging && ZeroChillMotion.animationsEnabled(this)
+                    && letterBubble.getVisibility() == View.VISIBLE) {
+                letterBubble.animate().alpha(0f).setDuration(130L).withEndAction(() -> {
+                    if (!indexDragging) letterBubble.setVisibility(View.GONE);
+                }).start();
+            } else {
+                letterBubble.setVisibility(View.GONE);
+                letterBubble.setAlpha(1f);
+            }
+        }
+        if (wasDragging && !stopped) {
+            scheduleAvatarPrefetch();
+            if (badgesDirty) recycler.post(badgeRefresh);
         }
     }
 
     private void jumpToLetter(String letter) {
         int position = adapter.positionForLetter(letter);
-        if (position < 0) {
-            int start = LETTERS.indexOf(letter);
-            for (int i = start + 1; i < LETTERS.length() && position < 0; i++) {
-                position = adapter.positionForLetter(String.valueOf(LETTERS.charAt(i)));
-            }
-        }
         if (position < 0 || !(recycler.getLayoutManager() instanceof GridLayoutManager)) return;
         ((GridLayoutManager) recycler.getLayoutManager()).scrollToPositionWithOffset(position, dp(22));
         recycler.post(this::updateStickyLetter);
@@ -428,8 +646,9 @@ public final class CreatorsActivity extends Activity {
         if (recentScroll == null || recentRow == null) return;
         recentRow.removeAllViews();
         boolean searching = input != null && input.length() > 0;
-        if (searching || creators == null || creators.isEmpty()) {
+        if (updatesOnly || searching || creators == null || creators.isEmpty()) {
             recentScroll.setVisibility(View.GONE);
+            recentLabel.setVisibility(View.GONE);
             return;
         }
         Map<String, CreatorCatalog.FavoriteGroup> byUrl = new HashMap<>();
@@ -445,6 +664,7 @@ public final class CreatorsActivity extends Activity {
             if (++shown == 8) break;
         }
         recentScroll.setVisibility(shown == 0 ? View.GONE : View.VISIBLE);
+        recentLabel.setVisibility(shown == 0 ? View.GONE : View.VISIBLE);
     }
 
     private View recentChip(CreatorCatalog.FavoriteGroup group) {
@@ -717,7 +937,7 @@ public final class CreatorsActivity extends Activity {
 
         String letterAt(int position) {
             if (position < 0 || position >= cards.size() || cards.get(position).group.item == null) return "#";
-            return LibraryBrowseGroups.letter(cards.get(position).group.item.title);
+            return creatorLetter(cards.get(position).group.item.title);
         }
 
         boolean startsLetter(int position) {
@@ -785,9 +1005,9 @@ public final class CreatorsActivity extends Activity {
 
             TextView more = BrowseUi.text(CreatorsActivity.this, "⋮", 23, Color.WHITE);
             more.setGravity(Gravity.CENTER);
-            more.setBackground(BrowseUi.rounded(CreatorsActivity.this, Color.argb(190, 0, 0, 0), 14));
-            FrameLayout.LayoutParams moreParams = new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.TOP | Gravity.START);
-            avatarFrame.addView(more, moreParams);
+            more.setTextSize(18);
+            more.setTextColor(AppearanceTheme.secondaryText(CreatorsActivity.this));
+            more.setBackgroundColor(Color.TRANSPARENT);
 
             TextView name = BrowseUi.text(CreatorsActivity.this, "", 13, Color.WHITE);
             name.setGravity(Gravity.CENTER);
@@ -795,8 +1015,12 @@ public final class CreatorsActivity extends Activity {
             name.setEllipsize(TextUtils.TruncateAt.END);
             LinearLayout.LayoutParams nameParams =
                     new LinearLayout.LayoutParams(-1, -2);
-            nameParams.setMargins(dp(2), dp(7), dp(2), 0);
-            wrapper.addView(name, nameParams);
+            nameParams.setMargins(dp(2), dp(3), dp(2), 0);
+            LinearLayout captionRow = new LinearLayout(CreatorsActivity.this);
+            captionRow.setGravity(Gravity.CENTER_VERTICAL);
+            captionRow.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
+            captionRow.addView(more, new LinearLayout.LayoutParams(dp(32), dp(48)));
+            wrapper.addView(captionRow, nameParams);
 
             return new Holder(wrapper, avatar, name, updateBadge, mergeBadge, more);
         }
@@ -818,6 +1042,11 @@ public final class CreatorsActivity extends Activity {
             holder.itemView.setOnClickListener(v -> openCreator(group, holder.avatar));
             holder.more.setContentDescription("Creator options for " + item.title);
             holder.more.setOnClickListener(v -> showMenu(v, group));
+            holder.itemView.setOnLongClickListener(v -> {
+                if (mergeMode) return false;
+                showMenu(v, group);
+                return true;
+            });
 
             Glide.with(holder.avatar).clear(holder.avatar);
             CreatorAvatarOverrideStore.Override avatarOverride = card.avatarOverride;
@@ -834,7 +1063,7 @@ public final class CreatorsActivity extends Activity {
                             () -> !stopped && holder.bound == group, card.decodeSide));
                 }
                 request.priority(Priority.HIGH)
-                        .transition(ThumbnailFades.avatar())
+                        .transition(SharedArtworkReveal.artwork("favorite-creators", item.url, true))
                         .placeholder(holder.placeholder)
                         .error(R.drawable.ic_more_account)
                         .into(holder.avatar);
@@ -951,6 +1180,7 @@ public final class CreatorsActivity extends Activity {
     @Override protected void onStop() {
         cancelArtwork();
         stopped = true;
+        endIndexDrag(false);
         UpdateInboxStore.unregisterChangeListener(this, inboxListener);
         recycler.removeCallbacks(avatarPrefetch);
         recycler.removeCallbacks(badgeRefresh);
@@ -984,6 +1214,9 @@ public final class CreatorsActivity extends Activity {
     };
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putString("query", input.getText().toString());
+        state.putBoolean("updates_only", updatesOnly);
+        state.putBoolean("merge_mode", mergeMode);
+        inlineSearch.save(state);
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
         if (pendingAvatarKeys != null) {
             state.putStringArrayList("pending_avatar_keys", pendingAvatarKeys);

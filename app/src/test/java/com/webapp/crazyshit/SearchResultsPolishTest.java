@@ -171,10 +171,10 @@ public class SearchResultsPolishTest {
             for (int position : new int[]{0, 1, 0}) {
                 adapter.onBindViewHolder(holder, position);
                 boolean creator = position == 1;
-                assertEquals(BrowseUi.dp(host.get(), creator ? 72 : 100), holder.image.getLayoutParams().width);
-                assertEquals(BrowseUi.dp(host.get(), creator ? 72 : 75), holder.image.getLayoutParams().height);
+                assertEquals(BrowseUi.dp(host.get(), creator ? 72 : 116), holder.image.getLayoutParams().width);
+                assertEquals(BrowseUi.dp(host.get(), creator ? 72 : 76), holder.image.getLayoutParams().height);
                 assertTrue(holder.image.getClipToOutline());
-                assertEquals(BrowseUi.dp(host.get(), creator ? 36 : 8),
+                assertEquals(BrowseUi.dp(host.get(), creator ? 36 : 10),
                         ((android.graphics.drawable.GradientDrawable) holder.image.getBackground()).getCornerRadius(), 1f);
                 assertEquals(17f, holder.title.getTextSize() / host.get().getResources().getDisplayMetrics().scaledDensity, .1f);
                 assertEquals(2, holder.title.getMaxLines());

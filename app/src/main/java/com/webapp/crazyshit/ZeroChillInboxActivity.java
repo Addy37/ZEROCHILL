@@ -139,8 +139,8 @@ public final class ZeroChillInboxActivity extends Activity {
             if (selectionMode()) clearSelection();
             else finish();
         });
-        back.setTextSize(30);
-        header.addView(back, new LinearLayout.LayoutParams(dp(46), dp(48)));
+        SecondaryScreenChrome.back(back, false);
+        header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
@@ -162,18 +162,8 @@ public final class ZeroChillInboxActivity extends Activity {
             if (newMessageDialog != null && newMessageDialog.isShowing()) return;
             newMessageDialog = ZeroChillNewMessageDialog.show(this);
         });
-        // Keep a full 48dp touch target while giving the primary compose action
-        // a compact, accent-filled pill that remains visible on OLED black.
-        composeAction.setTextSize(14f);
-        composeAction.setTypeface(null, android.graphics.Typeface.BOLD);
-        composeAction.setTextColor(AppearanceTheme.onAccent(this));
-        composeAction.setMinWidth(dp(88));
-        composeAction.setPadding(dp(14), 0, dp(14), 0);
-        composeAction.setBackground(new InsetDrawable(ZeroChillUi.rounded(
-                this, AppearanceTheme.accent(this), AppearanceTheme.accent(this),
-                R.dimen.zc_radius_pill), 0, dp(4), 0, dp(4)));
-        LinearLayout.LayoutParams composeParams = new LinearLayout.LayoutParams(-2, dp(48));
-        composeParams.setMarginStart(dp(8));
+        SecondaryScreenChrome.icon(composeAction, R.drawable.ic_action_message, "Start a new direct message", true);
+        LinearLayout.LayoutParams composeParams = new LinearLayout.LayoutParams(dp(48), dp(48));
         header.addView(composeAction, composeParams);
 
         selectionActions = new LinearLayout(this);
@@ -187,7 +177,7 @@ public final class ZeroChillInboxActivity extends Activity {
         selectionActions.addView(deleteAction);
         selectionActions.addView(cancelAction);
         header.addView(selectionActions, new LinearLayout.LayoutParams(-2, dp(48)));
-        header.setMinimumHeight(dp(58));
+        SecondaryScreenChrome.header(header, title, false);
         root.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
         progress = new ZeroChillProgressBar(this);
@@ -199,7 +189,7 @@ public final class ZeroChillInboxActivity extends Activity {
 
         empty = BrowseUi.text(
                 this,
-                "No conversations yet.\n\nTap + New to start a message.",
+                "No conversations yet.\n\nTap the message icon to start a conversation.",
                 14,
                 BrowseUi.MUTED
         );

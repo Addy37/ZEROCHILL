@@ -21,6 +21,21 @@ public class SettingsComposeScreenModelTest {
         assertEquals("Every 3 hours", action.getSubtitle());
     }
 
+    @Test public void settingsSearchFindsIndividualRowsAndBackReturnsToHub() {
+        SettingsComposeScreen.Section section = new SettingsComposeScreen.Section("Notifications");
+        SettingsComposeScreen.Item row = section.addAction("Account notification preferences",
+                "Direct messages and comment replies", "", () -> {});
+        assertTrue(SettingsComposeScreen.matchesSetting(section.getTitle(), row, "direct messages"));
+        assertFalse(SettingsComposeScreen.matchesSetting(section.getTitle(), row, "backup"));
+        SettingsComposeScreen.Navigation nav = new SettingsComposeScreen.Navigation("");
+        nav.open("Notifications", row.getTitle());
+        assertEquals("Notifications", nav.getPage());
+        assertEquals(row.getTitle(), nav.getTarget());
+        assertTrue(nav.back());
+        assertEquals("", nav.getPage());
+        assertFalse(nav.back());
+    }
+
     @Test public void switchInvokesCallbackOncePerActualChange() {
         SettingsComposeScreen.Section section = new SettingsComposeScreen.Section("Appearance");
         AtomicBoolean saved = new AtomicBoolean(true);

@@ -32,6 +32,9 @@ public final class LikedVideosActivity extends Activity {
     private GridLayoutManager galleryLayout;
     private final Map<String, Boolean> portraitLikedVideos = new HashMap<>();
     private TextView status, refresh, more;
+    private android.widget.EditText input;
+    private LibraryDestinationChrome.SearchController inlineSearch;
+    private boolean syncedLikes;
     private String owner = "";
     private boolean loading;
     private int generation, nextOffset, unavailable;
@@ -54,19 +57,26 @@ public final class LikedVideosActivity extends Activity {
         refresh = BrowseUi.action(this, "Refresh", "Refresh liked videos", v -> loadPage(0));
         heading.addView(refresh, new LinearLayout.LayoutParams(-2, dp(48)));
         LibraryDestinationChrome.attachHeader(root, heading, title);
+        input = new ZeroChillEditText(this);
+        input.setHint("Search Liked Videos");
+        inlineSearch = LibraryDestinationChrome.attachInlineSearch(this, heading, title, input);
         status = BrowseUi.text(this, "Loading your likes…", 13, UiPalette.TEXT_MUTED);
         status.setPadding(dp(16), dp(8), dp(16), dp(12));
-        LibraryDestinationChrome.styleSummary(this, status);
-        root.addView(status);
+        LibraryDestinationChrome.attachSummary(root, status, null,
+                () -> LibraryGridGesture.apply(recycler, LibraryGridGesture.next(galleryLayout.getSpanCount())));
         recycler = new RecyclerView(this);
         galleryLayout = new GridLayoutManager(this, 2);
         galleryLayout.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
             @Override public int getSpanSize(int position) {
-                return position >= 0 && position < rows.size() && rows.get(position).heading() ? 2 : 1;
+                return position >= 0 && position < rows.size() && rows.get(position).heading()
+                        ? galleryLayout.getSpanCount() : 1;
             }
         });
         recycler.setLayoutManager(galleryLayout);
         recycler.setAdapter(adapter);
+        recycler.addOnItemTouchListener(new LibraryGridGesture(this,
+                () -> LibraryGridGesture.apply(recycler, galleryLayout.getSpanCount() + 1),
+                () -> LibraryGridGesture.apply(recycler, galleryLayout.getSpanCount() - 1)));
         recycler.setClipToPadding(false);
         recycler.setPadding(dp(12), 0, dp(12), dp(24));
         root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -75,8 +85,17 @@ public final class LikedVideosActivity extends Activity {
         LibraryDestinationChrome.styleAction(more, this);
         root.addView(more, new LinearLayout.LayoutParams(-1, dp(48)));
         setContentView(root);
+        if (state != null) {
+            restoredScroll = state.getParcelable("scroll");
+            input.setText(state.getString("query", ""));
+            inlineSearch.restore(state);
+            LibraryGridGesture.apply(recycler, state.getInt("grid_columns", 2));
+        }
+        input.addTextChangedListener(BrowseUi.onText(value -> {
+            publish();
+            if (!loading) showStatus(syncedLikes);
+        }));
         ZeroChillSessionStore.preferences(this).registerOnSharedPreferenceChangeListener(sessionListener);
-        if (state != null) restoredScroll = state.getParcelable("scroll");
         Retained retained = (Retained) getLastNonConfigurationInstance();
         if (retained != null && owner.equals(retained.owner)) {
             items.addAll(retained.items);
@@ -106,6 +125,7 @@ public final class LikedVideosActivity extends Activity {
         if (owner.equals(current)) return;
         generation++;
         owner = current;
+        syncedLikes = false;
         loading = false;
         nextOffset = unavailable = 0;
         hasMore = false;
@@ -168,8 +188,16 @@ public final class LikedVideosActivity extends Activity {
     }
 
     private void showStatus(boolean synced) {
+        syncedLikes = synced;
         refresh.setEnabled(true); more.setEnabled(true);
         more.setVisibility(hasMore ? View.VISIBLE : View.GONE);
+        if (!owner.isEmpty() && input != null && !LibrarySearch.normalize(input.getText().toString()).isEmpty()) {
+            int matches = 0;
+            for (Row row : rows) if (!row.heading()) matches++;
+            status.setText(matches + " of " + items.size() + " loaded likes"
+                    + (hasMore ? " · Load more to search further" : ""));
+            return;
+        }
         status.setText(owner.isEmpty() ? "Sign in, then tap Refresh to view your likes."
                 : unavailable > 0 ? items.size() + " available · " + unavailable
                         + " older likes have no video details on this device."
@@ -186,7 +214,10 @@ public final class LikedVideosActivity extends Activity {
     private void rebuildRows() {
         rows.clear();
         LinkedHashMap<String, List<NativeContentItem>> groups = new LinkedHashMap<>();
+        String query = input == null ? "" : input.getText().toString();
         for (NativeContentItem item : items) {
+            if (!LibrarySearch.matches(query, item.title, item.url, item.uploader,
+                    LibraryBrowseGroups.sourceLabel(item.url))) continue;
             groups.computeIfAbsent(LibraryBrowseGroups.sourceLabel(item.url), key -> new ArrayList<>()).add(item);
         }
         for (Map.Entry<String, List<NativeContentItem>> entry : groups.entrySet()) {
@@ -278,7 +309,7 @@ public final class LikedVideosActivity extends Activity {
                             return false;
                         }
                     })
-                    .transition(ThumbnailFades.thumbnail()).into(holder.image);
+                    .transition(SharedArtworkReveal.artwork("liked-videos", item.url, false)).into(holder.image);
             }
             holder.itemView.setOnClickListener(v ->
                     LibraryPlayback.openSaved(LikedVideosActivity.this, item, -1L, false));
@@ -318,8 +349,14 @@ public final class LikedVideosActivity extends Activity {
     }
 
     @Override protected void onResume() { super.onResume(); if (status != null) checkAccount(); }
+    @Override public void onBackPressed() {
+        if (inlineSearch == null || !inlineSearch.close()) super.onBackPressed();
+    }
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
+        state.putString("query", input.getText().toString());
+        state.putInt("grid_columns", galleryLayout.getSpanCount());
+        inlineSearch.save(state);
         super.onSaveInstanceState(state);
     }
     @Override protected void onDestroy() {

@@ -52,7 +52,7 @@ public class LibraryCollectionTest {
         } finally { hub.close(); }
     }
 
-    @Test public void collectionStaysAfterPreviewsAndAccentChangeKeepsSnapshotAndTiles() throws Exception {
+    @Test public void collectionsComeBeforeShelvesAndAccentChangeKeepsSnapshotAndTiles() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         LibraryHubView hub = new LibraryHubView(activity, null);
         activity.setContentView(hub);
@@ -66,7 +66,9 @@ public class LibraryCollectionTest {
             shadowOf(Looper.getMainLooper()).idle();
             View grid = hub.findViewWithTag("library-collection");
             LinearLayout content = ReflectionHelpers.getField(hub, "content");
-            assertSame(grid, content.getChildAt(content.getChildCount() - 1));
+            assertSame(grid, content.getChildAt(1));
+            assertSame(hub.findViewWithTag("library-custom-collections"), content.getChildAt(2));
+            assertSame(ReflectionHelpers.getField(hub, "mediaContent"), content.getChildAt(3));
             Object snapshot = ReflectionHelpers.getField(hub, "displayed");
             work.clear();
             AppearanceTheme.setAccent(activity, AppearanceTheme.Accent.PURPLE);
@@ -102,8 +104,8 @@ public class LibraryCollectionTest {
         grid.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         grid.layout(0, 0, width, grid.getMeasuredHeight());
-        assertEquals(3, grid.getChildCount());
-        for (int row = 1; row <= 2; row++) {
+        assertEquals(2, grid.getChildCount());
+        for (int row = 0; row < 2; row++) {
             ViewGroup pair = (ViewGroup) grid.getChildAt(row);
             assertEquals(2, pair.getChildCount());
             assertEquals(pair.getChildAt(0).getWidth(), pair.getChildAt(1).getWidth());
@@ -123,31 +125,51 @@ public class LibraryCollectionTest {
         assertEquals(4, clicks[0]);
     }
 
-    @Test public void populatedCollectionsUseLargePreviewsAndKeepLabelsReadable() {
+    @Test public void customCollectionsHaveSeparateArtworkAndOneCreateAction() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        LibraryCollectionView grid = new LibraryCollectionView(activity, () -> {}, () -> {}, () -> {}, () -> {});
-        int width = BrowseUi.dp(activity, 400);
-        for (String tag : new String[]{"watch-later", "downloads", "history", "favorites"}) {
-            grid.setPreviews(tag, java.util.Arrays.asList("file:///preview-a", "file:///preview-b", "file:///preview-c"));
-        }
-        grid.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+        String id = MediaCollectionStore.create(activity, "Example collection");
+        CustomCollectionsView view = new CustomCollectionsView(activity);
+        view.bind(MediaCollectionStore.previews(activity));
+        ViewGroup tile = view.findViewWithTag("library-custom-collection-" + id);
+        assertNotNull(tile);
+        assertEquals(3, tile.getChildCount());
+        assertEquals("collection-artwork", tile.getChildAt(0).getTag());
+        assertNull(tile.getBackground());
+        assertNull(tile.getChildAt(0).getBackground());
+        assertEquals("Example collection", ((TextView) tile.getChildAt(1)).getText().toString());
+        assertEquals("0 items", ((TextView) tile.getChildAt(2)).getText().toString());
+        ViewGroup header = (ViewGroup) view.getChildAt(0);
+        View create = view.findViewWithTag("library-new-collection");
+        assertSame(header, create.getParent());
+        assertEquals("Create new collection", create.getContentDescription());
+        assertTrue(create.isClickable());
+        assertNull(create.getBackground());
+        assertEquals(2, view.getChildCount());
+        assertEquals("My Collections", ((TextView) header.getChildAt(0)).getText().toString());
+        ViewGroup rows = (ViewGroup) view.getChildAt(1);
+        assertEquals(1, rows.getChildCount());
+        assertNull(rows.findViewWithTag("library-new-collection"));
+        assertEquals(2, ((ViewGroup) rows.getChildAt(0)).getChildCount());
+        // A single collection plus an empty grid cell must not collapse the row.
+        int width = BrowseUi.dp(activity, 288);
+        view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        grid.layout(0, 0, width, grid.getMeasuredHeight());
-        grid.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        grid.layout(0, 0, width, grid.getMeasuredHeight());
-        for (String tag : new String[]{"watch-later", "downloads", "history", "favorites"}) {
-            ViewGroup stack = grid.findViewWithTag("library-collection-stack-" + tag);
-            assertEquals(View.VISIBLE, stack.getVisibility());
-            assertEquals(3, stack.getChildCount());
-            assertTrue(stack.getChildAt(2).getLayoutParams().width > BrowseUi.dp(activity, 40));
-            grid.setPreviews(tag, java.util.Collections.singletonList("file:///preview-a"));
-            assertEquals(1, stack.getChildCount());
-            assertTrue(stack.getChildAt(0).getLayoutParams().width >= BrowseUi.dp(activity, 48));
-            grid.setPreviews(tag, java.util.Collections.emptyList());
-            assertEquals(View.GONE, stack.getVisibility());
-        }
-        grid.release();
+        view.layout(0, 0, width, view.getMeasuredHeight());
+        View row = rows.getChildAt(0);
+        assertTrue("Single collection row must remain visible", row.getHeight() >= BrowseUi.dp(activity, 90));
+        assertTrue(tile.getHeight() >= BrowseUi.dp(activity, 90));
+        assertTrue(tile.getChildAt(0).getHeight() > BrowseUi.dp(activity, 70));
+        assertTrue(tile.getChildAt(2).getBottom() <= tile.getHeight());
+        assertEquals("Example collection", MediaCollectionStore.find(activity, id).name);
+        // Reconstruct the view as on an app restart; saved collection remains available.
+        CustomCollectionsView recreated = new CustomCollectionsView(activity);
+        recreated.bind(MediaCollectionStore.previews(activity));
+        assertNotNull(recreated.findViewWithTag("library-custom-collection-" + id));
+        recreated.release();
+        view.bind(java.util.Collections.emptyList());
+        assertSame(create, view.findViewWithTag("library-new-collection"));
+        assertEquals("Tap + to create a collection", ((TextView) rows.getChildAt(0)).getText().toString());
+        view.release();
     }
 
     private Intent open(Activity activity, LibraryHubView hub, String tag) {

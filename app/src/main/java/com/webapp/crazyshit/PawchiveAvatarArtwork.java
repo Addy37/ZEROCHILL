@@ -49,7 +49,7 @@ final class PawchiveAvatarArtwork {
                                                     .setHeader("Referer", PawchiveRepository.ORIGIN).build()))
                                             .override(size, size).centerCrop()
                                             .error(R.drawable.ic_more_account)
-                                            .transition(ThumbnailFades.avatar()).into(image);
+                                            .transition(SharedArtworkReveal.artwork("creator-avatar-fallback", item.url, true)).into(image);
                                 });
                             } catch (IOException ignored) { }
                         });

@@ -2,48 +2,48 @@ package com.webapp.crazyshit
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -102,17 +102,49 @@ object SettingsComposeScreen {
         }
     }
 
+    class Navigation(initialPage: String) {
+        var page by mutableStateOf(initialPage)
+            private set
+        var query by mutableStateOf("")
+        var target by mutableStateOf("")
+            private set
+
+        fun open(section: String, item: String = "") {
+            page = section
+            target = item
+            query = ""
+        }
+
+        fun back(): Boolean {
+            if (page.isNotEmpty()) { open(""); return true }
+            if (query.isNotEmpty()) { query = ""; return true }
+            return false
+        }
+    }
+
+    private data class Destination(val title: String, val summary: String, val icon: Int)
+    private val destinations = listOf(
+        Destination("Appearance", "Themes, colors, glass and motion", R.drawable.ic_more_view_style),
+        Destination("Notifications", "Messages, creators and app alerts", R.drawable.ic_more_update),
+        Destination("Content & playback", "Preferences, preloading and blocked creators", R.drawable.ic_player_play),
+        Destination("Account & privacy", "Profile, security and privacy", R.drawable.ic_more_account),
+        Destination("Library & storage", "History, saved items and backups", R.drawable.ic_more_library),
+        Destination("App updates", "Check for updates and What's New", R.drawable.ic_action_replay),
+        Destination("Advanced", "Source configuration and diagnostics", R.drawable.ic_more_settings),
+        Destination("About ZEROCHILL", "Version and startup tour", R.drawable.ic_more_help),
+    )
+
     @JvmStatic
-    fun mount(activity: SettingsActivity, sections: List<Section>) {
+    fun mount(activity: SettingsActivity, sections: List<Section>, navigation: Navigation) {
         val view = ComposeView(activity).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-            setContent { SettingsPage(activity, sections) }
+            setContent { SettingsPage(activity, sections, navigation) }
         }
         activity.setContentView(view)
     }
 
     @Composable
-    private fun SettingsPage(activity: SettingsActivity, sections: List<Section>) {
+    private fun SettingsPage(activity: SettingsActivity, sections: List<Section>, navigation: Navigation) {
         val accent by animateColorAsState(
             Color(AppearanceTheme.accent(activity)), tween(220), label = "settings accent"
         )
@@ -122,71 +154,137 @@ object SettingsComposeScreen {
                 onBackground = Ink, surface = Surface, onSurface = Ink,
             ),
         ) {
+            val current = sections.firstOrNull { it.title == navigation.page }
+            val focus = LocalFocusManager.current
             Column(
                 modifier = Modifier.fillMaxSize().background(Black)
                     .padding(WindowInsets.safeDrawing.asPaddingValues())
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(13.dp),
+                    .padding(horizontal = 16.dp),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 ) {
                     Box(
-                        modifier = Modifier.size(46.dp).clip(RoundedCornerShape(14.dp))
-                            .clickable { activity.finish() }
+                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
+                            .clickable { activity.navigateBack() }
                             .semantics { contentDescription = "Back" },
                         contentAlignment = Alignment.Center,
-                    ) { Text("‹", fontSize = 34.sp, color = accent) }
-                    Spacer(Modifier.width(8.dp))
-                    Column {
-                        Text("Settings", color = Ink, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                        Text("ZEROCHILL  /  PREFERENCES", color = Muted, fontSize = 11.sp, letterSpacing = 1.sp)
+                    ) {
+                        Icon(painterResource(R.drawable.ic_player_back), null,
+                            tint = Ink, modifier = Modifier.size(24.dp))
                     }
+                    Text(current?.title ?: "Settings", color = Ink,
+                        fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 }
-
-                sections.forEach { section ->
-                    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(start = 5.dp, top = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Box(Modifier.size(6.dp).background(accent, CircleShape))
-                            Text(
-                                section.title.uppercase(),
-                                color = Muted, fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp, letterSpacing = .8.sp,
-                            )
+                key(current?.title, navigation.target) {
+                    val fade = remember { Animatable(1f) }
+                    LaunchedEffect(current?.title, navigation.target) {
+                        if (ZeroChillMotion.animationsEnabled(activity)) {
+                            fade.snapTo(.76f)
+                            fade.animateTo(1f, tween(150))
                         }
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Surface),
-                            border = BorderStroke(1.dp, Stroke),
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column {
-                                section.items.forEachIndexed { index, item ->
-                                    if (index > 0) HorizontalDivider(
-                                        color = Stroke.copy(alpha = .8f),
-                                        thickness = .6.dp,
-                                        modifier = Modifier.padding(horizontal = 13.dp),
-                                    )
-                                    SettingRow(item, accent)
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f).fillMaxWidth()
+                            .verticalScroll(rememberScrollState()).alpha(fade.value).padding(bottom = 16.dp),
+                    ) {
+                        if (current == null) {
+                            OutlinedTextField(
+                                value = navigation.query,
+                                onValueChange = { navigation.query = it },
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                placeholder = { Text("Search settings", color = Muted) },
+                                leadingIcon = { Icon(painterResource(R.drawable.ic_nav_search), null,
+                                    tint = Muted, modifier = Modifier.size(20.dp)) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                            )
+                            val query = navigation.query.trim()
+                            if (query.isEmpty()) {
+                                destinations.filter { d -> sections.any { it.title == d.title } }
+                                    .forEach { destination ->
+                                        HubRow(destination.title, destination.summary, destination.icon, accent) {
+                                            navigation.open(destination.title)
+                                        }
+                                        SettingsDivider()
+                                    }
+                                Column(Modifier.fillMaxWidth().padding(top = 22.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Row {
+                                        Text("ZERO", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                        Text("CHILL", color = accent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                    }
+                                    Text(BuildConfig.VERSION_NAME, color = Muted, fontSize = 11.sp)
+                                }
+                            } else {
+                                val matches = sections.flatMap { section ->
+                                    section.items.filter { matchesSetting(section.title, it, query) }
+                                        .map { section.title to it }
+                                }
+                                if (matches.isEmpty()) Text("No matching settings", color = Muted,
+                                    modifier = Modifier.padding(16.dp))
+                                matches.forEach { (section, item) ->
+                                    HubRow(item.title, section, R.drawable.ic_more_settings, accent) {
+                                        focus.clearFocus()
+                                        navigation.open(section, item.title)
+                                    }
+                                    SettingsDivider()
                                 }
                             }
+                        } else {
+                            if (current.title == "Notifications") Text(
+                                "Device alerts and account-synced preferences are separate controls.",
+                                color = Secondary, fontSize = 12.sp,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                            )
+                            val ordered = if (navigation.target.isEmpty()) current.items.toList()
+                                else current.items.sortedBy { it.title != navigation.target }
+                            ordered.forEach { item ->
+                                SettingRow(item, accent)
+                                SettingsDivider()
+                            }
+                            if (current.title == "About ZEROCHILL") Text(
+                                "ZEROCHILL " + BuildConfig.VERSION_NAME + "\nNO LIMITS. ALL CONTENT.",
+                                color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                            )
                         }
                     }
                 }
-
-                Text(
-                    "ZeroChill  •  " + BuildConfig.VERSION_NAME + "\nCommunity Android client",
-                    color = Muted, fontSize = 11.sp, lineHeight = 16.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                )
             }
+        }
+    }
+
+    @JvmStatic
+    fun matchesSetting(section: String, item: Item, query: String): Boolean {
+        val haystack = listOf(section, item.title, item.subtitle, item.trailing).joinToString(" ")
+        return query.trim().split(Regex("\\s+")).all { haystack.contains(it, ignoreCase = true) }
+    }
+
+    @Composable
+    private fun SettingsDivider() {
+        HorizontalDivider(color = Stroke.copy(alpha = .55f), thickness = .6.dp,
+            modifier = Modifier.padding(horizontal = 12.dp))
+    }
+
+    @Composable
+    private fun HubRow(title: String, summary: String, icon: Int, accent: Color, action: () -> Unit) {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = action)
+                .padding(horizontal = 8.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(accent.copy(alpha = .10f)),
+                contentAlignment = Alignment.Center) {
+                Icon(painterResource(icon), null, tint = accent, modifier = Modifier.size(23.dp))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(summary, color = Secondary, fontSize = 12.sp, lineHeight = 16.sp)
+            }
+            Text("›", color = Muted, fontSize = 23.sp)
         }
     }
 
@@ -211,7 +309,7 @@ object SettingsComposeScreen {
             ) {
                 Text(
                     item.title,
-                    color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                    color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                     maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )
                 if (item.subtitle.isNotBlank()) {

@@ -19,6 +19,8 @@ import androidx.core.content.ContextCompat;
 
 public class SettingsActivity extends ComponentActivity {
     public static final String EXTRA_CHECK_FOR_UPDATES = "check_for_updates";
+    public static final String EXTRA_SECTION = "settings_section";
+    private SettingsComposeScreen.Navigation navigation;
 
     private SharedPreferences prefs;
     private AppUpdater appUpdater;
@@ -54,7 +56,15 @@ public class SettingsActivity extends ComponentActivity {
         prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
         appUpdater = new AppUpdater(this);
         backup = new AppBackupController(this);
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         ZeroChillUi.applySystemBars(this);
+        String page = state != null ? state.getString("settings_page", "")
+                : getIntent().getStringExtra(EXTRA_SECTION);
+        if (getIntent().getBooleanExtra(EXTRA_CHECK_FOR_UPDATES, false)) page = "App updates";
+        navigation = new SettingsComposeScreen.Navigation(page == null ? "" : page);
+        getOnBackPressedDispatcher().addCallback(this, new androidx.activity.OnBackPressedCallback(true) {
+            @Override public void handleOnBackPressed() { navigateBack(); }
+        });
         buildUi();
         renderedAppearanceSignature = AppearanceTheme.signature(this);
         appliedAppearanceColors = AppearanceTheme.colorSignature(this);
@@ -72,11 +82,15 @@ public class SettingsActivity extends ComponentActivity {
     /** Keep all original actions and preference keys; only the presentation changes. */
     private void buildUi() {
         settingsSections.clear();
-        SettingsComposeScreen.Section notifications = addGroup("Notifications & updates");
+        SettingsComposeScreen.Section notifications = addGroup("Notifications");
+        addAction(notifications, "Account notification preferences",
+                "Comment replies, likes, direct messages, message previews, grouping, creator and app alerts.", "",
+                () -> startActivity(new Intent(this, ZeroChillSocialSettingsActivity.class)
+                        .putExtra(ZeroChillSocialSettingsActivity.EXTRA_MODE, ZeroChillSocialSettingsActivity.MODE_NOTIFICATIONS)));
         addSwitch(
                 notifications,
                 "Favorite creator updates",
-                "Notify when your favorite creators have new content.",
+                "Device alert for new content from favorite creators.",
                 NotificationCoordinator.PREF_NEW_VIDEO_ALERTS,
                 true
         );
@@ -97,12 +111,13 @@ public class SettingsActivity extends ComponentActivity {
         addSwitch(
                 notifications,
                 "App update alerts",
-                "Notify when a new ZeroChill build is ready.",
+                "Device alert when a new ZeroChill build is ready.",
                 NotificationCoordinator.PREF_UPDATE_ALERTS,
                 true
         );
+        SettingsComposeScreen.Section updates = addGroup("App updates");
         addAction(
-                notifications,
+                updates,
                 "Check for app update",
                 "Installed version " + BuildConfig.VERSION_NAME,
                 "",
@@ -110,9 +125,10 @@ public class SettingsActivity extends ComponentActivity {
                     if (appUpdater != null) appUpdater.check(true);
                 }
         );
+        SettingsComposeScreen.Section advanced = addGroup("Advanced");
         if (getPackageName().endsWith(".dev")) {
             addAction(
-                    notifications,
+                    advanced,
                     "Preview update experience",
                     "Test the floating update card, progress bar, and ready state. No APK is installed.",
                     "",
@@ -128,11 +144,11 @@ public class SettingsActivity extends ComponentActivity {
             );
         }
 
-        SettingsComposeScreen.Section content = addGroup("Content");
+        SettingsComposeScreen.Section content = addGroup("Content & playback");
         addAction(content, "Content preference", ContentPreference.get(this).label, "",
                 () -> ContentPreferenceUi.choose(this, this::recreate));
 
-        SettingsComposeScreen.Section playback = addGroup("Playback");
+        SettingsComposeScreen.Section playback = content;
         addAction(
                 playback,
                 "ShitTok preloading",
@@ -148,7 +164,7 @@ public class SettingsActivity extends ComponentActivity {
                 this::showBlockedShitTokCreators
         );
 
-        addAction(notifications, "What’s New", "Highlights for your installed version.", "",
+        addAction(updates, "What’s New", "Highlights for your installed version.", "",
                 () -> WhatsNewDialog.show(this, false));
 
         SettingsComposeScreen.Section appearance = addGroup("Appearance");
@@ -166,8 +182,11 @@ public class SettingsActivity extends ComponentActivity {
                 "haptics_enabled",
                 true
         );
+        SettingsComposeScreen.Section about = addGroup("About ZEROCHILL");
+        addAction(about, "Feedback & support", "Send feedback or view your existing conversations.", "",
+                () -> startActivity(new Intent(this, FeedbackActivity.class)));
         addAction(
-                appearance,
+                about,
                 "Startup tour",
                 "Replay the ZEROCHILL introduction without resetting your data.",
                 "",
@@ -178,21 +197,7 @@ public class SettingsActivity extends ComponentActivity {
                 }
         );
 
-        SettingsComposeScreen.Section library = addGroup("Library & data");
-        addAction(
-                library,
-                "Favorite creators",
-                "Search and open your starred creators.",
-                "",
-                () -> startActivity(new Intent(this, CreatorsActivity.class))
-        );
-        addAction(
-                library,
-                "Library",
-                "Continue Watching, History and Watch Later.",
-                "",
-                () -> startActivity(new Intent(this, FavoritesActivity.class))
-        );
+        SettingsComposeScreen.Section library = addGroup("Library & storage");
         addAction(
                 library,
                 "Backup & restore",
@@ -208,7 +213,12 @@ public class SettingsActivity extends ComponentActivity {
                 this::showManageLibraryData
         );
 
-        SettingsComposeScreen.Section privacy = addGroup("Privacy");
+        SettingsComposeScreen.Section privacy = addGroup("Account & privacy");
+        addAction(privacy, "Your account", "ZEROCHILL ID, profile and account security.", "",
+                () -> startActivity(new Intent(this, ZeroChillAccountActivity.class)));
+        addAction(privacy, "Blocked users", "Manage accounts you have blocked.", "",
+                () -> startActivity(new Intent(this, ZeroChillSocialSettingsActivity.class)
+                        .putExtra(ZeroChillSocialSettingsActivity.EXTRA_MODE, ZeroChillSocialSettingsActivity.MODE_BLOCKED)));
         addAction(
                 privacy,
                 "Clear site data",
@@ -217,7 +227,6 @@ public class SettingsActivity extends ComponentActivity {
                 this::confirmClearSiteData
         );
 
-        SettingsComposeScreen.Section advanced = addGroup("Advanced");
         sourceConfigStatusView = addAction(
                 advanced,
                 "Source configuration",
@@ -241,7 +250,17 @@ public class SettingsActivity extends ComponentActivity {
         );
 
 
-        SettingsComposeScreen.mount(this, new java.util.ArrayList<>(settingsSections));
+        SettingsComposeScreen.mount(this, new java.util.ArrayList<>(settingsSections), navigation);
+    }
+
+    void navigateBack() {
+        if (navigation != null && navigation.back()) return;
+        finish();
+    }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        if (navigation != null) state.putString("settings_page", navigation.getPage());
+        super.onSaveInstanceState(state);
     }
 
     private SettingsComposeScreen.Section addGroup(String title) {

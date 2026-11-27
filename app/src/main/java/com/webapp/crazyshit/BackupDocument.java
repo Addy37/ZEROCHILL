@@ -53,6 +53,7 @@ final class BackupDocument {
         if (!"crazyshit-backup".equals(document.optString("format"))
                 || !(document.opt("version") instanceof Integer) || document.getInt("version") != 1)
             throw new IOException("This isn't a supported ZeroChill backup.");
+        if (document.has("collections")) MediaCollectionStore.validate(document.getJSONArray("collections"));
         JSONArray creators = document.getJSONArray("creators");
         JSONArray later = document.getJSONArray("watchLater");
         if (creators.length() > MAX_ITEMS || later.length() > MAX_ITEMS)

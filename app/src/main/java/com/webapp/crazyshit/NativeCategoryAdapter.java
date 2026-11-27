@@ -431,7 +431,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .skipMemoryCache(false)
                     .dontAnimate()
-                    .transition(ThumbnailFades.thumbnail())
+                    .transition(SharedArtworkReveal.artwork("native-category", item.url, false))
                     .centerCrop()
                     .placeholder(new ColorDrawable(Color.rgb(31, 31, 35)))
                     .error(new ColorDrawable(Color.rgb(31, 31, 35)))
@@ -459,7 +459,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                 .load(remoteImage(imageUrl.trim(), artwork == null ? item.url : artwork.referer))
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .dontAnimate()
-                .transition(ThumbnailFades.thumbnail())
+                .transition(SharedArtworkReveal.artwork("native-category", item.url, false))
                 .centerCrop()
                 .placeholder(new ColorDrawable(Color.rgb(31, 31, 35)))
                 .error(new ColorDrawable(Color.rgb(31, 31, 35)))
@@ -530,7 +530,7 @@ public final class NativeCategoryAdapter extends RecyclerView.Adapter<NativeCate
                     }
                 });
         if (ZeroChillMotion.animationsEnabled(holder.image.getContext())) {
-            foreground = foreground.transition(ThumbnailFades.hero());
+            foreground = foreground.transition(SharedArtworkReveal.artwork("creator-category", item.url, false));
         } else {
             foreground = foreground.dontAnimate();
         }

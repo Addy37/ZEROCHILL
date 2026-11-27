@@ -45,3 +45,13 @@ publication, resolver suspension, stale completion and queue cancellation. The
 fixture uses production Library views/queue and synthetic local conditions; it is
 not a physical-device performance benchmark. No timing improvement is claimed
 until the supplied recordings are checked against the new Beta on the user's device.
+
+## Custom collections layout refinement
+
+The Library uses the approved order: compact profile and communication shortcuts, compact saved-content actions (Watch Later/Favorites, History/Downloads), My Collections, Favorite Creators, and Liked Videos. Saved-content actions omit duplicate headings and preview stacks; custom collections own the larger 8:5 artwork panels with separate name/count captions and a single outlined New collection tile. Creators use one horizontally scrolling rail with all existing preview entries and View all. Liked Videos retains the existing orientation-aware rows. Existing store ownership, account and playback routes, navigation, local backup format and thumbnail request behavior for custom collections are unchanged. Collection surfaces follow the selected accent without restarting artwork requests.
+
+The final custom collection polish removes the surrounding artwork surface and the New collection grid tile. A single 48 dp heading action uses a theme-accent plus; the floating stacks grow modestly with cell-width bounds, retaining the title and count. An empty collection list shows a short creation hint. No store or navigation changes.
+
+## Secondary Library destinations, phase 1
+
+Favorites, Watch Later, History, Continue Watching, Downloads, custom collection contents, Favorite Creators and Liked Videos share a flat header and inline search. Existing search watchers and route ownership are preserved. Liked Videos searches loaded entries locally and keeps explicit refresh/pagination. Saved/history grids support 2–5 columns and date order; Downloads and Liked Videos support grid controls and pinch. Continue Watching retains mixed media at default density, with compact uniform cells at higher densities. Favorite Creators retains the existing three-column alphabetic grid and index. No backend, storage, or signing changes.

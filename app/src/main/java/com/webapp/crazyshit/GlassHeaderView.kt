@@ -131,7 +131,7 @@ internal fun searchResultsGlassConfig(activity: Activity): GlassEffectConfig =
         base.copy(
             surfaceTintColor = Color.Black,
             blurRadius = (base.blurRadius * 1.6f).coerceAtMost(2f),
-            surfaceOpacity = (base.surfaceOpacity + .06f).coerceAtMost(.30f),
+            surfaceOpacity = (base.surfaceOpacity + .10f).coerceAtMost(.36f),
         )
     }
 

@@ -74,6 +74,50 @@ public class StartupWizardUiTest {
         assertNull(find(root, "I confirm that I am 18 or older."));
     }
 
+    @Test public void tourExplainsCurrentFeaturesAndUsesStaticPreviewsWithMotionOff() throws Exception {
+        Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("app_prefs", 0).edit()
+                .putBoolean("immersive_motion_enabled", false).commit();
+        try {
+            StartupWizardActivity activity = create();
+            Method showPage = StartupWizardActivity.class.getDeclaredMethod("showPage", int.class, boolean.class);
+            showPage.setAccessible(true);
+            showPage.invoke(activity, 2, true);
+            View root = activity.getWindow().getDecorView();
+            CinematicTourView tour = org.robolectric.util.ReflectionHelpers.getField(activity, "tour");
+            assertEquals(0, tour.currentScene());
+            assertNull(org.robolectric.util.ReflectionHelpers.getField(tour, "animation"));
+            assertNotNull(find(root, "Find your feed."));
+            for (int i = 1; i < 5; i++) {
+                findDescription(root, "Next preview").performClick();
+                assertEquals(i, tour.currentScene());
+                assertNotNull(find(root, CinematicTourView.TITLES[i]));
+            }
+            findDescription(root, "Next preview").performClick();
+            assertEquals(0, tour.currentScene());
+            find(root, "CONTINUE").performClick();
+            assertNotNull(find(root, "Make it yours"));
+            assertNull(org.robolectric.util.ReflectionHelpers.getField(activity, "tour"));
+            activity.finish();
+        } finally {
+            context.getSharedPreferences("app_prefs", 0).edit().remove("immersive_motion_enabled").commit();
+        }
+    }
+
+    @Test public void fullCharacterCartoonsDrawAllSixPosesWithExistingAccents() {
+        Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(200, 200, android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
+        for (AppearanceTheme.Accent accent : AppearanceTheme.Accent.values()) {
+            WizardMascotArt art = new WizardMascotArt(context, accent.color);
+            for (int pose = 0; pose <= WizardMascotArt.POPCORN; pose++) {
+                for (float phase : new float[]{0f, .48f, 1f})
+                    art.draw(canvas, 0, 0, 200, pose, phase);
+            }
+        }
+        bitmap.recycle();
+    }
+
     @Test public void finalPageOffersOptionalCreateAndSignInEntries() throws Exception {
         StartupWizardActivity activity = create();
         showSettings(activity);
@@ -148,6 +192,7 @@ public class StartupWizardUiTest {
         showSettings(activity);
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         View root = activity.getWindow().getDecorView();
+        find(root, "+  Notification & haptic preferences").performClick();
         View switchView = findSwitch(root, "Favorite creator alerts");
         assertNotNull(switchView);
         boolean before = ((CompoundButton) switchView).isChecked();
@@ -170,7 +215,7 @@ public class StartupWizardUiTest {
         Method showPage = StartupWizardActivity.class.getDeclaredMethod(
                 "showPage", int.class, boolean.class);
         showPage.setAccessible(true);
-        showPage.invoke(activity, 4, true);
+        showPage.invoke(activity, 3, true);
     }
 
     private static View find(View root, String text) {

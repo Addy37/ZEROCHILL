@@ -59,21 +59,20 @@ public final class FeedbackThreadActivity extends Activity {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(14), dp(12), dp(14), dp(8));
 
-        MaterialButton back = button("‹");
-        back.setTextSize(28);
-        back.setContentDescription("Back");
-        back.setOnClickListener(v -> finish());
-        header.addView(back, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        TextView back = BrowseUi.action(this, "‹", "Back", v -> finish());
+        SecondaryScreenChrome.back(back, false);
+        header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
-        titles.setPadding(dp(10), 0, 0, 0);
+        titles.setPadding(dp(4), 0, 0, 0);
         heading = text("Feedback conversation", 22, Color.WHITE, true);
         status = text("Loading…", 12, MUTED, true);
         titles.addView(heading);
         titles.addView(status);
         header.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
-        root.addView(header);
+        SecondaryScreenChrome.header(header, heading, false);
+        root.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
         refresh = new ZeroChillRefreshLayout(this);
         refresh.setColorSchemeColors(AppearanceTheme.accent(this));

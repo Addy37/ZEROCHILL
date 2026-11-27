@@ -4961,7 +4961,7 @@ public final class ChaosFeedView extends FrameLayout {
                         .circleCrop()
                         .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                         .dontAnimate()
-                        .transition(ThumbnailFades.avatar())
+                        .transition(SharedArtworkReveal.artwork("shittok-avatar", creatorIdentity.url, true))
                         .placeholder(R.drawable.ic_more_account)
                         .error(R.drawable.ic_more_account)
                         .into(creatorAvatar);

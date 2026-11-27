@@ -40,10 +40,10 @@ final class GalleryContextMenu extends FrameLayout {
         LinearLayout rows = new LinearLayout(activity);
         rows.setOrientation(LinearLayout.VERTICAL);
         rows.setPadding(dp(6), dp(8), dp(6), dp(8));
-        String[] labels = {"Open", favorite ? "Unfavorite" : "Favorite", "Share", "Copy Link", "Download"};
+        String[] labels = {"Open", favorite ? "Unfavorite" : "Favorite", "Share", "Copy Link", "Download", "Save to collections"};
         int[] icons = {R.drawable.ic_player_play, favorite ? R.drawable.ic_action_heart_filled : R.drawable.ic_action_heart_outline,
-                R.drawable.ic_action_share, R.drawable.ic_action_link, R.drawable.ic_action_download};
-        for (int i = 0; i < labels.length; i++) {
+                R.drawable.ic_action_share, R.drawable.ic_action_link, R.drawable.ic_action_download, R.drawable.ic_nav_saved};
+        for (int i = 0; i < Math.min(labels.length, actions.length); i++) {
             final int index = i;
             TextView row = new TextView(activity);
             row.setText(labels[i]); row.setTextSize(15);

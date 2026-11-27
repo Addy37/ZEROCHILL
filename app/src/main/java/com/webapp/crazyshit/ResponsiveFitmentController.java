@@ -55,7 +55,7 @@ final class ResponsiveFitmentController {
         if (activity instanceof SearchActivity) {
             fitSearch(activity, landscape, widthDp);
         } else if (activity instanceof SettingsActivity) {
-            installSafeInsets(activity);
+            // Settings Compose owns safeDrawing insets. Do not apply native inset padding twice.
             fitSingleColumn(activity, widthDp, 720);
         } else if (activity instanceof FavoritesActivity) {
             // BrowseUi.screen owns system-bar, cutout and IME insets already.

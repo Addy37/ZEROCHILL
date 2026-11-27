@@ -80,13 +80,13 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.setPadding(dp(10), dp(3), dp(14), dp(3));
-        top.setBackground(headerBackground());
+        top.setBackgroundColor(Color.TRANSPARENT);
         top.setMinimumHeight(dp(58));
         shell.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
         TextView back = text("‹", 31, AppearanceTheme.primaryText(this), false);
         back.setGravity(Gravity.CENTER);
-        back.setContentDescription("Back");
+        SecondaryScreenChrome.back(back, false);
         back.setOnClickListener(v -> finish());
         ZeroChillMotion.installPressFeedback(back);
         top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -96,7 +96,9 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         titles.setPadding(dp(6), 0, 0, 0);
         top.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        titles.addView(text("Profile", 24, AppearanceTheme.primaryText(this), true));
+        TextView title = text("Profile", 24, AppearanceTheme.primaryText(this), true);
+        titles.addView(title);
+        SecondaryScreenChrome.header(top, title, false);
         TextView subtitle = text("ZEROCHILL ID", 11, ZeroChillUi.color(this, R.color.zc_text_muted), true);
         subtitle.setLetterSpacing(0.10f);
         titles.addView(subtitle);
@@ -107,7 +109,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(22), dp(28), dp(22), dp(34));
+        content.setPadding(dp(16), dp(14), dp(16), dp(28));
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
         progress = new ZeroChillProgressBar(this);
@@ -150,8 +152,8 @@ public final class ZeroChillPublicProfileActivity extends Activity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER_HORIZONTAL);
-        card.setPadding(dp(18), dp(18), dp(18), dp(17));
-        card.setBackground(panelBackground());
+        card.setPadding(dp(8), dp(10), dp(8), dp(10));
+        card.setBackgroundColor(Color.TRANSPARENT);
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
         cardParams.topMargin = dp(10);
         content.addView(card, cardParams);
@@ -650,7 +652,7 @@ public final class ZeroChillPublicProfileActivity extends Activity {
 
     private TextView secondaryButton(String label) {
         TextView view = text(label, 14, AppearanceTheme.primaryText(ZeroChillPublicProfileActivity.this), true);
-        ZeroChillUi.styleAction(view, false);
+        SecondaryScreenChrome.quietAction(view);
         ZeroChillMotion.installPressFeedback(view);
         return view;
     }

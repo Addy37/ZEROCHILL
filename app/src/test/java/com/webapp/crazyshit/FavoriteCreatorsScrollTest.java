@@ -104,6 +104,83 @@ public class FavoriteCreatorsScrollTest {
         }
     }
 
+    @Test public void updatesFilterUsesExistingUnreadCountsAndKeepsFavorites() throws Exception {
+        seedFavorites(3);
+        writeUnread("Testcreator001", 2);
+        try (ActivityController<CreatorsActivity> controller = Robolectric.buildActivity(CreatorsActivity.class).setup()) {
+            CreatorsActivity activity = controller.get();
+            TextView updates = ReflectionHelpers.getField(activity, "updatesFilter");
+            assertTrue(updates.performClick());
+            assertEquals(1, grid(activity).getAdapter().getItemCount());
+            assertEquals(3, CreatorFavoriteStore.names(context).size());
+            TextView all = ReflectionHelpers.getField(activity, "allFilter");
+            assertTrue(all.performClick());
+            assertEquals(3, grid(activity).getAdapter().getItemCount());
+        }
+    }
+
+    @Test public void alphabetIndexSkipsUnavailableLettersAndClampsEdges() {
+        boolean[] available = new boolean[27];
+        assertEquals(-1, CreatorsActivity.nearestAvailableIndex(12, available));
+        available[0] = true;
+        available[12] = true;
+        available[25] = true;
+        assertEquals(0, CreatorsActivity.nearestAvailableIndex(-4, available));
+        assertEquals(12, CreatorsActivity.nearestAvailableIndex(6, available));
+        assertEquals(12, CreatorsActivity.nearestAvailableIndex(13, available));
+        assertEquals(25, CreatorsActivity.nearestAvailableIndex(28, available));
+    }
+
+    @Test public void alphabetDragShowsIndicatorAndReleasesOnCancel() {
+        List<NativeContentItem> creators = new ArrayList<>();
+        HashSet<String> keys = new HashSet<>();
+        for (String prefix : Arrays.asList("Alpha", "Middle", "Zulu")) {
+            for (int i = 0; i < 16; i++) {
+                String name = prefix + "Fixture" + i;
+                String key = name.toLowerCase(java.util.Locale.US);
+                creators.add(new NativeContentItem(NativeContentItem.KIND_CREATOR, name,
+                        "https://fapello.com/" + key + "/", "", "", "", "", "", key));
+                keys.add(key);
+            }
+        }
+        context.getSharedPreferences("creator_favorites", 0).edit().putStringSet("creators", keys).commit();
+        CreatorCatalog.remember(context, creators);
+        try (ActivityController<CreatorsActivity> controller = Robolectric.buildActivity(CreatorsActivity.class).setup()) {
+            CreatorsActivity activity = controller.get();
+            android.widget.LinearLayout index = ReflectionHelpers.getField(activity, "letterIndex");
+            TextView bubble = ReflectionHelpers.getField(activity, "letterBubble");
+            View stage = (View) index.getParent();
+            stage.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY));
+            stage.layout(0, 0, 1080, 900);
+            assertEquals(27, index.getChildCount());
+            assertTrue(index.getWidth() > BrowseUi.dp(activity, 22));
+            long now = android.os.SystemClock.uptimeMillis();
+            android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+                    android.view.MotionEvent.ACTION_DOWN, 2f, 2f, 0);
+            android.view.MotionEvent move = android.view.MotionEvent.obtain(now, now + 16,
+                    android.view.MotionEvent.ACTION_MOVE, 2f, (index.getChildAt(12).getTop() + index.getChildAt(12).getBottom()) / 2f, 0);
+            android.view.MotionEvent cancel = android.view.MotionEvent.obtain(now, now + 32,
+                    android.view.MotionEvent.ACTION_CANCEL, 2f, 899f, 0);
+            try {
+                assertTrue(index.dispatchTouchEvent(down));
+                assertEquals(View.VISIBLE, bubble.getVisibility());
+                assertEquals("A", bubble.getText().toString());
+                assertTrue(index.getChildAt(0).isSelected());
+                assertTrue(index.dispatchTouchEvent(move));
+                assertEquals("M", bubble.getText().toString());
+                assertTrue(index.getChildAt(12).isSelected());
+                assertFalse(index.getChildAt(0).isSelected());
+                assertTrue(bubble.getTranslationY() >= 0);
+                assertTrue(bubble.getTranslationY() <= stage.getHeight() - BrowseUi.dp(activity, 58));
+                assertTrue(index.dispatchTouchEvent(cancel));
+                assertEquals(View.GONE, bubble.getVisibility());
+                assertFalse(index.getChildAt(12).isSelected());
+                assertEquals(48, grid(activity).getAdapter().getItemCount());
+            } finally { down.recycle(); move.recycle(); cancel.recycle(); }
+        }
+    }
+
     @Test public void prefetchIsTwoRowsAndFollowsReversalsAndListEdges() {
         assertArrayEquals(new int[]{12, 13, 14, 15, 16, 17},
                 CreatorsActivity.avatarPrefetchPositions(3, 11, 48, 3, 1));

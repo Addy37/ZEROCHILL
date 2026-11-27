@@ -273,20 +273,16 @@ public class LibraryProfileTest {
             ViewGroup creators = (ViewGroup) view.findViewWithTag("Favorite Creators");
             android.widget.HorizontalScrollView scroll = (android.widget.HorizontalScrollView) creators.getChildAt(1);
             ViewGroup rail = (ViewGroup) scroll.getChildAt(0);
-            assertEquals(2, rail.getChildCount());
+            assertEquals(4, rail.getChildCount());
             for (int i = 0; i < rail.getChildCount(); i++) {
-                ViewGroup column = (ViewGroup) rail.getChildAt(i);
-                assertEquals(2, column.getChildCount());
-                for (int j = 0; j < column.getChildCount(); j++) {
-                    ViewGroup wrapper = (ViewGroup) column.getChildAt(j);
-                    com.google.android.material.card.MaterialCardView avatar = (com.google.android.material.card.MaterialCardView) wrapper.getChildAt(0);
-                    assertEquals(BrowseUi.dp(activity, 72), avatar.getLayoutParams().width);
-                    assertEquals(avatar.getLayoutParams().width, avatar.getLayoutParams().height);
-                    assertEquals(BrowseUi.dp(activity, 36), avatar.getRadius(), 0.1f);
-                }
+                ViewGroup wrapper = (ViewGroup) rail.getChildAt(i);
+                com.google.android.material.card.MaterialCardView avatar = (com.google.android.material.card.MaterialCardView) wrapper.getChildAt(0);
+                assertEquals(BrowseUi.dp(activity, 72), avatar.getLayoutParams().width);
+                assertEquals(avatar.getLayoutParams().width, avatar.getLayoutParams().height);
+                assertEquals(BrowseUi.dp(activity, 36), avatar.getRadius(), 0.1f);
             }
             layoutLibrary(view, 320, 800);
-            saveRender(view, "library-two-avatar-rows");
+            saveRender(view, "library-single-avatar-rail");
         } finally { view.close(); }
     }
 

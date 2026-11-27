@@ -36,9 +36,12 @@ public final class StartupWizardActivity extends Activity {
     private static final int PAGE_WELCOME = 0;
     private static final int PAGE_ACCESS = 1;
     private static final int PAGE_MEET = 2;
-    private static final int PAGE_CONTROLS = 3;
-    private static final int PAGE_SETTINGS = 4;
-    private static final int PAGE_COUNT = 5;
+    private static final int PAGE_SETTINGS = 3;
+    private static final int PAGE_COUNT = 4;
+    private int showcaseScene;
+    private boolean preferencesExpanded;
+    private final ArrayList<View> ambientGlows = new ArrayList<>();
+    private CinematicTourView tour;
 
     private FrameLayout root;
     private FrameLayout pageHost;
@@ -85,8 +88,11 @@ public final class StartupWizardActivity extends Activity {
         selectedAccent = AppearanceTheme.accentChoice(this);
         previewAccentColor = selectedAccent.color;
         if (state != null) {
-            page = Math.max(PAGE_WELCOME, Math.min(PAGE_SETTINGS,
-                    state.getInt("wizard_page", PAGE_WELCOME)));
+            int savedPage = state.getInt("wizard_page", PAGE_WELCOME);
+            if (!state.getBoolean("wizard_four_steps", false) && savedPage == 3) savedPage = PAGE_MEET;
+            page = Math.max(PAGE_WELCOME, Math.min(PAGE_SETTINGS, savedPage));
+            showcaseScene = state.getInt("wizard_scene", 0);
+            preferencesExpanded = state.getBoolean("wizard_preferences_expanded", false);
             ageConfirmed = state.getBoolean("wizard_age", ageConfirmed);
             xmegaAccessAuthorized = state.getBoolean("wizard_access", xmegaAccessAuthorized);
             xmegaAccessReady = XMegaDriveAgeSession.isCookieReady(this);
@@ -110,6 +116,9 @@ public final class StartupWizardActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle out) {
         out.putInt("wizard_page", page);
+        out.putBoolean("wizard_four_steps", true);
+        out.putInt("wizard_scene", showcaseScene);
+        out.putBoolean("wizard_preferences_expanded", preferencesExpanded);
         out.putBoolean("wizard_age", ageConfirmed);
         out.putBoolean("wizard_access", xmegaAccessAuthorized);
         out.putBoolean("wizard_access_pending", accessSetupInProgress);
@@ -124,6 +133,20 @@ public final class StartupWizardActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (page == PAGE_SETTINGS && accountCardHost != null) refreshAccountCard();
+        if (tour != null) tour.resumeTour();
+    }
+
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (tour != null) {
+            if (hasFocus) tour.resumeTour(); else tour.pauseTour();
+        }
+    }
+
+    @Override protected void onPause() {
+        if (tour != null) tour.pauseTour();
+        cancelAmbientPulse();
+        super.onPause();
     }
 
     private void buildShell() {
@@ -198,6 +221,7 @@ public final class StartupWizardActivity extends Activity {
         if (transitioning) return;
         next = Math.max(PAGE_WELCOME, Math.min(PAGE_SETTINGS, next));
         cancelAmbientPulse();
+        if (tour != null) { tour.pauseTour(); tour = null; }
         accountRefreshEpoch++;
         accountCardHost = null;
         View incoming = buildPage(next);
@@ -243,7 +267,6 @@ public final class StartupWizardActivity extends Activity {
         if (target == PAGE_WELCOME) return buildWelcomePage();
         if (target == PAGE_ACCESS) return buildAccessPage();
         if (target == PAGE_MEET) return buildMeetPage();
-        if (target == PAGE_CONTROLS) return buildControlsPage();
         return buildSettingsPage();
     }
 
@@ -267,14 +290,17 @@ public final class StartupWizardActivity extends Activity {
         ScrollView scroll = pageScroll();
         LinearLayout column = pageColumn(scroll);
         column.setGravity(Gravity.CENTER_HORIZONTAL);
-        column.setPadding(dp(24), dp(66), dp(24), dp(30));
+        column.setGravity(Gravity.CENTER);
+        column.setPadding(dp(24), dp(20), dp(24), dp(20));
 
-        FrameLayout mascot = mascot(dp(176));
-        LinearLayout.LayoutParams mascotParams = new LinearLayout.LayoutParams(dp(176), dp(176));
+        View mascot = new WizardMascotArt.Welcome(this, previewAccentColor);
+        LinearLayout.LayoutParams mascotParams = new LinearLayout.LayoutParams(dp(192), dp(192));
         mascotParams.bottomMargin = dp(14);
         column.addView(mascot, mascotParams);
 
-        column.addView(wordmark(40f));
+        LinearLayout branding = wordmark(40f);
+        branding.setTag("wizard_wordmark");
+        column.addView(branding);
 
         TextView tagline = text("NO LIMITS. ALL CONTENT.", 11f,
                 color(R.color.zc_text_secondary), true);
@@ -284,25 +310,12 @@ public final class StartupWizardActivity extends Activity {
         taglineParams.topMargin = dp(13);
         column.addView(tagline, taglineParams);
 
-        TextView shortline = text("Swipe. Watch. Save. Repeat.", 20f, Color.WHITE, true);
+        TextView shortline = text("Your entertainment. Your rules.", 23f, Color.WHITE, true);
         shortline.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams shortParams = new LinearLayout.LayoutParams(-1, -2);
         shortParams.topMargin = dp(30);
         column.addView(shortline, shortParams);
 
-        TextView sub = text(
-                "A faster way to move through the content you want, without getting in your way.",
-                13.5f,
-                color(R.color.zc_text_secondary),
-                false
-        );
-        sub.setGravity(Gravity.CENTER);
-        sub.setLineSpacing(0f, 1.12f);
-        LinearLayout.LayoutParams subParams = new LinearLayout.LayoutParams(-1, -2);
-        subParams.topMargin = dp(10);
-        subParams.leftMargin = dp(18);
-        subParams.rightMargin = dp(18);
-        column.addView(sub, subParams);
         return scroll;
     }
 
@@ -315,20 +328,9 @@ public final class StartupWizardActivity extends Activity {
         addSubtitle(column,
                 "ZEROCHILL can open adult and sensitive content. Confirm your age before entering.");
 
-        column.addView(infoCard(
-                "CONTENT WARNING",
-                "ZEROCHILL can provide access to adult, graphic, violent, and other sensitive material."
-        ), cardParams());
-
-        column.addView(infoCard(
-                "REGIONAL ACCESS",
-                "Content and source availability may vary by region. Follow your local laws and the terms of the services you access."
-        ), cardParams());
-
-        column.addView(infoCard(
-                "UNOFFICIAL APP",
-                "ZEROCHILL is an independent application and is not affiliated with or endorsed by the websites and services it accesses."
-        ), cardParams());
+        TextView notice = text("ZEROCHILL can provide access to adult, graphic, violent, and other sensitive material.\n\nContent and source availability may vary by region. Follow local laws and the terms of the services you access.\n\nZEROCHILL is independent and is not affiliated with or endorsed by the websites and services it accesses.", 14f, color(R.color.zc_text_secondary), false);
+        notice.setLineSpacing(dp(3), 1.12f);
+        column.addView(notice, cardParams());
 
         accessSetupButton = actionButton(
                 xmegaAccessAuthorized && xmegaAccessReady
@@ -391,59 +393,8 @@ public final class StartupWizardActivity extends Activity {
     }
 
     private View buildMeetPage() {
-        ScrollView scroll = pageScroll();
-        LinearLayout column = pageColumn(scroll);
-        addEyebrow(column, "THE EXPERIENCE");
-        addTitle(column, "Meet ZEROCHILL");
-        addSubtitle(column, "Four spaces. One app. Everything stays close.");
-
-        column.addView(experienceCard(
-                R.drawable.ic_nav_chaos,
-                "ShitTok",
-                "Swipe through a mixed video feed built for fast discovery."
-        ), cardParams());
-        column.addView(experienceCard(
-                R.drawable.ic_nav_series,
-                "Shows",
-                "Browse featured content, series, categories, and weekly picks."
-        ), cardParams());
-        column.addView(experienceCard(
-                R.drawable.ic_nav_onlyfap,
-                "OnlyFap",
-                "Explore creators, galleries, favorites, and the randomized Discover shelf."
-        ), cardParams());
-        column.addView(experienceCard(
-                R.drawable.ic_more_library,
-                "Library",
-                "Continue watching, revisit history, manage Watch Later, downloads, and favorite creators."
-        ), cardParams());
-        return scroll;
-    }
-
-    private View buildControlsPage() {
-        ScrollView scroll = pageScroll();
-        LinearLayout column = pageColumn(scroll);
-        addEyebrow(column, "FLUID CONTROLS");
-        addTitle(column, "Built around gestures");
-        addSubtitle(column, "The important controls stay close. Everything else stays out of the way.");
-
-        GridMorphPreviewView previewView = new GridMorphPreviewView(this);
-        previewView.setBackground(panelBackground(18));
-        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, dp(150));
-        previewParams.bottomMargin = dp(12);
-        column.addView(previewView, previewParams);
-
-        column.addView(controlCard("↑ ↓", "Swipe ShitTok",
-                "Move to the next or previous clip."), cardParams());
-        column.addView(controlCard("TAP", "Pause or resume",
-                "Tap the current ShitTok clip to pause or keep watching."), cardParams());
-        column.addView(controlCard("↔", "Open creator flow",
-                "Swipe sideways from supported ShitTok clips to move into the creator gallery."), cardParams());
-        column.addView(controlCard("PINCH", "Resize OnlyFap",
-                "Pinch a creator gallery and the holographic grid morphs smoothly around your fingers."), cardParams());
-        column.addView(controlCard("HOLD", "More actions",
-                "Long press supported media for downloads and additional actions."), cardParams());
-        return scroll;
+        tour = new CinematicTourView(this, previewAccentColor, showcaseScene, index -> showcaseScene = index);
+        return tour;
     }
 
     private View buildSettingsPage() {
@@ -451,7 +402,7 @@ public final class StartupWizardActivity extends Activity {
         LinearLayout column = pageColumn(scroll);
         addEyebrow(column, "YOUR DEFAULTS");
         addTitle(column, "Make it yours");
-        addSubtitle(column, "Choose your starting preferences. You can change them later in Settings.");
+        addSubtitle(column, "Choose your color. Account setup is optional.");
 
         column.addView(buildAccentCard(), cardParams());
 
@@ -460,21 +411,35 @@ public final class StartupWizardActivity extends Activity {
         column.addView(accountCardHost, cardParams());
         refreshAccountCard();
 
-        column.addView(settingsSwitch(
+        LinearLayout preferences = new LinearLayout(this);
+        preferences.setOrientation(LinearLayout.VERTICAL);
+        TextView expand = actionButton(preferencesExpanded ? "−  Notification & haptic preferences" : "+  Notification & haptic preferences", false);
+        column.addView(expand, new LinearLayout.LayoutParams(-1, dp(48)));
+        column.addView(preferences, cardParams());
+        preferences.setVisibility(preferencesExpanded ? View.VISIBLE : View.GONE);
+        expand.setContentDescription("Notification and haptic preferences, " + (preferencesExpanded ? "expanded" : "collapsed"));
+        expand.setOnClickListener(v -> {
+            preferencesExpanded = !preferencesExpanded;
+            expand.setContentDescription("Notification and haptic preferences, " + (preferencesExpanded ? "expanded" : "collapsed"));
+            preferences.setVisibility(preferencesExpanded ? View.VISIBLE : View.GONE);
+            expand.setText((preferencesExpanded ? "−  " : "+  ") + "Notification & haptic preferences");
+        });
+
+        preferences.addView(settingsSwitch(
                 "Favorite creator alerts",
                 "Notify me when creators I follow have new content.",
                 favoriteAlerts,
                 checked -> favoriteAlerts = checked
         ), cardParams());
 
-        column.addView(settingsSwitch(
+        preferences.addView(settingsSwitch(
                 "ZEROCHILL update alerts",
                 "Notify me when a new app version is available.",
                 updateAlerts,
                 checked -> updateAlerts = checked
         ), cardParams());
 
-        column.addView(settingsSwitch(
+        preferences.addView(settingsSwitch(
                 "Haptic feedback",
                 "Use subtle vibration for controls and interactions.",
                 hapticsEnabled,
@@ -482,7 +447,7 @@ public final class StartupWizardActivity extends Activity {
         ), cardParams());
 
         TextView note = text(
-                "Android notification permission is only requested after you choose ENTER ZEROCHILL, and only when an alert option is enabled.",
+                "If alerts are on, Android may ask for notification permission when you finish.",
                 12f,
                 color(R.color.zc_text_muted),
                 false
@@ -491,55 +456,48 @@ public final class StartupWizardActivity extends Activity {
         LinearLayout.LayoutParams noteParams = new LinearLayout.LayoutParams(-1, -2);
         noteParams.topMargin = dp(8);
         column.addView(note, noteParams);
+        TextView later = text("Change these later in Settings. Replay from About ZEROCHILL.", 12f,
+                color(R.color.zc_text_muted), false);
+        later.setGravity(Gravity.CENTER);
+        column.addView(later, cardParams());
         return scroll;
     }
 
     private View buildAccentCard() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14), dp(16), dp(14), dp(17));
-        card.setBackground(panelBackground(18));
+        card.setPadding(dp(8), dp(8), dp(8), dp(8));
 
         TextView title = text("MAKE IT YOUR COLOR", 12f, UiPalette.TEXT_SECONDARY, true);
         title.setLetterSpacing(.11f);
         card.addView(title);
-        TextView detail = text("Pick the glow you want across ZEROCHILL.", 12.5f,
-                color(R.color.zc_text_secondary), false);
-        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
-        detailParams.topMargin = dp(5);
-        card.addView(detail, detailParams);
-
         LinearLayout preview = new LinearLayout(this);
         preview.setOrientation(LinearLayout.VERTICAL);
         preview.setGravity(Gravity.CENTER);
         preview.setPadding(dp(8), dp(5), dp(8), dp(13));
         LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, -2);
-        previewParams.topMargin = dp(14);
+        previewParams.topMargin = dp(4);
         card.addView(preview, previewParams);
-        accentPreviewMascot = mascot(dp(106));
-        preview.addView(accentPreviewMascot, new LinearLayout.LayoutParams(dp(106), dp(106)));
+        accentPreviewMascot = mascot(dp(76));
+        preview.addView(accentPreviewMascot, new LinearLayout.LayoutParams(dp(76), dp(76)));
         LinearLayout mark = wordmark(27f);
         accentPreviewChill = (TextView) mark.getChildAt(1);
         preview.addView(mark);
-        accentPreviewButton = text("YOUR ZEROCHILL", 11f,
-                AppearanceTheme.onAccent(this), true);
-        accentPreviewButton.setGravity(Gravity.CENTER);
-        accentPreviewButton.setLetterSpacing(.08f);
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(dp(150), dp(32));
-        buttonParams.topMargin = dp(10);
-        preview.addView(accentPreviewButton, buttonParams);
+        accentPreviewButton = null;
         updateAccentPreviewColor(previewAccentColor);
 
-        // A horizontal row inside a HorizontalScrollView keeps every named color reachable
-        // on narrow phones without shrinking touch targets.
-        android.widget.HorizontalScrollView horizontal = new android.widget.HorizontalScrollView(this);
-        horizontal.setHorizontalScrollBarEnabled(false);
-        horizontal.setFillViewport(true);
+        LinearLayout swatchRows = new LinearLayout(this);
+        swatchRows.setOrientation(LinearLayout.VERTICAL);
         LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setGravity(Gravity.CENTER);
+        swatchRows.addView(row, new LinearLayout.LayoutParams(-1, -2));
         accentSwatches.clear();
         for (AppearanceTheme.Accent accent : AppearanceTheme.Accent.values()) {
+            if (accentSwatches.size() == 4) {
+                row = new LinearLayout(this);
+                row.setGravity(Gravity.CENTER);
+                swatchRows.addView(row, new LinearLayout.LayoutParams(-1, -2));
+            }
             LinearLayout swatch = new LinearLayout(this);
             swatch.setOrientation(LinearLayout.VERTICAL);
             swatch.setGravity(Gravity.CENTER);
@@ -564,15 +522,11 @@ public final class StartupWizardActivity extends Activity {
                     info.setChecked(selectedAccent == accent);
                 }
             });
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(64), dp(76));
-            params.rightMargin = dp(5);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(72), 1f);
             row.addView(swatch, params);
             accentSwatches.add(swatch);
         }
-        horizontal.addView(row, new android.widget.HorizontalScrollView.LayoutParams(-2, -1));
-        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, dp(76));
-        rowParams.topMargin = dp(2);
-        card.addView(horizontal, rowParams);
+        card.addView(swatchRows, new LinearLayout.LayoutParams(-1, -2));
         updateAccentSwatches();
         return card;
     }
@@ -616,6 +570,7 @@ public final class StartupWizardActivity extends Activity {
 
     private void updateAccentPreviewColor(int accent) {
         previewAccentColor = accent;
+        for (View glow : ambientGlows) tintAmbient(glow, accent);
         if (accentPreviewMascot != null) {
             MascotAccent.applyGlow(accentPreviewMascot.getChildAt(0), accent);
             MascotAccent.apply((ImageView) accentPreviewMascot.getChildAt(1),
@@ -698,7 +653,7 @@ public final class StartupWizardActivity extends Activity {
         card.addView(title, titleParams);
 
         TextView body = text(
-                "Create an account to keep your identity, favorite creators, comments, messages, and social activity with you.",
+                "Connect your identity, favorite creators, comments and messages.",
                 12.3f,
                 color(R.color.zc_text_secondary),
                 false
@@ -944,12 +899,24 @@ public final class StartupWizardActivity extends Activity {
     }
 
     private void onPageVisible(View view) {
+        if (page == PAGE_MEET && tour != null && hasWindowFocus()) tour.resumeTour();
         if (page == PAGE_WELCOME && ZeroChillMotion.animationsEnabled(this)) {
+            nextButton.setScaleX(.94f);
+            nextButton.setScaleY(.94f);
+            nextButton.animate().scaleX(1f).scaleY(1f).setDuration(420L)
+                    .setInterpolator(new android.view.animation.OvershootInterpolator(.9f)).start();
+            View branding = view.findViewWithTag("wizard_wordmark");
+            if (branding != null) {
+                branding.setAlpha(0f);
+                branding.setTranslationY(dp(7));
+                branding.animate().alpha(1f).translationY(0f).setDuration(420L)
+                        .setInterpolator(new DecelerateInterpolator()).start();
+            }
             View outline = view.findViewWithTag("wizard_mascot_outline");
             if (outline != null) {
-                ambientPulse = ObjectAnimator.ofFloat(outline, View.ALPHA, 1f, 0.58f, 1f);
+                ambientPulse = ObjectAnimator.ofFloat(outline, View.ALPHA, .15f, 1f, .72f, 1f);
                 ambientPulse.setDuration(1450L);
-                ambientPulse.setRepeatCount(ValueAnimator.INFINITE);
+                ambientPulse.setRepeatCount(1);
                 ambientPulse.setRepeatMode(ValueAnimator.RESTART);
                 ambientPulse.start();
             }
@@ -1196,16 +1163,9 @@ public final class StartupWizardActivity extends Activity {
             int marginY
     ) {
         View glow = new View(this);
-        GradientDrawable background = new GradientDrawable();
-        background.setShape(GradientDrawable.OVAL);
-        background.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        background.setGradientRadius(Math.max(width, height) * 0.52f);
-        background.setColors(new int[]{
-                Color.argb(54, 8, 146, 208),
-                Color.argb(16, 8, 146, 208),
-                Color.TRANSPARENT
-        });
-        glow.setBackground(background);
+        ambientGlows.add(glow);
+        glow.setTag((float) Math.max(width, height) * .52f);
+        tintAmbient(glow, previewAccentColor);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width, height);
         params.gravity = gravity;
         params.leftMargin = marginX;
@@ -1213,6 +1173,16 @@ public final class StartupWizardActivity extends Activity {
         params.topMargin = marginY;
         params.bottomMargin = marginY;
         parent.addView(glow, params);
+    }
+
+    private void tintAmbient(View glow, int accent) {
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.OVAL);
+        background.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+        background.setGradientRadius((Float) glow.getTag());
+        background.setColors(new int[]{(accent & 0xffffff) | 0x36000000,
+                (accent & 0xffffff) | 0x10000000, Color.TRANSPARENT});
+        glow.setBackground(background);
     }
 
     private TextView text(String value, float size, int color, boolean bold) {
@@ -1241,102 +1211,4 @@ public final class StartupWizardActivity extends Activity {
         void onChanged(boolean checked);
     }
 
-    /** Tiny looping visualization of the new holographic creator-gallery density morph. */
-    private static final class GridMorphPreviewView extends View {
-        private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final RectF rect = new RectF();
-        private ValueAnimator animator;
-        private float fraction;
-
-        GridMorphPreviewView(Activity context) {
-            super(context);
-            fill.setStyle(Paint.Style.FILL);
-            fill.setColor(Color.argb(26, 8, 146, 208));
-            stroke.setStyle(Paint.Style.STROKE);
-            stroke.setStrokeWidth(dp(context, 1.25f));
-            stroke.setColor(Color.argb(210, 8, 146, 208));
-            setContentDescription("Animated creator gallery grid resizing preview");
-        }
-
-        @Override
-        protected void onAttachedToWindow() {
-            super.onAttachedToWindow();
-            if (!ValueAnimator.areAnimatorsEnabled()) {
-                fraction = 1f;
-                invalidate();
-                return;
-            }
-            animator = ValueAnimator.ofFloat(0f, 1f);
-            animator.setDuration(1350L);
-            animator.setRepeatCount(ValueAnimator.INFINITE);
-            animator.setRepeatMode(ValueAnimator.REVERSE);
-            animator.setInterpolator(new AccelerateDecelerateInterpolator());
-            animator.addUpdateListener(value -> {
-                fraction = (float) value.getAnimatedValue();
-                invalidate();
-            });
-            animator.start();
-        }
-
-        @Override
-        protected void onDetachedFromWindow() {
-            if (animator != null) animator.cancel();
-            animator = null;
-            super.onDetachedFromWindow();
-        }
-
-        @Override
-        protected void onDraw(Canvas canvas) {
-            super.onDraw(canvas);
-            float pad = dp(getContextActivity(), 14f);
-            float gap = dp(getContextActivity(), 7f);
-            float usableWidth = Math.max(1f, getWidth() - (pad * 2f));
-            float usableHeight = Math.max(1f, getHeight() - (pad * 2f));
-
-            for (int index = 0; index < 8; index++) {
-                RectF start = cell(index, 2, 4, usableWidth, usableHeight, pad, gap);
-                RectF end = cell(index, 4, 2, usableWidth, usableHeight, pad, gap);
-                rect.set(
-                        lerp(start.left, end.left, fraction),
-                        lerp(start.top, end.top, fraction),
-                        lerp(start.right, end.right, fraction),
-                        lerp(start.bottom, end.bottom, fraction)
-                );
-                float radius = dp(getContextActivity(), 8f);
-                canvas.drawRoundRect(rect, radius, radius, fill);
-                canvas.drawRoundRect(rect, radius, radius, stroke);
-            }
-        }
-
-        private RectF cell(
-                int index,
-                int columns,
-                int rows,
-                float width,
-                float height,
-                float pad,
-                float gap
-        ) {
-            float cellWidth = (width - (gap * (columns - 1))) / columns;
-            float cellHeight = (height - (gap * (rows - 1))) / rows;
-            int column = index % columns;
-            int row = index / columns;
-            float left = pad + column * (cellWidth + gap);
-            float top = pad + row * (cellHeight + gap);
-            return new RectF(left, top, left + cellWidth, top + cellHeight);
-        }
-
-        private float lerp(float start, float end, float value) {
-            return start + ((end - start) * value);
-        }
-
-        private Activity getContextActivity() {
-            return (Activity) getContext();
-        }
-
-        private static float dp(Activity activity, float value) {
-            return value * activity.getResources().getDisplayMetrics().density;
-        }
-    }
 }

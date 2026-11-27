@@ -60,9 +60,354 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         void onOpen(int position, NativeContentItem item, View transitionAnchor);
 
         void onLongPress(NativeContentItem item, View anchor);
+
+        default void onOmittedImage(NativeContentItem item) { }
+        default void onBatchPublished() { }
     }
 
     private final ArrayList<NativeContentItem> items = new ArrayList<>();
+    private final java.util.Set<String> omittedBlackImages = new java.util.HashSet<>();
+    private int galleryGeneration;
+    private GalleryThumbnailPipeline thumbnailPipeline;
+    private final java.util.LinkedHashMap<String, NativeContentItem> pendingTiles = new java.util.LinkedHashMap<>();
+    private final java.util.LinkedHashSet<String> batchInFlight = new java.util.LinkedHashSet<>();
+    private final java.util.LinkedHashMap<String, GalleryThumbnailPipeline.Result> batchResults = new java.util.LinkedHashMap<>();
+    private final android.os.Handler batchUi = new android.os.Handler(android.os.Looper.getMainLooper());
+    private boolean batchEnabled, batchActive = true;
+    private boolean usedContinuousPreparation;
+    private int firstVisible, lastVisible;
+    private boolean batchFlushPosted;
+    private static final long BATCH_PUBLISH_MS = 45L;
+    private static final int SKELETON_TYPE = 1;
+    private final Runnable flushBatch = this::publishPreparedBatch;
+    private final GalleryWorkload.FramePressure framePressure = new GalleryWorkload.FramePressure();
+    private boolean frameSamplePosted;
+    private final android.view.Choreographer.FrameCallback frameSample = this::sampleRevealFrame;
+
+    private boolean constrained() {
+        return framePressure.constrained(android.os.SystemClock.uptimeMillis());
+    }
+
+    private int estimatedVisibleTiles() {
+        RecyclerView list = previewViewport;
+        return Math.max(Math.max(0, lastVisible - firstVisible + 1),
+                GalleryWorkload.estimatedScreenTiles(gridColumns,
+                        list == null ? 0 : list.getWidth(),
+                        list == null ? 0 : list.getHeight()));
+    }
+
+    private int revealCapacity(int visible) {
+        return GalleryWorkload.revealCapacity(gridColumns, visible, constrained());
+    }
+
+    private void updatePreparationBudget() {
+        if (batchActive && previewsActive && thumbnailPipeline != null)
+            thumbnailPipeline.setPreparationBudget(gridColumns, constrained());
+    }
+
+    private void sampleRevealFrame(long nanos) {
+        frameSamplePosted = false;
+        if (activeReveals <= 0 || !previewsActive || !batchActive || previewViewport == null) {
+            framePressure.idle();
+            updatePreparationBudget();
+            return;
+        }
+        boolean before = constrained();
+        framePressure.sample(nanos, android.os.SystemClock.uptimeMillis());
+        if (before != constrained()) updatePreparationBudget();
+        requestFrameSample();
+    }
+
+    private void requestFrameSample() {
+        if (!frameSamplePosted && activeReveals > 0) {
+            frameSamplePosted = true;
+            android.view.Choreographer.getInstance().postFrameCallback(frameSample);
+        }
+    }
+
+    private void stopFrameSampleIfIdle() {
+        if (activeReveals > 0) return;
+        if (frameSamplePosted) android.view.Choreographer.getInstance().removeFrameCallback(frameSample);
+        frameSamplePosted = false;
+        framePressure.idle();
+    }
+    private final java.util.Set<String> locallyRevealed = new java.util.HashSet<>();
+
+    private boolean hasRevealed(String url) {
+        return thumbnailPipeline != null ? thumbnailPipeline.hasRevealed(url)
+                : locallyRevealed.contains(url);
+    }
+    private int activeReveals;
+    private long lastFastScroll = -GalleryRevealImageView.SETTLE_MS;
+    private long lastRevealStart = -GalleryRevealImageView.STAGGER_MS;
+    private long lastScrollEvent;
+    private final Rect revealBounds = new Rect();
+    private final Runnable revealTick = this::pumpReveals;
+    private boolean revealTickPosted;
+    private final RecyclerView.OnScrollListener revealScroll = new RecyclerView.OnScrollListener() {
+        @Override public void onScrolled(@NonNull RecyclerView list, int dx, int dy) {
+            if (dx == 0 && dy == 0) return;
+            long now = android.os.SystemClock.uptimeMillis();
+            long elapsed = lastScrollEvent == 0 ? 16L : Math.max(8L, Math.min(50L, now - lastScrollEvent));
+            lastScrollEvent = now;
+            float density = list.getResources().getDisplayMetrics().density;
+            if (list.getScrollState() == RecyclerView.SCROLL_STATE_SETTLING
+                    || Math.hypot(dx, dy) / Math.max(1f, density) > elapsed * .7f)
+                lastFastScroll = now;
+            scheduleRevealTick(0L);
+        }
+        @Override public void onScrollStateChanged(@NonNull RecyclerView list, int state) {
+            if (state == RecyclerView.SCROLL_STATE_SETTLING)
+                lastFastScroll = android.os.SystemClock.uptimeMillis();
+            scheduleRevealTick(0L);
+        }
+    };
+
+    private boolean revealVisible(Holder holder) {
+        return previewVisible(holder) && holder.image.getHeight() > 0
+                && holder.image.getGlobalVisibleRect(revealBounds)
+                && revealBounds.height() >= holder.image.getHeight() * .55f
+                && revealBounds.width() >= holder.image.getWidth() * .55f;
+    }
+
+    private void scheduleRevealTick(long delay) {
+        if (!batchActive || !previewsActive || previewViewport == null
+                || revealTickPosted) return;
+        revealTickPosted = true;
+        batchUi.postDelayed(revealTick, Math.max(0L, delay));
+    }
+
+    private void stopRevealTick() {
+        batchUi.removeCallbacks(revealTick);
+        revealTickPosted = false;
+    }
+
+    private void pumpReveals() {
+        revealTickPosted = false;
+        RecyclerView list = previewViewport;
+        if (!batchActive || !previewsActive || list == null) return;
+        ArrayList<Holder> candidates = new ArrayList<>();
+        for (Holder holder : previewHolders)
+            if (holder.revealPending && holder.revealAnimator == null
+                    && holder.boundItem != null && revealVisible(holder)) candidates.add(holder);
+        if (candidates.isEmpty()) return;
+        if (!ZeroChillMotion.animationsEnabled(context)) {
+            for (Holder holder : candidates) finishReveal(holder);
+            return;
+        }
+        long now = android.os.SystemClock.uptimeMillis();
+        if (!GalleryRevealImageView.canStart(list.getScrollState(), now - lastFastScroll)) {
+            if (list.getScrollState() != RecyclerView.SCROLL_STATE_SETTLING)
+                scheduleRevealTick(GalleryRevealImageView.SETTLE_MS);
+            return;
+        }
+        int visible = 0;
+        for (Holder holder : previewHolders) if (revealVisible(holder)) visible++;
+        if (activeReveals >= revealCapacity(visible)) return;
+        long stagger = GalleryWorkload.staggerMs(gridColumns, constrained());
+        long wait = stagger - (now - lastRevealStart);
+        if (wait > 0L) { scheduleRevealTick(wait); return; }
+        candidates.sort(java.util.Comparator.comparingInt((Holder h) -> h.itemView.getTop())
+                .thenComparingInt(h -> h.itemView.getLeft()));
+        Holder holder = candidates.get(0);
+        if (hasRevealed(holder.boundItem.url)) {
+            finishReveal(holder);
+            scheduleRevealTick(0L);
+            return;
+        }
+        lastRevealStart = now;
+        activeReveals++;
+        android.animation.ValueAnimator animation = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        holder.revealAnimator = animation;
+        animation.setDuration(GalleryRevealImageView.DURATION_MS);
+        animation.setInterpolator(new android.view.animation.PathInterpolator(.25f, .1f, .25f, 1f));
+        animation.addUpdateListener(value ->
+                holder.image.setRevealProgress((float) value.getAnimatedValue()));
+        animation.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator ignored) {
+                if (holder.revealAnimator != animation) return;
+                holder.revealAnimator = null;
+                activeReveals--;
+                stopFrameSampleIfIdle();
+                finishReveal(holder);
+                scheduleRevealTick(0L);
+            }
+        });
+        animation.start();
+        requestFrameSample();
+        scheduleRevealTick(stagger);
+    }
+
+    private void finishReveal(Holder holder) {
+        holder.revealPending = false;
+        holder.image.setRevealProgress(1f);
+        if (holder.boundItem != null) {
+            if (thumbnailPipeline != null) thumbnailPipeline.markRevealed(holder.boundItem.url);
+            else locallyRevealed.add(holder.boundItem.url);
+        }
+    }
+
+    private void cancelReveal(Holder holder, boolean preservePending) {
+        android.animation.ValueAnimator animation = holder.revealAnimator;
+        if (animation != null) {
+            holder.revealAnimator = null;
+            activeReveals--;
+            animation.cancel();
+            stopFrameSampleIfIdle();
+        }
+        holder.revealPending &= preservePending;
+        holder.image.setRevealProgress(holder.revealPending ? 0f : 1f);
+    }
+
+    private void queueReveal(Holder holder, NativeContentItem item) {
+        if (hasRevealed(item.url) || !ZeroChillMotion.animationsEnabled(context)) {
+            cancelReveal(holder, false);
+            finishReveal(holder);
+            return;
+        }
+        // Multiple ready callbacks for the same bound tile must not restart a reveal.
+        if (holder.revealPending) {
+            scheduleRevealTick(0L);
+            return;
+        }
+        holder.revealPending = true;
+        holder.image.setRevealProgress(0f);
+        scheduleRevealTick(0L);
+    }
+
+    void setThumbnailPipeline(GalleryThumbnailPipeline pipeline) { thumbnailPipeline = pipeline; }
+    void setBatchEnabled(boolean enabled) { batchEnabled = enabled; }
+    void setBatchActive(boolean active) {
+        batchActive = active;
+        if (active) {
+            updatePreparationBudget();
+            scheduleBatch();
+            scheduleRevealTick(0L);
+        } else {
+            stopRevealTick();
+            for (Holder holder : previewHolders) cancelReveal(holder, true);
+        }
+    }
+    boolean hasPendingThumbnails() { return !pendingTiles.isEmpty(); }
+    boolean shouldPrefetchNextPage() {
+        return usedContinuousPreparation && batchActive && previewsActive
+                && previewViewport != null
+                && GalleryWorkload.shouldPrefetchNextPage(items.size(), lastVisible, gridColumns,
+                        hasPendingThumbnails());
+    }
+    static int skeletonCount(int pending, int columns) {
+        return Math.min(Math.max(0, pending), 2 * GalleryWorkload.columns(columns));
+    }
+    private int skeletonCount() { return skeletonCount(pendingTiles.size(), gridColumns); }
+    private void resetBatch() {
+        batchUi.removeCallbacks(flushBatch);
+        batchFlushPosted = false;
+        if (thumbnailPipeline != null) thumbnailPipeline.unsubscribe(this);
+        pendingTiles.clear(); batchInFlight.clear(); batchResults.clear();
+        firstVisible = lastVisible = 0;
+        usedContinuousPreparation = false;
+    }
+    private void scheduleBatch() {
+        if (!batchEnabled || !batchActive || !previewsActive || thumbnailPipeline == null
+                || pendingTiles.isEmpty()) return;
+        updatePreparationBudget();
+        usedContinuousPreparation = true;
+        int remaining = GalleryWorkload.continuousPreparationSlots(gridColumns,
+                estimatedVisibleTiles(), batchInFlight.size() + batchResults.size(), constrained());
+        int priorityEnd = Math.max(firstVisible + estimatedVisibleTiles(),
+                lastVisible + 1 + gridColumns * 2);
+        int queuedPosition = items.size();
+        if (remaining <= 0) return;
+        int generation = galleryGeneration;
+        for (NativeContentItem item : pendingTiles.values()) {
+            if (remaining <= 0) break;
+            if (batchInFlight.contains(item.url) || batchResults.containsKey(item.url)) {
+                queuedPosition++;
+                continue;
+            }
+            remaining--;
+            batchInFlight.add(item.url);
+            // Visible and near-visible work takes priority; prepare the rest continuously.
+            requestPreparedThumbnail(item, queuedPosition++ < priorityEnd, this, result -> {
+                if (generation != galleryGeneration || !batchInFlight.remove(item.url)) return;
+                if (pendingTiles.containsKey(item.url)) batchResults.put(item.url, result);
+                // A rolling window: publish ready items promptly, even if earlier requests stall.
+                if (!batchFlushPosted) {
+                    batchFlushPosted = true;
+                    batchUi.postDelayed(flushBatch, BATCH_PUBLISH_MS);
+                }
+                if (batchInFlight.isEmpty()) {
+                    batchUi.removeCallbacks(flushBatch);
+                    batchUi.post(flushBatch);
+                }
+            });
+        }
+    }
+
+    private void publishPreparedBatch() {
+        batchFlushPosted = false;
+        if (batchResults.isEmpty()) { scheduleBatch(); return; }
+        int oldSkeletons = skeletonCount();
+        int oldSize = items.size();
+        ArrayList<NativeContentItem> rejected = new ArrayList<>();
+        for (Map.Entry<String, GalleryThumbnailPipeline.Result> entry : batchResults.entrySet()) {
+            NativeContentItem item = pendingTiles.remove(entry.getKey());
+            if (item == null) continue;
+            if (entry.getValue().state == GalleryThumbnailPipeline.State.OMIT) {
+                omittedBlackImages.add(item.url);
+                rejected.add(item);
+            } else items.add(item);
+        }
+        batchResults.clear();
+        // The ready portion of the grid never gets rebound or rearranged for a failed candidate.
+        if (oldSkeletons > 0) notifyItemRangeRemoved(oldSize, oldSkeletons);
+        if (items.size() > oldSize) notifyItemRangeInserted(oldSize, items.size() - oldSize);
+        int skeletons = skeletonCount();
+        if (skeletons > 0) notifyItemRangeInserted(items.size(), skeletons);
+        for (NativeContentItem item : rejected) listener.onOmittedImage(item);
+        listener.onBatchPublished();
+        scheduleBatch();
+    }
+
+    void omitBlackImages(Collection<String> urls) {
+        int oldSkeletons = skeletonCount();
+        omittedBlackImages.addAll(urls);
+        for (String url : urls) {
+            pendingTiles.remove(url);
+            batchResults.remove(url);
+        }
+        int newSkeletons = skeletonCount();
+        if (oldSkeletons > newSkeletons)
+            notifyItemRangeRemoved(items.size() + newSkeletons, oldSkeletons - newSkeletons);
+        stopFavoriteMoves();
+        for (int end = items.size() - 1; end >= 0;) {
+            if (!items.get(end).isImage() || !omittedBlackImages.contains(items.get(end).url)) {
+                end--; continue;
+            }
+            int start = end;
+            while (start > 0 && items.get(start - 1).isImage()
+                    && omittedBlackImages.contains(items.get(start - 1).url)) start--;
+            items.subList(start, end + 1).clear();
+            notifyItemRangeRemoved(start, end - start + 1);
+            end = start - 1;
+        }
+    }
+
+    void resetBlackImageOmissions() {
+        galleryGeneration++;
+        omittedBlackImages.clear();
+        resetBatch();
+    }
+
+    void omitBlackImage(String url) {
+        if (url == null || url.isEmpty()) return;
+        omittedBlackImages.add(url);
+        int position = indexOfUrl(url);
+        if (position < 0 || !items.get(position).isImage()) return;
+        stopFavoriteMoves();
+        items.remove(position);
+        notifyItemRemoved(position);
+    }
     private final Map<String, Float> aspectRatios = new HashMap<>();
     private final LinkedHashSet<String> highlightedUrls = new LinkedHashSet<>();
     private final Context context;
@@ -92,6 +437,16 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 else if (holder.needsRepair) repairArtwork(holder, holder.boundItem, holder.boundItem.imageUrl);
             }
         }
+        if (batchActive && previewsActive) {
+            for (Holder holder : previewHolders) {
+                if (holder.revealAnimator != null && !previewVisible(holder))
+                    cancelReveal(holder, true);
+                if (holder.revealPending && holder.revealAnimator == null
+                        && activeReveals < revealCapacity(estimatedVisibleTiles()) && revealVisible(holder)
+                        && viewport.getScrollState() != RecyclerView.SCROLL_STATE_SETTLING)
+                    scheduleRevealTick(0L);
+            }
+        }
         return true;
     };
     private final PreloadRequestTracker imagePreloads =
@@ -114,13 +469,19 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     void replace(List<NativeContentItem> incoming, boolean preloadAhead) {
         stopFavoriteMoves();
+        galleryGeneration++;
+        resetBatch();
         items.clear();
         normalOrder.clear();
         addUnique(incoming);
-        for (NativeContentItem item : items) normalOrder.put(item.url, normalOrder.size());
+        if (incoming != null) for (NativeContentItem item : incoming)
+            if (item != null) normalOrder.putIfAbsent(item.url, normalOrder.size());
         rememberAndSort();
         notifyDataSetChanged();
-        if (preloadAhead) preloadRange(0, Math.min(items.size(), adaptiveAspectRatios ? 6 : 12));
+        if (preloadAhead) {
+            preloadRange(0, Math.min(items.size(), GalleryWorkload.preparationWindow(gridColumns, estimatedVisibleTiles())));
+            scheduleBatch();
+        }
     }
 
     void append(List<NativeContentItem> incoming) {
@@ -129,22 +490,32 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     void append(List<NativeContentItem> incoming, boolean preloadAhead) {
         int start = items.size();
+        int oldSkeletons = skeletonCount();
         addUnique(incoming);
+        if (oldSkeletons > 0) notifyItemRangeRemoved(start, oldSkeletons);
         if (incoming != null) for (NativeContentItem item : incoming)
             if (item != null) normalOrder.putIfAbsent(item.url, normalOrder.size());
         int added = items.size() - start;
         if (added > 0) {
             notifyItemRangeInserted(start, added);
-            if (preloadAhead) preloadRange(start, Math.min(items.size(), start + (adaptiveAspectRatios ? 6 : 12)));
+            if (preloadAhead && (!batchEnabled || batchActive))
+                preloadRange(start, Math.min(items.size(), start
+                        + GalleryWorkload.preparationWindow(gridColumns, estimatedVisibleTiles())));
         }
+        if (skeletonCount() > 0) notifyItemRangeInserted(items.size(), skeletonCount());
         reorderFavorites();
+        if (preloadAhead) scheduleBatch();
     }
 
     void appendPinned(List<NativeContentItem> incoming) {
         int start = items.size();
+        int oldSkeletons = skeletonCount();
         addUnique(incoming);
+        if (oldSkeletons > 0) notifyItemRangeRemoved(start, oldSkeletons);
         if (items.size() > start) notifyItemRangeInserted(start, items.size() - start);
+        if (skeletonCount() > 0) notifyItemRangeInserted(items.size(), skeletonCount());
         reorderFavorites();
+        scheduleBatch();
     }
 
     private void rememberAndSort() {
@@ -246,9 +617,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
 
     void preloadVisible(int first, int last) {
-        int from = Math.max(0, first);
-        int lookAhead = adaptiveAspectRatios ? 6 : 12;
-        int to = Math.min(items.size(), Math.max(from, last + lookAhead));
+        firstVisible = Math.max(0, first);
+        lastVisible = Math.max(firstVisible, last);
+        if (!batchActive || !previewsActive) return;
+        scheduleBatch();
+        int from = firstVisible;
+        int lookAhead = Math.max(adaptiveAspectRatios ? 6 : 12, gridColumns * 2 + 1);
+        int to = Math.min(items.size(), Math.max(from, lastVisible + lookAhead));
         preloadRange(from, to);
     }
 
@@ -258,6 +633,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     ArrayList<NativeContentItem> normalSnapshot() {
         ArrayList<NativeContentItem> result = snapshot();
+        result.addAll(pendingTiles.values());
         result.removeIf(item -> !normalOrder.containsKey(item.url));
         result.sort(java.util.Comparator.comparingInt(item -> normalOrder.get(item.url)));
         return result;
@@ -272,16 +648,23 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     int size() {
-        return items.size();
+        return items.size() + pendingTiles.size();
     }
 
     void setGridColumns(int columns) {
         int next = Math.max(1, columns);
         if (gridColumns == next) return;
+        int oldSkeletons = skeletonCount();
         gridColumns = next;
+        int newSkeletons = skeletonCount();
+        if (oldSkeletons > newSkeletons) notifyItemRangeRemoved(items.size() + newSkeletons, oldSkeletons - newSkeletons);
+        else if (newSkeletons > oldSkeletons) notifyItemRangeInserted(items.size() + oldSkeletons, newSkeletons - oldSkeletons);
         if (!items.isEmpty()) {
             notifyItemRangeChanged(0, items.size(), PAYLOAD_OVERLAY_DENSITY);
         }
+        updatePreparationBudget();
+        scheduleBatch();
+        scheduleRevealTick(0L);
     }
 
     static float overlayScaleForColumns(int columns) {
@@ -316,7 +699,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public long getItemId(int position) {
-        return items.get(position).url.hashCode();
+        return position < items.size() ? items.get(position).url.hashCode()
+                : Long.MIN_VALUE + position - items.size();
+    }
+
+    @Override public int getItemViewType(int position) {
+        return position < items.size() ? 0 : SKELETON_TYPE;
     }
 
     @NonNull
@@ -332,9 +720,18 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         tileParams.setMargins(gap, gap, gap, gap);
         tile.setLayoutParams(tileParams);
 
-        ImageView image = new ImageView(parent.getContext());
+        GalleryRevealImageView image = new GalleryRevealImageView(parent.getContext());
         image.setBackgroundColor(Color.rgb(20, 20, 23));
         tile.addView(image, new FrameLayout.LayoutParams(-1, -1));
+
+        android.widget.ProgressBar preparing = new android.widget.ProgressBar(parent.getContext());
+        preparing.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(
+                AppearanceTheme.accent(parent.getContext())));
+        FrameLayout.LayoutParams preparingParams = new FrameLayout.LayoutParams(dp(parent, 22), dp(parent, 22),
+                Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        preparingParams.topMargin = dp(parent, 12);
+        preparing.setVisibility(View.GONE);
+        tile.addView(preparing, preparingParams);
 
         TextView unavailable = new TextView(parent.getContext());
         unavailable.setText(R.string.media_preview_unavailable);
@@ -482,7 +879,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 playIcon,
                 playDuration,
                 morphPulse,
-                unavailable, favorite, maintenance, gif
+                unavailable, favorite, maintenance, gif, preparing
         );
     }
 
@@ -492,6 +889,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             int position,
             @NonNull List<Object> payloads
     ) {
+        if (position >= items.size()) { onBindViewHolder(holder, position); return; }
         if (payloads.contains(PAYLOAD_FAVORITE)) {
             holder.favorite.setVisibility(favoriteUrls.contains(items.get(position).url) ? View.VISIBLE : View.GONE);
             if (payloads.contains(PAYLOAD_OVERLAY_DENSITY)) applyOverlayDensity(holder);
@@ -506,9 +904,26 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
+        cancelReveal(holder, false);
         resetTileTransform(holder.itemView);
         holder.morphPulse.animate().cancel();
         holder.morphPulse.setAlpha(0f);
+        if (position >= items.size()) {
+            holder.bindGeneration++;
+            holder.boundItem = null;
+            Glide.with(holder.image).clear(holder.image);
+            holder.tile.setAspectRatio(1f);
+            for (int i = 0; i < holder.tile.getChildCount(); i++)
+                holder.tile.getChildAt(i).setVisibility(View.GONE);
+            holder.image.setVisibility(View.VISIBLE);
+            holder.image.setImageDrawable(new ColorDrawable(Color.rgb(30, 34, 40)));
+            holder.itemView.setContentDescription("Preparing media");
+            holder.itemView.setOnClickListener(null);
+            holder.itemView.setOnLongClickListener(null);
+            holder.itemView.setClickable(false);
+            holder.itemView.setLongClickable(false);
+            return;
+        }
         NativeContentItem item = items.get(position);
         holder.favorite.setVisibility(favoriteUrls.contains(item.url) ? View.VISIBLE : View.GONE);
         holder.maintenance.bind(item);
@@ -543,6 +958,8 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         );
 
         holder.bindGeneration++;
+        if (thumbnailPipeline != null) thumbnailPipeline.unsubscribe(holder);
+        holder.preparing.setVisibility(View.GONE);
         holder.unavailable.setVisibility(View.GONE);
         cancelPreview(holder);
         holder.boundItem = item;
@@ -555,7 +972,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         File cachedPreview = BunkrRepository.isBunkrUrl(item.url) || pawchiveVideo
                 ? BunkrMediaPreview.cached(context, item) : null;
         String eromeArtwork = EromeRepository.gridArtwork(item);
-        if (!eromeArtwork.isEmpty()) {
+        if (thumbnailPipeline != null && GalleryThumbnailPipeline.supports(item)) {
+            prepareThumbnail(holder, item);
+        } else if (!eromeArtwork.isEmpty()) {
             loadArtwork(holder, item, eromeArtwork, true);
         } else if (cachedPreview != null) {
             holder.wantsMediaPreview = true;
@@ -575,6 +994,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         holder.itemView.setOnClickListener(v -> {
             int current = holder.getBindingAdapterPosition();
             if (current == RecyclerView.NO_POSITION || current >= items.size()) return;
+            // A tap during a pending reveal should open the actual artwork, not its matte.
+            if (holder.revealPending) {
+                cancelReveal(holder, false);
+                finishReveal(holder);
+                scheduleRevealTick(0L);
+            }
             listener.onOpen(current, items.get(current), holder.image);
         });
         holder.itemView.setOnLongClickListener(v -> {
@@ -585,20 +1010,94 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         });
     }
 
-    private void loadArtwork(Holder holder, NativeContentItem item, String url, boolean repair) {
+    private void prepareThumbnail(Holder holder, NativeContentItem item) {
         int binding = holder.bindGeneration;
+        int generation = galleryGeneration;
+        Glide.with(holder.image).clear(holder.image);
+        holder.image.setImageDrawable(new ColorDrawable(GalleryRevealImageView.MATTE));
+        // The tail skeleton owns loading. A rare cache miss uses a quiet matte, never a spinner.
+        holder.preparing.setVisibility(View.GONE);
+        requestPreparedThumbnail(item, true, holder, result -> {
+            if (binding != holder.bindGeneration || generation != galleryGeneration) return;
+            if (result.state == GalleryThumbnailPipeline.State.OMIT) {
+                listener.onOmittedImage(item);
+                return;
+            }
+            if (result.state == GalleryThumbnailPipeline.State.UNAVAILABLE) {
+                holder.preparing.setVisibility(View.GONE);
+                holder.image.setImageDrawable(new ColorDrawable(Color.rgb(30, 34, 40)));
+                holder.unavailable.setVisibility(item.isVideo() ? View.GONE : View.VISIBLE);
+                return;
+            }
+            RequestBuilder<Drawable> display =
+                    GalleryThumbnailPipeline.request(Glide.with(holder.image), result.model, result.signature);
+            display.dontAnimate().placeholder(new ColorDrawable(GalleryRevealImageView.MATTE))
+                    .listener(new RequestListener<Drawable>() {
+                        @Override public boolean onLoadFailed(GlideException error, Object model,
+                                Target<Drawable> target, boolean first) {
+                            if (binding != holder.bindGeneration || generation != galleryGeneration) return true;
+                            thumbnailPipeline.invalidateReady(item.url);
+                            cancelReveal(holder, false);
+                            holder.preparing.setVisibility(View.GONE);
+                            holder.unavailable.setVisibility(View.VISIBLE);
+                            return false;
+                        }
+                        @Override public boolean onResourceReady(Drawable resource, Object model,
+                                Target<Drawable> target, DataSource source, boolean first) {
+                            if (binding != holder.bindGeneration || generation != galleryGeneration) return true;
+                            if (adaptiveAspectRatios) applyAspectRatio(holder, item, resource);
+                            holder.preparing.setVisibility(View.GONE);
+                            holder.unavailable.setVisibility(View.GONE);
+                            queueReveal(holder, item);
+                            return false;
+                        }
+                    }).into(holder.image);
+        });
+    }
+
+    private void requestPreparedThumbnail(NativeContentItem item, boolean visible,
+            Object subscriber, java.util.function.Consumer<GalleryThumbnailPipeline.Result> callback) {
+        String referer = imageReferer(item);
+        GlideUrl original = GalleryBlackImage.eligible(item) ? withHeaders(item.url, referer) : null;
+        GlideUrl preview = item.imageUrl.isEmpty() || item.imageUrl.equals(item.url)
+                ? null : withHeaders(item.imageUrl, referer);
+        thumbnailPipeline.prepare(item, preview, original, visible,
+                batchEnabled && subscriber == this, subscriber, callback);
+    }
+
+    private void loadArtwork(Holder holder, NativeContentItem item, String url, boolean repair) {
+        loadArtwork(holder, item, url, repair, false, false);
+    }
+
+    private void loadArtwork(Holder holder, NativeContentItem item, String url,
+            boolean repair, boolean verifyOriginal, boolean finalOriginalAttempt) {
+        int binding = holder.bindGeneration;
+        int generation = galleryGeneration;
+        int artworkRequest = ++holder.artworkRequest;
         RequestBuilder<Drawable> request = Glide.with(holder.image)
                 .load(withHeaders(url, imageReferer(item)))
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .transition(ThumbnailFades.thumbnail())
-                .placeholder(new ColorDrawable(Color.rgb(20, 20, 23)))
-                .error(new ColorDrawable(Color.rgb(20, 20, 23)))
+                .dontAnimate()
+                .placeholder(new ColorDrawable(GalleryRevealImageView.MATTE))
+                .error(new ColorDrawable(GalleryRevealImageView.MATTE))
                 .listener(new RequestListener<Drawable>() {
                     @Override public boolean onLoadFailed(GlideException error, Object model,
                             Target<Drawable> target, boolean firstResource) {
+                        if (binding == holder.bindGeneration)
+                            GalleryDiagnostics.imageFailure(finalOriginalAttempt ? "grid_original_retry"
+                                    : verifyOriginal ? "grid_original_check" : "grid_artwork",
+                                    item, url, imageReferer(item), model, error);
+                        if (binding == holder.bindGeneration && artworkRequest == holder.artworkRequest)
+                            cancelReveal(holder, false);
                         // Glide forbids starting another request synchronously inside its listener.
                         holder.image.post(() -> {
-                            if (binding != holder.bindGeneration) return;
+                            if (!currentArtworkRequest(holder, item, binding, generation, artworkRequest)) return;
+                            if (handleOriginalFailure(holder, item, url, binding, generation,
+                                    artworkRequest, finalOriginalAttempt)) return;
+                            if (verifyOriginal) {
+                                holder.unavailable.setVisibility(View.VISIBLE);
+                                return;
+                            }
                             if (PawchiveRepository.isDirectMedia(item.url)) {
                                 holder.unavailable.setVisibility(View.VISIBLE);
                                 return;
@@ -618,33 +1117,106 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                     }
                     @Override public boolean onResourceReady(Drawable resource, Object model,
                             Target<Drawable> target, DataSource dataSource, boolean firstResource) {
+                        if (binding == holder.bindGeneration)
+                            GalleryDiagnostics.imageReady("grid_artwork", item, url,
+                                    resource.getIntrinsicWidth(), resource.getIntrinsicHeight());
                         if (adaptiveAspectRatios && binding == holder.bindGeneration)
                             applyAspectRatio(holder, item, resource);
+                        if (binding == holder.bindGeneration && artworkRequest == holder.artworkRequest) {
+                            holder.unavailable.setVisibility(View.GONE);
+                            queueReveal(holder, item);
+                            inspectBlackImage(holder, item, resource, binding, generation, artworkRequest, verifyOriginal);
+                        }
                         return false;
                     }
                 });
         int decodeSize = adaptiveAspectRatios ? 384 : 360;
         request = formatThumbnail(request.override(decodeSize, decodeSize), item);
-        if (isOnlyHavenImagePreview(item)) {
+        if (GalleryBlackImage.eligible(item)) request = request.disallowHardwareConfig();
+        if (verifyOriginal) request = request.dontTransform().disallowHardwareConfig()
+                .skipMemoryCache(true).diskCacheStrategy(DiskCacheStrategy.NONE);
+        if (!verifyOriginal && isOnlyHavenImagePreview(item)) {
             RequestBuilder<Drawable> fallback = Glide.with(holder.image)
                     .load(withHeaders(item.url, imageReferer(item)))
-                    .diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate()
-                    .transition(ThumbnailFades.thumbnail());
+                    .diskCacheStrategy(DiskCacheStrategy.ALL).dontAnimate();
             fallback = adaptiveAspectRatios ? fallback.dontTransform().override(384, 384)
                     : fallback.centerCrop().override(360, 360);
+            if (GalleryBlackImage.eligible(item)) fallback = fallback.disallowHardwareConfig();
             fallback = fallback.listener(new RequestListener<Drawable>() {
                 @Override public boolean onLoadFailed(GlideException error, Object model,
-                        Target<Drawable> target, boolean firstResource) { return false; }
+                        Target<Drawable> target, boolean firstResource) {
+                    if (binding == holder.bindGeneration)
+                        GalleryDiagnostics.imageFailure("grid_original_fallback", item, item.url, imageReferer(item), model, error);
+                    if (binding == holder.bindGeneration && artworkRequest == holder.artworkRequest)
+                        cancelReveal(holder, false);
+                    holder.image.post(() -> {
+                        if (!currentArtworkRequest(holder, item, binding, generation, artworkRequest)) return;
+                        handleOriginalFailure(holder, item, item.url, binding, generation, artworkRequest, false);
+                    });
+                    return false;
+                }
                 @Override public boolean onResourceReady(Drawable resource, Object model,
                         Target<Drawable> target, DataSource source, boolean firstResource) {
+                    if (binding == holder.bindGeneration)
+                        GalleryDiagnostics.imageReady("grid_original_fallback", item, item.url,
+                                resource.getIntrinsicWidth(), resource.getIntrinsicHeight());
                     if (adaptiveAspectRatios && binding == holder.bindGeneration)
                         applyAspectRatio(holder, item, resource);
+                    if (binding == holder.bindGeneration && artworkRequest == holder.artworkRequest) {
+                        holder.unavailable.setVisibility(View.GONE);
+                        queueReveal(holder, item);
+                        inspectBlackImage(holder, item, resource, binding, generation, artworkRequest, false);
+                    }
                     return false;
                 }
             });
             request = request.error(fallback);
         }
         request.into(holder.image);
+    }
+
+    private boolean currentArtworkRequest(Holder holder, NativeContentItem item,
+            int binding, int generation, int request) {
+        return binding == holder.bindGeneration && generation == galleryGeneration
+                && request == holder.artworkRequest && previewViewport != null
+                && holder.boundItem != null && item.url.equals(holder.boundItem.url)
+                && indexOfUrl(item.url) >= 0;
+    }
+
+    private boolean handleOriginalFailure(Holder holder, NativeContentItem item, String requested,
+            int binding, int generation, int request, boolean finalAttempt) {
+        GalleryBlackImage.FailureAction action =
+                GalleryBlackImage.originalFailureAction(item, requested, finalAttempt);
+        if (action == GalleryBlackImage.FailureAction.KEEP) return false;
+        holder.unavailable.setVisibility(View.VISIBLE);
+        if (action == GalleryBlackImage.FailureAction.RETRY) {
+            // One fresh original request, bypassing Glide's caches. Never loop on a server outage.
+            holder.image.postDelayed(() -> {
+                if (currentArtworkRequest(holder, item, binding, generation, request))
+                    loadArtwork(holder, item, item.url, false, true, true);
+            }, 650L);
+        } else {
+            GalleryDiagnostics.unavailableImage(item);
+            omitBlackImage(item.url);
+            listener.onOmittedImage(item);
+        }
+        return true;
+    }
+
+    private void inspectBlackImage(Holder holder, NativeContentItem item, Drawable resource,
+            int binding, int generation, int request, boolean verifiedOriginal) {
+        if (!GalleryBlackImage.eligible(item)) return;
+        GalleryBlackImage.check(resource, black -> holder.image.post(() -> {
+            if (!black || !currentArtworkRequest(holder, item, binding, generation, request)) return;
+            if (!verifiedOriginal) {
+                // A blank thumbnail alone is not evidence that its original is blank.
+                loadArtwork(holder, item, item.url, false, true, false);
+                return;
+            }
+            GalleryDiagnostics.blackImage(item);
+            omitBlackImage(item.url);
+            listener.onOmittedImage(item);
+        }));
     }
 
     private void repairArtwork(Holder holder, NativeContentItem item, String rejected) {
@@ -725,11 +1297,13 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         int binding = holder.bindGeneration;
         RequestBuilder<Drawable> preview = Glide.with(holder.image).load(file).override(384, 384)
                 .diskCacheStrategy(DiskCacheStrategy.NONE)
-                .transition(ThumbnailFades.thumbnail())
+                .dontAnimate()
+                .placeholder(new ColorDrawable(GalleryRevealImageView.MATTE))
                 .listener(new RequestListener<Drawable>() {
                     @Override public boolean onLoadFailed(GlideException error, Object model,
                             Target<Drawable> target, boolean firstResource) {
                         if (binding == holder.bindGeneration) {
+                            cancelReveal(holder, false);
                             file.delete(); // Regenerate an evicted/corrupt entry on the next attachment.
                             holder.unavailable.setVisibility(View.VISIBLE);
                             if (PawchiveRepository.isDirectMedia(item.url))
@@ -743,6 +1317,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                             PawchiveMediaRequests.trace(item.url, "tile displayed");
                         if (adaptiveAspectRatios && binding == holder.bindGeneration)
                             applyAspectRatio(holder, item, resource);
+                        if (binding == holder.bindGeneration) {
+                            holder.unavailable.setVisibility(View.GONE);
+                            queueReveal(holder, item);
+                        }
                         return false;
                     }
                 });
@@ -764,7 +1342,15 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     void setPreviewsActive(boolean active) {
         if (previewsActive == active) return;
         previewsActive = active;
-        if (!active) stopFavoriteMoves();
+        if (!active) {
+            stopFavoriteMoves();
+            stopRevealTick();
+            for (Holder holder : previewHolders) cancelReveal(holder, true);
+        } else {
+            updatePreparationBudget();
+            scheduleBatch();
+            scheduleRevealTick(0L);
+        }
         for (Holder holder : previewHolders) {
             if (!active) {
                 cancelPreview(holder);
@@ -780,14 +1366,19 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     @Override public void onAttachedToRecyclerView(@NonNull RecyclerView recycler) {
         super.onAttachedToRecyclerView(recycler);
         previewViewport = recycler;
+        updatePreparationBudget();
         BunkrMediaPreview.addPlaybackPreviewListener(playbackPreviewListener);
         recycler.getViewTreeObserver().addOnPreDrawListener(previewVisibility);
+        recycler.addOnScrollListener(revealScroll);
     }
 
     @Override public void onDetachedFromRecyclerView(@NonNull RecyclerView recycler) {
         stopFavoriteMoves();
         BunkrMediaPreview.removePlaybackPreviewListener(playbackPreviewListener);
         recycler.getViewTreeObserver().removeOnPreDrawListener(previewVisibility);
+        recycler.removeOnScrollListener(revealScroll);
+        stopRevealTick();
+        for (Holder holder : previewHolders) cancelReveal(holder, true);
         for (int i = 0; i < recycler.getChildCount(); i++) {
             RecyclerView.ViewHolder raw = recycler.getChildViewHolder(recycler.getChildAt(i));
             if (raw instanceof Holder) cancelPreview((Holder) raw);
@@ -800,6 +1391,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         super.onViewAttachedToWindow(holder);
         previewHolders.add(holder);
         holder.attached = true;
+        if (holder.revealPending) scheduleRevealTick(0L);
         NativeContentItem item = holder.boundItem;
         if (item == null) return;
         if (holder.wantsMediaPreview) requestMediaPreview(holder, item);
@@ -810,6 +1402,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         resetTileTransform(holder.itemView);
         previewHolders.remove(holder);
         holder.attached = false;
+        cancelReveal(holder, true);
         cancelPreview(holder);
         holder.previewAttempted = false;
         super.onViewDetachedFromWindow(holder);
@@ -848,9 +1441,12 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public void onViewRecycled(@NonNull Holder holder) {
+        cancelReveal(holder, false);
         resetTileTransform(holder.itemView);
         previewHolders.remove(holder);
         holder.bindGeneration++;
+        if (thumbnailPipeline != null) thumbnailPipeline.unsubscribe(holder);
+        holder.preparing.setVisibility(View.GONE);
         cancelPreview(holder);
         holder.boundItem = null;
         holder.maintenance.bind(null);
@@ -865,22 +1461,42 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     @Override
     public int getItemCount() {
-        return items.size();
+        return items.size() + skeletonCount();
     }
 
     private void addUnique(List<NativeContentItem> incoming) {
         if (incoming == null) return;
         java.util.Set<String> existing = new java.util.HashSet<>();
         for (NativeContentItem item : items) existing.add(item.url);
+        existing.addAll(pendingTiles.keySet());
         for (NativeContentItem candidate : incoming) {
             if (candidate == null || candidate.url == null || candidate.url.isEmpty()) continue;
-            if (existing.add(candidate.url)) items.add(candidate);
+            if (candidate.isImage() && omittedBlackImages.contains(candidate.url)) continue;
+            if (!existing.add(candidate.url)) continue;
+            if (batchEnabled && thumbnailPipeline != null && GalleryThumbnailPipeline.supports(candidate)) {
+                GalleryThumbnailPipeline.Result cached = thumbnailPipeline.cached(candidate.url);
+                if (cached == null) {
+                    pendingTiles.put(candidate.url, candidate);
+                    usedContinuousPreparation = true;
+                }
+                else if (cached.state != GalleryThumbnailPipeline.State.OMIT) items.add(candidate);
+                else omittedBlackImages.add(candidate.url);
+            } else items.add(candidate);
         }
     }
 
     private void preloadRange(int start, int end) {
         for (int i = start; i < end; i++) {
             NativeContentItem item = items.get(i);
+            if (thumbnailPipeline != null && GalleryThumbnailPipeline.supports(item)) {
+                if (batchEnabled) continue;
+                int generation = galleryGeneration;
+                requestPreparedThumbnail(item, false, this, result -> {
+                    if (generation == galleryGeneration && result.state == GalleryThumbnailPipeline.State.OMIT)
+                        listener.onOmittedImage(item);
+                });
+                continue;
+            }
             String imageUrl = EromeRepository.gridArtwork(item);
             if (imageUrl.isEmpty()) imageUrl = item.imageUrl == null ? "" : item.imageUrl.trim();
             if (imageUrl.isEmpty()) continue;
@@ -1098,12 +1714,15 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     static final class Holder extends RecyclerView.ViewHolder {
         int bindGeneration;
+        int artworkRequest;
+        boolean revealPending;
+        android.animation.ValueAnimator revealAnimator;
         boolean attached, needsRepair, repairPending, wantsMediaPreview, previewAttempted;
         NativeContentItem boundItem;
         final ArrayList<String> failedArtwork = new ArrayList<>();
         BunkrMediaPreview.Task preview;
         final AspectRatioFrameLayout tile;
-        final ImageView image;
+        final GalleryRevealImageView image;
         final FrameLayout source;
         final ImageView sourceIcon;
         final TextView sourceVariant;
@@ -1116,10 +1735,11 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         final ImageView favorite;
         final BunkrMaintenanceUi.Badge maintenance;
         final TextView gif;
+        final android.widget.ProgressBar preparing;
 
         Holder(
                 AspectRatioFrameLayout itemView,
-                ImageView image,
+                GalleryRevealImageView image,
                 FrameLayout source,
                 ImageView sourceIcon,
                 TextView sourceVariant,
@@ -1129,7 +1749,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 TextView playDuration,
                 View morphPulse,
                 TextView unavailable, ImageView favorite, BunkrMaintenanceUi.Badge maintenance,
-                TextView gif
+                TextView gif, android.widget.ProgressBar preparing
         ) {
             super(itemView);
             this.tile = itemView;
@@ -1146,6 +1766,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             this.favorite = favorite;
             this.maintenance = maintenance;
             this.gif = gif;
+            this.preparing = preparing;
         }
     }
 

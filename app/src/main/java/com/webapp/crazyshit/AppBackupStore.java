@@ -22,6 +22,7 @@ final class AppBackupStore {
         JSONArray later = new JSONArray();
         for (FavoriteStore.Item item : FavoriteStore.load(context)) later.put(watchLaterItem(item, item.content));
         document.put("watchLater", later);
+        document.put("collections", MediaCollectionStore.encode(MediaCollectionStore.load(context)));
         JSONObject settings = new JSONObject();
         for (Map.Entry<String, ?> entry : context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).getAll().entrySet()) {
             if (BackupDocument.BOOLEAN_SETTINGS.contains(entry.getKey())
@@ -83,7 +84,13 @@ final class AppBackupStore {
         LinkedHashMap<String, Map<String, Object>> changes = new LinkedHashMap<>();
         changes.put("creator_favorites", single("creators", favorites));
         changes.put(CreatorCatalog.PREFS, single("items", ContentItemCodec.encodeList(new ArrayList<>(creators.values()), 10000).toString()));
-        changes.put("watch_later", single("items", new JSONArray(ordered).toString()));
+        Map<String, Object> savedMedia = single("items", new JSONArray(ordered).toString());
+        Set<String> allowed = new HashSet<>();
+        for (JSONObject item : ordered) if (item.optBoolean("mediaFavorite", false))
+            allowed.add(item.getString("url"));
+        savedMedia.put(MediaCollectionStore.KEY, MediaCollectionStore.merge(document.optJSONArray("collections"),
+                MediaCollectionStore.load(context), allowed).toString());
+        changes.put("watch_later", savedMedia);
         Map<String, Object> settings = new LinkedHashMap<>();
         JSONObject values = document.getJSONObject("settings");
         java.util.Iterator<String> keys = values.keys();

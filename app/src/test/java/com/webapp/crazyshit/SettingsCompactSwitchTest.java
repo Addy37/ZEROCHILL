@@ -23,6 +23,19 @@ public class SettingsCompactSwitchTest {
         // Settings uses the approved Compose presentation. Exercise the actual mounted
         // Activity models and preference callbacks used by both row and switch clicks.
         List<SettingsComposeScreen.Section> sections = ReflectionHelpers.getField(activity, "settingsSections");
+        java.util.Set<String> categories = new java.util.HashSet<>();
+        java.util.Set<String> titles = new java.util.HashSet<>();
+        for (SettingsComposeScreen.Section section : sections) {
+            assertTrue("Duplicate category: " + section.getTitle(), categories.add(section.getTitle()));
+            for (SettingsComposeScreen.Item item : section.getItems())
+                assertTrue("Duplicate setting: " + item.getTitle(), titles.add(item.getTitle()));
+        }
+        assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("Appearance", "Notifications",
+                "Content & playback", "Account & privacy", "Library & storage", "App updates",
+                "Advanced", "About ZEROCHILL")), categories);
+        assertTrue(titles.contains("Account notification preferences"));
+        assertFalse(titles.contains("Favorite creators"));
+        assertFalse(titles.contains("Library"));
         List<SettingsComposeScreen.Item> switches = new ArrayList<>();
         for (SettingsComposeScreen.Section section : sections)
             for (SettingsComposeScreen.Item item : section.getItems())

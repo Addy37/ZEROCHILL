@@ -196,14 +196,13 @@ public final class UpdateInboxActivity extends Activity {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(12), dp(8), dp(12), dp(4));
 
-        header.addView(
-                BrowseUi.action(this, "‹", "Back", v -> finish()),
-                new LinearLayout.LayoutParams(dp(48), dp(48))
-        );
+        TextView back = BrowseUi.action(this, "‹", "Back", v -> finish());
+        SecondaryScreenChrome.back(back, false);
+        header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
-        titles.setPadding(dp(12), 0, dp(8), 0);
+        titles.setPadding(dp(4), 0, dp(4), 0);
         TextView title = BrowseUi.text(this, "Notifications", 24, UiPalette.TEXT_PRIMARY);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         titles.addView(title);
@@ -218,14 +217,17 @@ public final class UpdateInboxActivity extends Activity {
         markAll.setTextSize(12);
         ZeroChillMotion.installPressFeedback(markAll);
         LinearLayout cleanupActions = new LinearLayout(this);
-        cleanupActions.setOrientation(LinearLayout.VERTICAL);
-        cleanupActions.addView(markAll, new LinearLayout.LayoutParams(dp(80), dp(44)));
+        cleanupActions.setOrientation(LinearLayout.HORIZONTAL);
+        SecondaryScreenChrome.icon(markAll, R.drawable.ic_secondary_read_all, "Mark all notifications read", true);
+        cleanupActions.addView(markAll, new LinearLayout.LayoutParams(dp(48), dp(48)));
         clearAll = BrowseUi.action(this, "Clear All", "Clear all local notification history", v -> confirmClearAll());
         clearAll.setTextSize(12);
         ZeroChillMotion.installPressFeedback(clearAll);
-        cleanupActions.addView(clearAll, new LinearLayout.LayoutParams(dp(80), dp(44)));
+        SecondaryScreenChrome.icon(clearAll, R.drawable.ic_secondary_clear, "Clear all local notification history", false);
+        cleanupActions.addView(clearAll, new LinearLayout.LayoutParams(dp(48), dp(48)));
         header.addView(cleanupActions);
-        root.addView(header);
+        SecondaryScreenChrome.header(header, title, false);
+        root.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout filters = new LinearLayout(this);
         filters.setOrientation(LinearLayout.HORIZONTAL);
@@ -776,13 +778,13 @@ public final class UpdateInboxActivity extends Activity {
             view.setPadding(dp(14), 0, dp(14), 0);
             view.setBackground(new InsetDrawable(BrowseUi.rounded(
                     UpdateInboxActivity.this, UiPalette.RAISED, 12
-            ), 0, dp(4), 0, dp(4)));
+            ), 0, dp(12), 0, dp(12)));
             ZeroChillMotion.installPressFeedback(view);
             return view;
         }
 
         private LinearLayout.LayoutParams actionPillParams() {
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(32));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(48));
             params.setMargins(0, 0, dp(4), 0);
             return params;
         }
@@ -810,7 +812,7 @@ public final class UpdateInboxActivity extends Activity {
             holder.title.setFocusable(creatorGroup);
             holder.title.setClickable(creatorGroup);
             holder.title.setMinHeight(0);
-            holder.subtitle.setMaxLines(creatorGroup ? 1 : 2);
+            holder.subtitle.setMaxLines(creatorGroup ? 1 : UpdateInboxStore.CATEGORY_APP.equals(entry.category) ? 3 : 2);
             holder.title.setContentDescription(creatorGroup ? "Open " + entry.title + " creator gallery" : null);
             boolean social = UpdateInboxStore.CATEGORY_SOCIAL.equals(entry.category);
             boolean replyNotification = social

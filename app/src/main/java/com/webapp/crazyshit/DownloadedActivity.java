@@ -49,6 +49,7 @@ public final class DownloadedActivity extends Activity {
     private boolean reading;
     private android.os.Parcelable restoredScroll;
     private EditText input;
+    private LibraryDestinationChrome.SearchController inlineSearch;
     private TextView count;
     private TextView empty;
     private List<VideoDownloadStore.Entry> currentEntries = new ArrayList<>();
@@ -75,6 +76,8 @@ public final class DownloadedActivity extends Activity {
             restoredScroll = state.getParcelable("scroll");
             input.setText(state.getString("query", ""));
             input.setSelection(input.length());
+            inlineSearch.restore(state);
+            LibraryGridGesture.apply(recycler, state.getInt("grid_columns", 2));
         }
         loader.execute(() -> VideoDownloadStore.recoverInterrupted(this));
     }
@@ -123,14 +126,12 @@ public final class DownloadedActivity extends Activity {
         input.setPadding(dp(14), 0, dp(14), 0);
         LibraryDestinationChrome.styleSearch(this, input);
         input.setContentDescription("Search Downloads");
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(-1, dp(50));
-        inputParams.setMargins(dp(12), 0, dp(12), dp(8));
-        root.addView(input, inputParams);
+        inlineSearch = LibraryDestinationChrome.attachInlineSearch(this, header, title, input);
 
         count = BrowseUi.text(this, "", 12, BrowseUi.MUTED);
         count.setPadding(dp(16), dp(4), dp(16), dp(8));
-        LibraryDestinationChrome.styleSummary(this, count);
-        root.addView(count);
+        LibraryDestinationChrome.attachSummary(root, count, null,
+                () -> LibraryGridGesture.apply(recycler, LibraryGridGesture.next(galleryLayout.getSpanCount())));
 
         empty = BrowseUi.text(this, "", 15, BrowseUi.MUTED);
         empty.setGravity(Gravity.CENTER);
@@ -145,7 +146,8 @@ public final class DownloadedActivity extends Activity {
         galleryLayout = new GridLayoutManager(this, 2);
         galleryLayout.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
             @Override public int getSpanSize(int position) {
-                return downloadsAdapter != null && downloadsAdapter.isPortrait(position) ? 1 : 2;
+                return galleryLayout.getSpanCount() > 2 || downloadsAdapter != null && downloadsAdapter.isPortrait(position)
+                        ? 1 : galleryLayout.getSpanCount();
             }
         });
         recycler.setLayoutManager(galleryLayout);
@@ -154,6 +156,9 @@ public final class DownloadedActivity extends Activity {
         recycler.setClipToPadding(false);
         downloadsAdapter = new DownloadsAdapter();
         recycler.setAdapter(downloadsAdapter);
+        recycler.addOnItemTouchListener(new LibraryGridGesture(this,
+                () -> LibraryGridGesture.apply(recycler, galleryLayout.getSpanCount() + 1),
+                () -> LibraryGridGesture.apply(recycler, galleryLayout.getSpanCount() - 1)));
         root.addView(recycler, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         setContentView(root);
@@ -289,9 +294,15 @@ public final class DownloadedActivity extends Activity {
         DownloadHolder(FrameLayout frame) { super(frame); this.frame = frame; }
     }
 
+    @Override public void onBackPressed() {
+        if (inlineSearch == null || !inlineSearch.close()) super.onBackPressed();
+    }
+
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putParcelable("scroll", recycler.getLayoutManager().onSaveInstanceState());
         state.putString("query", input == null ? "" : input.getText().toString());
+        state.putInt("grid_columns", galleryLayout.getSpanCount());
+        inlineSearch.save(state);
         super.onSaveInstanceState(state);
     }
     @Override protected void onDestroy() {
@@ -311,6 +322,7 @@ public final class DownloadedActivity extends Activity {
 
         LibraryAspectMediaCard card = new LibraryAspectMediaCard(this);
         card.setPortrait(Boolean.TRUE.equals(portraitDownloads.get(entry.id)));
+        card.setUniform(galleryLayout != null && galleryLayout.getSpanCount() > 2);
         card.setCardBackgroundColor(UiPalette.SURFACE);
         card.setRadius(dp(16));
         card.setCardElevation(0f);
@@ -398,7 +410,7 @@ public final class DownloadedActivity extends Activity {
         view.setContentDescription(description);
         view.setClickable(true);
         view.setFocusable(true);
-        view.setBackground(rounded(Color.argb(150, 0, 0, 0), dp(17)));
+        view.setBackground(rounded(Color.argb(110, 0, 0, 0), dp(15)));
         return view;
     }
 
@@ -463,7 +475,7 @@ public final class DownloadedActivity extends Activity {
                         }
                     })
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                    .transition(ThumbnailFades.thumbnail())
+                    .transition(SharedArtworkReveal.artwork("downloads", entry.pageUrl, false))
                     .into(image);
         } else {
             image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);

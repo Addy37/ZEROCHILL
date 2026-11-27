@@ -518,6 +518,7 @@ final class BunkrGalleryPagerAdapter
             holder.imageLoading = !preview.isEmpty();
             updateState(holder, position);
             if (preview.isEmpty()) {
+                if (item.isImage()) GalleryDiagnostics.missingImage(item);
                 Glide.with(holder.image).clear(holder.image);
                 holder.image.setImageDrawable(new ColorDrawable(Color.BLACK));
             } else {
@@ -544,6 +545,8 @@ final class BunkrGalleryPagerAdapter
                             ) {
                                 if (holder.imageRequest != request || !item.url.equals(holder.boundUrl)) return true;
                                 holder.imageLoading = false;
+                                GalleryDiagnostics.imageFailure(fullImage ? "viewer_original" : "viewer_preview",
+                                        item, preview, imageReferer(item), model, error);
                                 if (pawchive) PawchiveMediaRequests.trace(item.url,
                                         (fullImage ? "original" : "preview") + " Glide failed "
                                                 + error.getClass().getSimpleName());
@@ -587,6 +590,8 @@ final class BunkrGalleryPagerAdapter
                                 if (holder.imageRequest != request || !item.url.equals(holder.boundUrl)) return true;
                                 holder.imageLoading = false;
                                 holder.hasUsableImage = true;
+                                GalleryDiagnostics.imageReady(fullImage ? "viewer_original" : "viewer_preview",
+                                        item, preview, resource.getIntrinsicWidth(), resource.getIntrinsicHeight());
                                 listener.onArtworkReady(holder.getBindingAdapterPosition());
                                 if (fullImage) {
                                     if (pawchive) PawchiveMediaRequests.trace(item.url,

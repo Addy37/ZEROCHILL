@@ -419,8 +419,9 @@ final class ShowsHubView extends FrameLayout {
         heroCard.setOnClickListener(v -> openHero());
         heroAction.setOnClickListener(v -> openHero());
         refreshContinueWatching();
-        ColdTabSnapshot.install(this, scroll, heroImage, "shows",
-                () -> heroItem != null && itemCount() > 0);
+        ColdTabSnapshot.installShows(this, scroll, heroImage,
+                () -> heroItem != null && itemCount() > 0,
+                () -> heroItem != null || itemCount() > 0);
     }
 
     void clear() {
@@ -1190,7 +1191,7 @@ final class ShowsHubView extends FrameLayout {
                             .skipMemoryCache(false)
                             .disallowHardwareConfig()
                             .dontAnimate()
-                            .transition(hero ? ThumbnailFades.hero() : ThumbnailFades.thumbnail())
+                            .transition(SharedArtworkReveal.artwork(hero ? "shows-hero" : "shows-shelf", item.url, false))
                             .placeholder(artworkPlaceholder())
                             .error(artworkPlaceholder());
             if (fullHeroArtwork) request.fitCenter();
@@ -1234,7 +1235,7 @@ final class ShowsHubView extends FrameLayout {
                         )
                         .disallowHardwareConfig()
                         .dontAnimate()
-                        .transition(hero ? ThumbnailFades.hero() : ThumbnailFades.thumbnail())
+                        .transition(SharedArtworkReveal.artwork(hero ? "shows-hero" : "shows-shelf", item.url, false))
                         .placeholder(artworkPlaceholder())
                         .error(artworkPlaceholder());
         if (fullHeroArtwork) request.fitCenter();
@@ -1306,7 +1307,7 @@ final class ShowsHubView extends FrameLayout {
                 .disallowHardwareConfig()
                 .transform(continueWatchingFill())
                 .dontAnimate()
-                .transition(ThumbnailFades.thumbnail())
+                .transition(SharedArtworkReveal.artwork("shows-continue", pageUrl, false))
                 .placeholder(artworkPlaceholder())
                 .error(artworkPlaceholder())
                 .into(view);

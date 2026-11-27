@@ -159,7 +159,9 @@ public final class FavoriteStore {
         } catch (Exception ignored) {
         }
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        prefs.edit().putString(KEY_ITEMS, array.toString()).apply();
+        SharedPreferences.Editor editor = prefs.edit().putString(KEY_ITEMS, array.toString());
+        MediaCollectionStore.prune(context, editor, items);
+        editor.apply();
     }
 
     public static final class Item {

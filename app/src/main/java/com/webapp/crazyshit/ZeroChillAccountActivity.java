@@ -206,14 +206,14 @@ public final class ZeroChillAccountActivity extends Activity {
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.setPadding(dp(10), dp(3), dp(14), dp(3));
-        top.setBackground(headerBackground());
+        top.setBackgroundColor(Color.TRANSPARENT);
         top.setElevation(0f);
         top.setMinimumHeight(dp(58));
         shell.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
         TextView back = text("‹", 31, AppearanceTheme.primaryText(this), false);
         back.setGravity(Gravity.CENTER);
-        back.setContentDescription("Back");
+        SecondaryScreenChrome.back(back, false);
         back.setOnClickListener(v -> finish());
         ZeroChillMotion.installPressFeedback(back);
         top.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -225,6 +225,7 @@ public final class ZeroChillAccountActivity extends Activity {
 
         TextView title = text("Account", 24, AppearanceTheme.primaryText(this), true);
         titles.addView(title);
+        SecondaryScreenChrome.header(top, title, false);
         TextView subtitle = text("ZEROCHILL ID", 11,
                 ZeroChillUi.color(this, R.color.zc_text_muted), true);
         subtitle.setLetterSpacing(0.10f);
@@ -238,7 +239,7 @@ public final class ZeroChillAccountActivity extends Activity {
 
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(22), dp(24), dp(22), dp(34));
+        content.setPadding(dp(16), dp(14), dp(16), dp(28));
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
         progress = new ZeroChillProgressBar(this);
@@ -521,8 +522,8 @@ public final class ZeroChillAccountActivity extends Activity {
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.HORIZONTAL);
         hero.setGravity(Gravity.CENTER_VERTICAL);
-        hero.setPadding(dp(15), dp(15), dp(15), dp(15));
-        hero.setBackground(panelBackground(20));
+        hero.setPadding(dp(4), dp(10), dp(4), dp(10));
+        hero.setBackgroundColor(Color.TRANSPARENT);
 
         FrameLayout avatarHalo = new FrameLayout(this);
         avatarHalo.setBackground(circle(AppearanceTheme.raised(ZeroChillAccountActivity.this)));
@@ -736,7 +737,9 @@ public final class ZeroChillAccountActivity extends Activity {
         settingsRow("Change password", android.R.drawable.ic_lock_lock, () -> openSecurity("password"));
         settingsRow("Delete account", android.R.drawable.ic_menu_delete, () -> openSecurity("delete"));
 
-        settingsRow("Notification preferences", android.R.drawable.ic_dialog_info, () -> openSocial("notifications"));
+        settingsRow("Notification preferences", android.R.drawable.ic_dialog_info, () ->
+                startActivity(new Intent(this, SettingsActivity.class)
+                        .putExtra(SettingsActivity.EXTRA_SECTION, "Notifications")));
         settingsRow("Blocked users", android.R.drawable.ic_menu_close_clear_cancel, () -> openSocial("blocked"));
 
         TextView signOut = secondaryButton("SIGN OUT");
@@ -790,9 +793,9 @@ public final class ZeroChillAccountActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(16), dp(7), dp(14), dp(7));
-        row.setMinimumHeight(dp(54));
-        row.setBackground(panelBackground(14));
+        row.setPadding(dp(8), dp(7), dp(8), dp(7));
+        row.setMinimumHeight(dp(52));
+        row.setBackgroundColor(Color.TRANSPARENT);
         ImageView symbol = new ImageView(this);
         symbol.setImageResource(iconRes);
         symbol.setColorFilter(AppearanceTheme.secondaryText(ZeroChillAccountActivity.this));

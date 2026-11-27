@@ -217,7 +217,7 @@ final class OnlyFapCreatorSearchAdapter
 
         TextView badge = new TextView(context);
         badge.setText("OnlyFap");
-        badge.setTextColor(UiPalette.TEXT_SECONDARY);
+        badge.setTextColor(AppearanceTheme.accent(context));
         badge.setTextSize(10.5f);
         badge.setTypeface(null, android.graphics.Typeface.BOLD);
         badge.setGravity(Gravity.CENTER);
@@ -225,7 +225,7 @@ final class OnlyFapCreatorSearchAdapter
         LinearLayout.LayoutParams badgeParams =
                 new LinearLayout.LayoutParams(-2, dp(context, 20));
         badgeParams.bottomMargin = dp(context, 4);
-        badge.setVisibility(android.view.View.GONE);
+        badge.setPadding(dp(context, 6), 0, dp(context, 6), 0);
         copy.addView(badge, badgeParams);
 
         TextView name = new TextView(context);
@@ -358,7 +358,8 @@ final class OnlyFapCreatorSearchAdapter
                 Glide.with(target)
                         .load(source)
                         .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                        .transition(circle ? ThumbnailFades.avatar() : ThumbnailFades.thumbnail())
+                        .transition(SharedArtworkReveal.artwork(circle ? "creator-search-avatar" : "creator-search-preview",
+                                item.url, circle))
                         .placeholder(R.drawable.ic_more_account)
                         .error(R.drawable.ic_more_account);
         if (circle) request.circleCrop();

@@ -42,11 +42,12 @@ final class LibraryDestinationChrome {
     static void attachHeader(LinearLayout root, LinearLayout header, TextView title) {
         Context context = root.getContext();
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(context, 8), dp(context, 8), dp(context, 8), dp(context, 8));
-        header.setMinimumHeight(dp(context, 64));
-        header.setBackground(surface(context, 21, 0xFF17242E, INSET, 56));
-        header.setClipToOutline(true);
-        title.setTextSize(22);
+        header.setPadding(0, 0, 0, 0);
+        header.setMinimumHeight(dp(context, 52));
+        header.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        header.setClipToOutline(false);
+        title.setTextSize(24);
+        title.setPadding(dp(context, 4), 0, dp(context, 4), 0);
         title.setTextColor(AppearanceTheme.primaryText(context));
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         title.setMaxLines(2);
@@ -54,11 +55,21 @@ final class LibraryDestinationChrome {
         for (int i = 0; i < header.getChildCount(); i++) {
             View child = header.getChildAt(i);
             if (child instanceof TextView && child != title) {
-                styleAction((TextView) child, context);
+                TextView action = (TextView) child;
+                styleAction(action, context);
+                if ("Back".contentEquals(action.getContentDescription())) {
+                    action.setText("");
+                    action.setPadding(dp(context, 12), 0, dp(context, 12), 0);
+                    android.graphics.drawable.Drawable arrow = androidx.core.content.ContextCompat
+                            .getDrawable(context, R.drawable.ic_player_back).mutate();
+                    arrow.setTint(AppearanceTheme.primaryText(context));
+                    arrow.setBounds(0, 0, dp(context, 24), dp(context, 24));
+                    action.setCompoundDrawables(arrow, null, null, null);
+                }
             }
         }
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.setMargins(dp(context, 12), dp(context, 6), dp(context, 12), dp(context, 10));
+        params.setMargins(dp(context, 8), dp(context, 6), dp(context, 8), dp(context, 4));
         root.addView(header, params);
     }
 
@@ -66,8 +77,129 @@ final class LibraryDestinationChrome {
         input.setTextColor(AppearanceTheme.primaryText(context));
         input.setHintTextColor(AppearanceTheme.secondaryText(context));
         input.setTextSize(15);
-        input.setBackground(surface(context, 17, 0xFF17222B, OLED, 50));
-        input.setMinHeight(dp(context, 50));
+        input.setBackground(surface(context, 14, 0xFF181D23, 0xFF101216, 0));
+        input.setMinHeight(dp(context, 44));
+        input.setSingleLine(true);
+    }
+
+    static ImageView iconAction(Context context, int drawable, String description, boolean accent,
+            View.OnClickListener click) {
+        ImageView icon = new ImageView(context);
+        icon.setImageResource(drawable);
+        icon.setColorFilter(accent ? AppearanceTheme.accent(context) : AppearanceTheme.primaryText(context));
+        icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        icon.setPadding(dp(context, 12), dp(context, 12), dp(context, 12), dp(context, 12));
+        icon.setContentDescription(description);
+        icon.setFocusable(true);
+        icon.setClickable(true);
+        icon.setOnClickListener(click);
+        ZeroChillMotion.installPressFeedback(icon);
+        return icon;
+    }
+
+    static SearchController attachInlineSearch(Activity activity, LinearLayout header,
+            TextView title, EditText input) {
+        return new SearchController(activity, header, title, input);
+    }
+
+    static final class SearchController {
+        private final Activity activity;
+        private final LinearLayout header;
+        private final TextView title;
+        private final EditText input;
+        private final java.util.List<View> actions = new java.util.ArrayList<>();
+        private final ImageView search, close;
+        private boolean open;
+
+        SearchController(Activity activity, LinearLayout header, TextView title, EditText input) {
+            this.activity = activity; this.header = header; this.title = title; this.input = input;
+            int titleIndex = header.indexOfChild(title);
+            for (int i = titleIndex + 1; i < header.getChildCount(); i++) actions.add(header.getChildAt(i));
+            styleSearch(activity, input);
+            input.setPadding(dp(activity, 12), 0, dp(activity, 12), 0);
+            input.setContentDescription(input.getHint());
+            input.setVisibility(View.GONE);
+            header.addView(input, titleIndex + 1, new LinearLayout.LayoutParams(0, dp(activity, 44), 1));
+            search = iconAction(activity, R.drawable.ic_nav_search, "Search", false, v -> show(true));
+            search.setTag("library-search-open");
+            header.addView(search, titleIndex + 2, new LinearLayout.LayoutParams(dp(activity, 48), dp(activity, 48)));
+            close = iconAction(activity, R.drawable.ic_more_close, "Close search", false, v -> close());
+            close.setTag("library-search-close");
+            close.setVisibility(View.GONE);
+            header.addView(close, new LinearLayout.LayoutParams(dp(activity, 48), dp(activity, 48)));
+            if (titleIndex > 0) header.getChildAt(0).setOnClickListener(v -> {
+                if (!close()) activity.finish();
+            });
+        }
+
+        boolean isOpen() { return open; }
+
+        void show(boolean keyboard) {
+            if (!open) {
+                open = true;
+                title.setVisibility(View.GONE); search.setVisibility(View.GONE);
+                for (View action : actions) action.setVisibility(View.GONE);
+                input.setVisibility(View.VISIBLE); close.setVisibility(View.VISIBLE);
+                if (ZeroChillMotion.animationsEnabled(activity)) {
+                    input.setAlpha(0f); input.animate().alpha(1f).setDuration(140L).start();
+                }
+            }
+            if (keyboard) {
+                input.requestFocus();
+                input.setSelection(input.length());
+                input.post(() -> {
+                    if (!open || !input.hasFocus()) return;
+                    android.view.inputmethod.InputMethodManager manager =
+                            (android.view.inputmethod.InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+                    if (manager != null) manager.showSoftInput(input, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+                });
+            }
+        }
+
+        boolean close() {
+            if (!open) return false;
+            open = false;
+            BrowseUi.hideKeyboard(activity, input);
+            input.clearFocus(); input.animate().cancel(); input.setAlpha(1f);
+            input.setText(""); input.setVisibility(View.GONE); close.setVisibility(View.GONE);
+            title.setVisibility(View.VISIBLE); search.setVisibility(View.VISIBLE);
+            for (View action : actions) action.setVisibility(View.VISIBLE);
+            return true;
+        }
+
+        void restore(android.os.Bundle state) {
+            if (state != null && (state.getBoolean("inline_search", false) || input.length() > 0)) show(false);
+        }
+        void save(android.os.Bundle state) { state.putBoolean("inline_search", open); }
+    }
+
+    static void attachSummary(LinearLayout root, TextView count, Runnable sort, Runnable density) {
+        Context context = root.getContext();
+        LinearLayout row = new LinearLayout(context);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(context, 12), 0, dp(context, 8), 0);
+        styleSummary(context, count);
+        count.setPadding(dp(context, 4), 0, dp(context, 4), 0);
+        row.addView(count, new LinearLayout.LayoutParams(0, -2, 1));
+        if (sort != null) {
+            TextView action = BrowseUi.action(context, "⇅", "Change sort order", v -> sort.run());
+            styleAction(action, context); action.setTextSize(22);
+            row.addView(action, new LinearLayout.LayoutParams(dp(context, 48), dp(context, 48)));
+        }
+        if (density != null) {
+            ImageView grid = iconAction(context, R.drawable.ic_more_view_style, "Change grid columns", true, v -> density.run());
+            row.addView(grid, new LinearLayout.LayoutParams(dp(context, 48), dp(context, 48)));
+        }
+        row.setMinimumHeight(dp(context, 40));
+        root.addView(row, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    static String compactDate(long timestamp, long now) {
+        if (timestamp <= 0) return "";
+        java.text.DateFormat format = LibraryBrowseGroups.TODAY.equals(LibraryBrowseGroups.dateBucket(timestamp, now))
+                ? java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
+                : java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM);
+        return format.format(new java.util.Date(timestamp));
     }
 
     static void styleSummary(Context context, TextView count) {
@@ -78,12 +210,13 @@ final class LibraryDestinationChrome {
 
     static void styleEmpty(Context context, TextView empty) {
         empty.setTextColor(AppearanceTheme.secondaryText(context));
-        empty.setBackground(surface(context, 19, 0xFF121B23, OLED, 35));
+        empty.setBackgroundColor(android.graphics.Color.TRANSPARENT);
     }
 
     static void styleAction(TextView action, Context context) {
         action.setTextColor(AppearanceTheme.accent(context));
-        action.setBackground(surface(context, 15, RAISED, INSET, 72));
+        action.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        action.setPadding(0, 0, 0, 0);
         action.setMinimumWidth(dp(context, 48));
         action.setMinimumHeight(dp(context, 48));
         action.setGravity(Gravity.CENTER);
@@ -93,8 +226,7 @@ final class LibraryDestinationChrome {
         card.setRadius(dp(context, 18));
         card.setCardElevation(0);
         card.setCardBackgroundColor(RAISED);
-        card.setStrokeWidth(dp(context, 1));
-        card.setStrokeColor(ColorUtils.setAlphaComponent(AppearanceTheme.accent(context), 65));
+        card.setStrokeWidth(0);
     }
 
     static TextView mediaCaption(Context context, String value) {

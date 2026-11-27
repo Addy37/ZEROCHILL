@@ -107,6 +107,34 @@ public class NativeFeedBrowserActivity extends Activity {
 
     private NativeFeedAdapter adapter;
     private BunkrGalleryAdapter bunkrGalleryAdapter;
+    private final java.util.LinkedHashSet<String> omittedBlackImages = new java.util.LinkedHashSet<>();
+    private final java.util.LinkedHashSet<String> pendingImageOmissions = new java.util.LinkedHashSet<>();
+    private final android.os.Handler galleryThumbnailUi = new android.os.Handler(android.os.Looper.getMainLooper());
+    private GalleryThumbnailPipeline galleryThumbnailPipeline;
+    private boolean galleryPreviewsResumed;
+    private int lastAutomaticGalleryPage = -1;
+    private void maybePrefetchCreatorGalleryPage() {
+        if (!galleryPreviewsResumed || !isCreatorGallery() || creatorAvatarPickerMode
+                || restoringBrowser || loading || endReached || isFinishing() || isDestroyed()) return;
+        BunkrGalleryAdapter active = activeCreatorAdapter();
+        if (active == null || !active.shouldPrefetchNextPage()
+                || lastAutomaticGalleryPage == currentPage) return;
+        lastAutomaticGalleryPage = currentPage;
+        load(true);
+    }
+    private final Runnable flushImageOmissions = this::applyImageOmissions;
+
+    private void applyImageOmissions() {
+        if (isFinishing() || isDestroyed() || pendingImageOmissions.isEmpty()) return;
+        java.util.Set<String> batch = new java.util.LinkedHashSet<>(pendingImageOmissions);
+        pendingImageOmissions.clear();
+        for (BunkrGalleryAdapter tab : creatorTabAdapters)
+            if (tab != null) tab.omitBlackImages(batch);
+        if (bunkrGalleryAdapter != null && !isCreatorGallery()) bunkrGalleryAdapter.omitBlackImages(batch);
+        if (albumGridAdapter != null) albumGridAdapter.omitBlackImages(batch);
+        updateCreatorTabLabels();
+        updateCreatorEmptyState();
+    }
     private GalleryContextMenu galleryContextMenu;
     private final java.util.Set<String> mediaFavoriteUrls = new java.util.HashSet<>();
     private int favoriteReadGeneration;
@@ -1336,6 +1364,28 @@ public class NativeFeedBrowserActivity extends Activity {
                     }
 
                     @Override
+                    public void onOmittedImage(NativeContentItem item) {
+                        if (isFinishing() || isDestroyed()) return;
+                        if (!omittedBlackImages.add(item.url)) return;
+                        pendingImageOmissions.add(item.url);
+                        if (pendingImageOmissions.size() == 1)
+                            galleryThumbnailUi.postDelayed(flushImageOmissions, 100L);
+                    }
+
+                    @Override
+                    public void onBatchPublished() {
+                        if (isFinishing() || isDestroyed()) return;
+                        updateCreatorTabLabels();
+                        updateCreatorEmptyState();
+                        if (galleryPreviewsResumed && !loading && !endReached && isCreatorGallery()) {
+                            BunkrGalleryAdapter active = activeCreatorAdapter();
+                            if (active != null && active.getItemCount() == 0 && !active.hasPendingThumbnails())
+                                load(true);
+                            else maybePrefetchCreatorGalleryPage();
+                        }
+                    }
+
+                    @Override
                     public void onLongPress(NativeContentItem item, View anchor) {
                         if (creatorAvatarPickerMode) return;
                         if (isCreatorGallery()) {
@@ -1347,6 +1397,10 @@ public class NativeFeedBrowserActivity extends Activity {
                 },
                 adaptiveAspectRatios
         );
+        if (galleryThumbnailPipeline == null) galleryThumbnailPipeline = new GalleryThumbnailPipeline(this);
+        galleryAdapter.setThumbnailPipeline(galleryThumbnailPipeline);
+        galleryAdapter.setBatchEnabled(isCreatorGallery() && !creatorAvatarPickerMode);
+        galleryAdapter.setBatchActive(!isCreatorGallery());
         if (isCreatorGallery()) galleryAdapter.setFavoriteUrls(mediaFavoriteUrls);
         if (isCreatorGallery() && !notificationFreshUrls.isEmpty()) {
             galleryAdapter.setHighlightedUrls(notificationFreshUrls);
@@ -1383,9 +1437,13 @@ public class NativeFeedBrowserActivity extends Activity {
             creatorTabsPager.setCurrentItem(CREATOR_TAB_PICTURES, false);
         }
         updateCreatorTabLabels();
+        for (int tab = 0; tab < CREATOR_TAB_COUNT; tab++)
+            creatorTabAdapters[tab].setBatchActive(tab == activeCreatorTab());
         creatorTabsPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
+                for (int tab = 0; tab < CREATOR_TAB_COUNT; tab++)
+                    creatorTabAdapters[tab].setBatchActive(tab == position);
                 RecyclerView active = activeCreatorRecycler();
                 if (active != null) {
                     recycler = active;
@@ -1436,8 +1494,9 @@ public class NativeFeedBrowserActivity extends Activity {
             public void onScrolled(@NonNull RecyclerView view, int dx, int dy) {
                 int[] range = visibleRange(view.getLayoutManager());
                 galleryAdapter.preloadVisible(range[0], range[1]);
-                if (dy > 0 && !loading && !endReached &&
-                        range[1] >= Math.max(0, galleryAdapter.getItemCount() - 5)) {
+                if (dy > 0 && !loading && !endReached && !galleryAdapter.hasPendingThumbnails()
+                        && (!isCreatorGallery() || galleryAdapter == activeCreatorAdapter())
+                        && range[1] >= Math.max(0, galleryAdapter.getItemCount() - 5)) {
                     load(true);
                 }
             }
@@ -1480,9 +1539,18 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private void reload() {
+        galleryThumbnailUi.removeCallbacks(flushImageOmissions);
+        pendingImageOmissions.clear();
+        if (galleryThumbnailPipeline != null) galleryThumbnailPipeline.reset();
+        omittedBlackImages.clear();
+        for (BunkrGalleryAdapter tab : creatorTabAdapters)
+            if (tab != null) tab.resetBlackImageOmissions();
+        if (bunkrGalleryAdapter != null) bunkrGalleryAdapter.resetBlackImageOmissions();
+        if (albumGridAdapter != null) albumGridAdapter.resetBlackImageOmissions();
         generation++;
         fapelloFailureShown = false;
         currentPage = 0;
+        lastAutomaticGalleryPage = -1;
         loading = false;
         endReached = false;
         episodePrefetchFailedPage = -1;
@@ -1669,6 +1737,7 @@ public class NativeFeedBrowserActivity extends Activity {
                         empty.setVisibility(View.VISIBLE);
                     }
                     maybePrefetchShowEpisodes();
+                    maybePrefetchCreatorGalleryPage();
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
@@ -1890,7 +1959,7 @@ public class NativeFeedBrowserActivity extends Activity {
             TabLayout.Tab target = creatorTabs.getTabAt(tab);
             if (target == null) continue;
             BunkrGalleryAdapter galleryAdapter = creatorTabAdapters[tab];
-            int count = galleryAdapter == null ? 0 : galleryAdapter.getItemCount();
+            int count = galleryAdapter == null ? 0 : galleryAdapter.size();
             target.setText(count > 0 ? labels[tab] + "  " + count : labels[tab]);
         }
     }
@@ -2167,6 +2236,9 @@ public class NativeFeedBrowserActivity extends Activity {
                         ? BunkrGalleryActivity.FILTER_PICTURES
                         : BunkrGalleryActivity.FILTER_VIDEOS
         );
+        // Exclusions are presentation-only; never remove media from the persisted session.
+        intent.putStringArrayListExtra(BunkrGalleryActivity.EXTRA_OMITTED_BLACK_IMAGES,
+                new ArrayList<>(omittedBlackImages));
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_URL, item.url);
         intent.putExtra(BunkrGalleryActivity.EXTRA_INITIAL_POSITION, position);
         GalleryMediaTransition.start(this, intent, transitionAnchor, item);
@@ -2208,7 +2280,8 @@ public class NativeFeedBrowserActivity extends Activity {
                         if (android.os.Build.VERSION.SDK_INT < 33)
                             ZeroChillToast.makeText(this, "Link copied", ZeroChillToast.LENGTH_SHORT).show();
                     },
-                    () -> GalleryMediaDownloader.download(this, io, item, "", "", null)
+                    () -> GalleryMediaDownloader.download(this, io, item, "", "", null),
+                    () -> MediaCollectionPicker.show(this, item, creatorGalleryCacheKey, this::refreshMediaFavorites)
                 }, () -> galleryContextMenu = null);
     }
 
@@ -3293,7 +3366,7 @@ public class NativeFeedBrowserActivity extends Activity {
         if (isEromeAlbum()) return bunkrAlbumItems.size();
         if (showDetailsMode) return showEpisodes.size();
         return isBunkr()
-                ? (bunkrGalleryAdapter == null ? 0 : bunkrGalleryAdapter.getItemCount())
+                ? (bunkrGalleryAdapter == null ? 0 : bunkrGalleryAdapter.size())
                 : (adapter == null ? 0 : adapter.getItemCount());
     }
 
@@ -3503,6 +3576,9 @@ public class NativeFeedBrowserActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        galleryThumbnailUi.removeCallbacks(flushImageOmissions);
+        pendingImageOmissions.clear();
+        if (galleryThumbnailPipeline != null) galleryThumbnailPipeline.close();
         if (creatorGalleryReveal != null) creatorGalleryReveal.cancelAndShow();
         setGalleryPreviewsActive(false);
         generation++;
@@ -3517,6 +3593,8 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private void setGalleryPreviewsActive(boolean active) {
+        galleryPreviewsResumed = active;
+        if (galleryThumbnailPipeline != null) galleryThumbnailPipeline.setPaused(!active);
         if (bunkrGalleryAdapter != null) bunkrGalleryAdapter.setPreviewsActive(active);
         if (albumGridAdapter != null) albumGridAdapter.setPreviewsActive(active);
         for (BunkrGalleryAdapter gallery : creatorTabAdapters) {

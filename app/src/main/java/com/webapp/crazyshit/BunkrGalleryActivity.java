@@ -55,6 +55,8 @@ public final class BunkrGalleryActivity extends Activity {
     public static final String EXTRA_CREATOR_QUERY = "bunkr_gallery_creator_query";
     public static final String EXTRA_FAPELLO_PROFILE_URL = "bunkr_gallery_fapello_profile_url";
     public static final String EXTRA_MEDIA_FILTER = "bunkr_gallery_media_filter";
+    static final String EXTRA_OMITTED_BLACK_IMAGES = "gallery_omitted_black_images";
+    private final java.util.Set<String> omittedBlackImages = new java.util.HashSet<>();
     static final String EXTRA_NOTIFICATION_GALLERY_FALLBACK = "notification_gallery_fallback";
     public static final String EXTRA_INITIAL_URL = "bunkr_gallery_initial_url";
     public static final String EXTRA_INITIAL_POSITION = "bunkr_gallery_initial_position";
@@ -168,6 +170,8 @@ public final class BunkrGalleryActivity extends Activity {
         creatorSessionKey = CreatorGallerySpec.sessionKey(creatorQuery, fapelloProfileUrl,
                 favoriteKey.isEmpty() ? creatorQuery : favoriteKey,
                 creatorSeedNames, creatorSeedUrls, creatorAliases);
+        ArrayList<String> omitted = getIntent().getStringArrayListExtra(EXTRA_OMITTED_BLACK_IMAGES);
+        if (omitted != null) omittedBlackImages.addAll(omitted);
         mediaFilter = value(getIntent().getStringExtra(EXTRA_MEDIA_FILTER));
         if (!FILTER_PICTURES.equals(mediaFilter) && !FILTER_VIDEOS.equals(mediaFilter)) {
             mediaFilter = FILTER_ALL;
@@ -307,6 +311,13 @@ public final class BunkrGalleryActivity extends Activity {
         viewerChrome = new OnlyFapViewerChrome(this, new OnlyFapViewerChrome.Actions() {
             @Override public void close() { finishViewer(); }
             @Override public void favorite() { toggleCurrentFavorite(); }
+            @Override public void collections() {
+                NativeContentItem current = adapter.itemAt(pager.getCurrentItem());
+                BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(sessionId);
+                MediaCollectionPicker.show(BunkrGalleryActivity.this, current,
+                        snapshot == null ? value(creatorQuery) : snapshot.creatorQuery,
+                        BunkrGalleryActivity.this::refreshCurrentFavorite);
+            }
             @Override public void playback() { toggleCurrentPlayback(); }
             @Override public void fullscreen() { toggleVideoFullscreen(); }
             @Override public void more(View anchor) { showMenu(anchor); }
@@ -869,6 +880,7 @@ public final class BunkrGalleryActivity extends Activity {
                 runOnUiThread(() -> {
                     if (!canApplyMediaResult(requestGeneration)) return;
                     resolvingMedia.remove(item.url);
+                    GalleryDiagnostics.resolveFailure(item, prefetch);
                     adapter.setLoading(position, false);
                     if (pager.getCurrentItem() == position)
                         adapter.setFailed(position, true);
@@ -1524,6 +1536,9 @@ public final class BunkrGalleryActivity extends Activity {
         ZeroChillMenu menu = new ZeroChillMenu(this, anchor);
         menu.setOnDismissListener(() -> { if (viewerChrome != null) viewerChrome.setMenuOpen(false); });
         if (savedFavoriteImage(current)) {
+            menu.getMenu().add("Save to collections").setOnMenuItemClickListener(item -> {
+                MediaCollectionPicker.show(this, current, value(creatorQuery), this::refreshCurrentFavorite); return true;
+            });
             menu.getMenu().add("Share item").setOnMenuItemClickListener(item -> { shareCurrent(); return true; });
             menu.getMenu().add("Open gallery").setEnabled(savedCreatorGallery() != null)
                     .setOnMenuItemClickListener(item -> { openSavedCreatorGallery(); return true; });
@@ -1536,6 +1551,11 @@ public final class BunkrGalleryActivity extends Activity {
             menu.showAbove();
             return;
         }
+        menu.getMenu().add("Save to collections").setEnabled(current != null).setOnMenuItemClickListener(item -> {
+            BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(sessionId);
+            MediaCollectionPicker.show(this, current, snapshot == null ? value(creatorQuery) : snapshot.creatorQuery,
+                    this::refreshCurrentFavorite); return true;
+        });
         menu.getMenu().add("Share item").setEnabled(current != null).setOnMenuItemClickListener(item -> { shareCurrent(); return true; });
         if (current != null && current.isVideo()) {
             menu.getMenu().add(Menu.NONE, 3, 0, "Download video");
@@ -1543,23 +1563,32 @@ public final class BunkrGalleryActivity extends Activity {
                     .setOnMenuItemClickListener(item -> { setChromeVisible(false); adapter.showVideoControls(pager.getCurrentItem()); return true; });
         }
         menu.getMenu().add(Menu.NONE, 1, 1, "Open item page");
+        boolean creatorGallery = isCreatorGallery();
+        String parentDestination = PawchiveRepository.isProfile(fapelloProfileUrl) ? fapelloProfileUrl : albumUrl;
+        String galleryDestination = creatorGallery
+                ? creatorPageDestination(current, parentDestination) : parentDestination;
         menu.getMenu().add(
                 Menu.NONE,
                 2,
                 2,
-                isCreatorGallery() ? "Open creator page" : "Open album page"
-        );
+                creatorGallery ? "Open creator page" : "Open album page"
+        ).setEnabled(!galleryDestination.isEmpty());
         menu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == 3) {
                 downloadCurrentVideo();
                 return true;
             }
             if (item.getItemId() == 1) {
-                if (current != null) openPage(PawchiveRepository.pageUrl(current));
+                if (current != null) {
+                    String destination = PawchiveRepository.pageUrl(current);
+                    GalleryDiagnostics.navigation(current, false, destination);
+                    openPage(destination);
+                }
                 return true;
             }
             if (item.getItemId() == 2) {
-                openPage(PawchiveRepository.isProfile(fapelloProfileUrl) ? fapelloProfileUrl : albumUrl);
+                GalleryDiagnostics.navigation(current, creatorGallery, galleryDestination);
+                openPage(galleryDestination);
                 return true;
             }
             return false;
@@ -1635,7 +1664,12 @@ public final class BunkrGalleryActivity extends Activity {
                                 getSystemService(CLIPBOARD_SERVICE);
                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Media link", PawchiveRepository.pageUrl(item)));
                     },
-                    () -> downloadGalleryItem(position, item)
+                    () -> downloadGalleryItem(position, item),
+                    () -> {
+                        BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(sessionId);
+                        MediaCollectionPicker.show(this, item, snapshot == null ? value(creatorQuery) : snapshot.creatorQuery,
+                                this::refreshCurrentFavorite);
+                    }
                 }, () -> mediaContextMenu = null);
             });
         });
@@ -1689,6 +1723,36 @@ public final class BunkrGalleryActivity extends Activity {
         startActivity(Intent.createChooser(share, "Share"));
     }
 
+    /** Mixed creator galleries use a search URL as their parent, not the selected creator's page. */
+    static String creatorPageDestination(NativeContentItem item, String parentDestination) {
+        if (item == null) return "";
+        String profile = item.uploader.trim();
+        // OnlyHaven's repository stores the verified creator page in uploader, not the
+        // gallery's search URL. Never substitute another provider when that page is missing.
+        if (OnlyHavenRepository.isOnlyHavenUrl(profile) || OnlyHavenRepository.isOnlyHavenUrl(item.url)) {
+            if (OnlyHavenRepository.isOnlyHavenUrl(profile) && isWebPage(profile)
+                    && !profile.equals(item.url) && !profile.equals(item.imageUrl)
+                    && !OnlyHavenRepository.isDirectImageUrl(profile)) return profile;
+            return "";
+        }
+        if (FapelloRepository.isFapelloUrl(item.url) && FapelloRepository.isModelUrl(profile)
+                && isWebPage(profile)) return profile;
+        if (PawchiveRepository.isDirectMedia(item.url) && PawchiveRepository.isProfile(profile)
+                && isWebPage(profile)) return profile;
+        if (WikiFeetRepository.isXItem(item) && WikiFeetRepository.isXProfileUrl(profile)
+                && isWebPage(profile)) return profile;
+        // Keep existing album/search navigation for sources without a known item-level profile.
+        return parentDestination == null ? "" : parentDestination.trim();
+    }
+
+    private static boolean isWebPage(String url) {
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            return uri.getHost() != null && ("https".equalsIgnoreCase(uri.getScheme())
+                    || "http".equalsIgnoreCase(uri.getScheme()));
+        } catch (IllegalArgumentException ignored) { return false; }
+    }
+
     private void openPage(String url) {
         if (url == null || url.isEmpty()) return;
         Intent intent = new Intent(this, WebFallbackActivity.class);
@@ -1705,6 +1769,7 @@ public final class BunkrGalleryActivity extends Activity {
         if (items == null) return filtered;
         for (NativeContentItem item : items) {
             if (item == null || WikiFeetRepository.isRetiredItem(item)) continue;
+            if (item.isImage() && omittedBlackImages.contains(item.url)) continue;
             if (isCreatorGallery() && PawchiveRepository.isProfile(fapelloProfileUrl)
                     && PawchiveRepository.isNativeVideo(item)) continue;
             if (FILTER_PICTURES.equals(mediaFilter) && !item.isImage()) continue;

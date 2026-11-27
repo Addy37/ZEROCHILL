@@ -2435,7 +2435,7 @@ final class OnlyFapHubView extends FrameLayout {
                             ))
                             .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                             .dontAnimate()
-                            .transition(ThumbnailFades.avatar())
+                            .transition(SharedArtworkReveal.artwork("onlyfap-avatar", creator.url, true))
                             .placeholder(new ColorDrawable(
                                     ZeroChillUi.color(getContext(), R.color.zc_surface_pressed)))
                             .error(R.drawable.ic_more_account);
@@ -2790,7 +2790,7 @@ final class OnlyFapHubView extends FrameLayout {
                         .centerCrop()
                         .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                         .dontAnimate()
-                        .transition(ThumbnailFades.thumbnail())
+                        .transition(SharedArtworkReveal.artwork("onlyfap-shelf", creator.url, false))
                         .placeholder(new ColorDrawable(
                                 ZeroChillUi.color(
                                         image.getContext(),
