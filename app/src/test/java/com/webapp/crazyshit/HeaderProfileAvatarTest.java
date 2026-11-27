@@ -156,53 +156,34 @@ public class HeaderProfileAvatarTest {
         view.close();
     }
 
-    @Test public void shittokSelectorStaysNearCenterWhenSigningOutAndRestoresOnSignIn() {
+    @Test public void retiredSelectorStaysHiddenAndFiveFeedStripSurvivesAccountChanges() {
         NativeMainActivity main = Robolectric.buildActivity(NativeMainActivity.class).get();
         AccountProfileCache.record(main, state("a", ""));
-        ContentPreference.set(main, ContentPreference.ALL);
         LinearLayout bar = ReflectionHelpers.callInstanceMethod(main, "buildTopBar");
         View selector = bar.findViewWithTag("shittok_source_control");
-        HeaderProfileAvatar view = ReflectionHelpers.getField(main, "headerProfileAvatar");
+        HeaderProfileAvatar avatar = ReflectionHelpers.getField(main, "headerProfileAvatar");
+        ShitTokCategoryStrip strip = new ShitTokCategoryStrip(main);
         main.setShitTokSourceSelectorVisible(true);
-        view.resume();
-        assertEquals(View.VISIBLE, selector.getVisibility());
-        assertEquals(View.VISIBLE, view.getVisibility());
-
-        for (int width : new int[]{320, 360, 412}) {
-            layoutHeader(bar, width);
-            int signedInLeft = selector.getLeft();
-            int signedInRight = selector.getRight();
-            if (width == 412) {
-                int inset = Math.abs((signedInLeft + signedInRight) / 2 - bar.getWidth() / 2);
-                assertTrue(inset <= BrowseUi.dp(main, 5));
-            }
-            user = "";
-            view.refresh();
-            layoutHeader(bar, width);
-            assertEquals(View.INVISIBLE, view.getVisibility());
-            if (width == 412) {
-                assertEquals(signedInLeft, selector.getLeft());
-                assertEquals(signedInRight, selector.getRight());
-                assertEquals(BrowseUi.dp(main, 44), view.getWidth());
-            } else {
-                assertTrue(selector.getLeft() > signedInLeft);
-                int inset = Math.abs((selector.getLeft() + selector.getRight()) / 2 - bar.getWidth() / 2);
-                assertTrue(inset <= BrowseUi.dp(main, 6));
-            }
-
-            user = "a";
-            view.refresh();
-            layoutHeader(bar, width);
-            assertEquals(View.VISIBLE, view.getVisibility());
-            assertEquals(signedInLeft, selector.getLeft());
-        }
-
-        user = "";
-        view.refresh();
-        main.setShitTokSourceSelectorVisible(false);
+        avatar.resume();
         assertEquals(View.GONE, selector.getVisibility());
-        assertEquals(View.GONE, view.getVisibility());
-        view.close();
+        assertEquals(View.VISIBLE, avatar.getVisibility());
+        for (int width : new int[]{320, 360, 412}) {
+            user = "";
+            avatar.refresh();
+            layoutHeader(bar, width);
+            assertEquals(View.GONE, selector.getVisibility());
+            assertEquals(View.GONE, avatar.getVisibility());
+            user = "a";
+            avatar.refresh();
+            layoutHeader(bar, width);
+            assertEquals(View.VISIBLE, avatar.getVisibility());
+            assertEquals(View.GONE, selector.getVisibility());
+            for (ShitTokCategoryStrip.Tab tab : ShitTokCategoryStrip.Tab.values())
+                assertNotNull(strip.findViewWithTag("shittok_category_" + tab.value));
+        }
+        strip.findViewWithTag("shittok_category_cell_guys").performClick();
+        assertEquals(ShitTokCategoryStrip.Tab.GUYS, ShitTokCategoryStrip.Tab.selected(main));
+        avatar.close();
     }
 
     private static void layoutHeader(LinearLayout bar, int widthDp) {

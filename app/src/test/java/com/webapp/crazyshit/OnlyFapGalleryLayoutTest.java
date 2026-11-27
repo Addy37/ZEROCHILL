@@ -112,11 +112,11 @@ public class OnlyFapGalleryLayoutTest {
         apply.setAccessible(true);
         ColorDrawable resource = new ColorDrawable() {
             public int getIntrinsicWidth() { return 100; }
-            public int getIntrinsicHeight() { return 800; }
+            public int getIntrinsicHeight() { return 400; }
         };
         apply.invoke(adapter, holder, holder.boundItem, resource);
         layout();
-        assertEquals(holder.itemView.getWidth() * 8, holder.itemView.getHeight());
+        assertEquals(holder.itemView.getWidth() * 4, holder.itemView.getHeight());
         assertGeometry();
     }
     @Test public void actualFavoriteMoveIsRetiredOnDetachBeforeHolderReuse() {
@@ -147,7 +147,7 @@ public class OnlyFapGalleryLayoutTest {
         BunkrGalleryAdapter.Holder first = (BunkrGalleryAdapter.Holder) list.getChildViewHolder(list.getChildAt(0));
         apply.invoke(adapter, first, first.boundItem, new ColorDrawable() {
             public int getIntrinsicWidth() { return 100; }
-            public int getIntrinsicHeight() { return 800; }
+            public int getIntrinsicHeight() { return 400; }
         });
         layout();
         assertGeometry(); // No old pre-draw snapshot may translate the new layout.

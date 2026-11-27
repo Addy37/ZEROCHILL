@@ -29,12 +29,13 @@ public class ShitTokOrientationQueueTest {
             hidden.add(item("hidden", .5f).url);
             ReflectionHelpers.callInstanceMethod(feed, "appendUnique", from(java.util.List.class,
                     Arrays.asList(item("portrait", .5f), item("square", 1f),
-                            item("landscape", 1.001f), item("unknown", 0f),
+                            item("landscape", 1.001f), item("too-wide", 3f), item("unknown", 0f),
                             item("portrait", .5f), item("hidden", .5f))));
             ArrayList<NativeContentItem> queue = ReflectionHelpers.getField(feed, "items");
-            assertEquals(2, queue.size());
+            assertEquals(3, queue.size());
             assertEquals("portrait", queue.get(0).title);
             assertEquals("square", queue.get(1).title);
+            assertEquals("landscape", queue.get(2).title);
             feed.close();
         }
     }

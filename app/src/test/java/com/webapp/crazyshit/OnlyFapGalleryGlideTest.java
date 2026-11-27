@@ -117,9 +117,9 @@ public class OnlyFapGalleryGlideTest {
         assertEquals(first().itemView.getWidth() * 2, first().itemView.getHeight());
         adapter.replace(Collections.singletonList(wide), false); layout();
         assertEquals(first().itemView.getWidth(), first().itemView.getHeight());
-        complete(wide, 384, 48);
+        complete(wide, 192, 48);
         await(() -> first().image.getDrawable() != null && first().image.getDrawable().getIntrinsicWidth() > 0);
-        assertEquals(Math.round(first().itemView.getWidth() / 8f), first().itemView.getHeight());
+        assertEquals(Math.round(first().itemView.getWidth() / 4f), first().itemView.getHeight());
     }
     @Test public void canceledGlideResultCannotResizeReplacementItem() throws Exception {
         NativeContentItem old = item("old"), replacement = item("replacement");
