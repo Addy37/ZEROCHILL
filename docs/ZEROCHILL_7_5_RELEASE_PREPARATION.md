@@ -61,8 +61,12 @@ with representative existing data, replaces each with the signed APK, checks
 UID, first install, local media and settings, and exercises upgrade startup,
 What’s New acknowledgement, downloads and secondary navigation. A fresh install
 must open the cinematic wizard. The statically verified APK and SHA-256 file are uploaded to Actions before
-the emulator runs. Check the separate emulator evidence before calling the
-upgrade validated.
+the emulator runs. The signed source was `7a28dd47ac0b0342bfba989c738211007ffe5664`.
+The [signed run](https://github.com/Addy37/ZEROCHILL/actions/runs/45928943983)
+passed 144 focused release tests. The [Android 15 upgrade run](https://github.com/Addy37/ZEROCHILL/actions/runs/45931003615)
+reused that APK and passed both public baselines and fresh wizard launch.
+The APK SHA-256 is
+`a6f5d5c9188df32204b56d520901f59ff08f58b686416f16ec2de01fb7423b35`.
 
 For a 7.4 to 7.5 upgrade, the package, Keystore alias, secure-session store,
 New Zerochill routing and local data store identities are carried forward. A

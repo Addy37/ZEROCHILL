@@ -1,8 +1,9 @@
 # ZEROCHILL 7.5 release handoff
 
-**Publication status — NO-GO.** This branch is for a signed phone-test APK. The
-owner must explicitly authorize publication. Keep the PR draft until the
-current build and phone checks have been reviewed.
+**Phone testing is ready. Publication status — NO-GO.** The signed APK and
+both offline upgrade scenarios passed their gates. Keep the PR draft until
+the phone checks and full production suites have been reviewed. The owner
+must explicitly authorize publication.
 
 - Branch [release/zerochill-7.5.0-preparation](https://github.com/Addy37/ZEROCHILL/tree/release/zerochill-7.5.0-preparation)
 - Draft [PR #500](https://github.com/Addy37/ZEROCHILL/pull/500)
@@ -109,6 +110,13 @@ confirmed fullscreen defect left open at the source checkpoint.
   SELinux labels on manually pushed preferences. Logs show EACCES on those
   fixtures before the wizard appeared. The harness now assigns and verifies
   the fresh app-data label before rerunning the two scenarios with the same APK.
+- [Final Android 15 upgrade run](https://github.com/Addy37/ZEROCHILL/actions/runs/45931003615)
+  completed successfully at `1bfa643d26c7806f6ad51dfa0b8af795579be766`
+  using the same signed APK. [Upgrade evidence](https://github.com/Addy37/ZEROCHILL/actions/runs/45931003615/artifacts/15168862758)
+  includes passing 7.4.0 and 7.3.0 result files and the fresh-install wizard
+  result. Both in-place installs retained first-install time, UID, seeded
+  local media/settings and visible downloads. What’s New appeared and was
+  acknowledged in both upgrade cases.
 - Follow the [latest branch run](https://github.com/Addy37/ZEROCHILL/actions/workflows/zerochill-7-5-0-candidate.yml?query=branch%3Arelease%2Fzerochill-7.5.0-preparation).
   The signed artifact contains one APK, `SHA256SUMS.txt`,
   `BUILD_LINEAGE.txt` and `VALIDATION.json`. A later emulator-only run uses the
@@ -139,19 +147,15 @@ until publication is explicitly authorized.
 
 ## Next steps for ChatGPT
 
-1. Open PR #500 and inspect the latest **ZEROCHILL 7.5.0 Signed Release
-   Candidate** Actions run. Verify its head SHA, branch, APK identity and
-   checksum from `VALIDATION.json` before sharing the direct artifact URL.
-2. If the run fails, inspect the exact failing step. Fix legitimate code or
-   fixture failures in the existing branch and push one coherent correction.
-   The normal `pull_request` synchronize trigger runs again. Keep the package,
-   signing gate, source gate and tested assertions intact.
-3. Check the seeded emulator upgrade result separately. If it is incomplete,
-   rerun it or reproduce the specific step before claiming retained data.
-   Use the audit's phone checklist with the exact APK. Prioritize fullscreen
-   behavior, existing session and data, and live push on the production package.
-4. Before publication, complete full debug and release test suites and the
+1. Phone-test the linked APK. Start with a normal 7.4.0 upgrade and the
+   ShitTok fullscreen checklist, then verify authenticated state and real
+   push delivery. Validate landscape insets and reduced motion on physical
+   hardware. Keep the recorded APK checksum and full source SHA.
+2. If acceptance finds a problem, fix it on PR #500's branch and run the
+   targeted regressions before pushing. A code change requires a fresh
+   signed artifact. Workflow-only reruns can reuse the exact APK when the
+   verified source comparison and checksum pass.
+3. Before publication, complete full debug and release test suites and the
    remaining device checks, record results, and obtain explicit owner approval.
-   The standing publication workflow is manual. Do not merge, tag, dispatch
-   publication, change remote provider configuration or activate the updater
-   during phone acceptance.
+   The standing publication workflow is manual. Keep publication, tags,
+   provider changes and the updater gated during phone acceptance.
