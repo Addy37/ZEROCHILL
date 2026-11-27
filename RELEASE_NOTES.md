@@ -7,7 +7,8 @@ New sources. Smarter search. Your content, your way. Explore five ShitTok feeds,
 - Choose from five independent feeds: Chaos, Straight, Gay, Trans and Groups. Each remembers its own place and playback state. Feed switching prioritizes returning videos and keeps slow sources from blocking the rest of a feed.
 - Erome videos join Straight, Gay and Trans. The ShitTok source preference is independent of Erome search.
 - See the playback provider beside the creator name. Open an eligible creator gallery or Erome album by swiping or tapping its shortcut, then return to your clip and playback position.
-- Updated fullscreen fit for landscape clips, more responsive return buffering and a live ambient backdrop.
+- Horizontal clips open in a dedicated fullscreen player. Tap to show or hide the controls, double-tap either side to seek, drag the timeline, or choose a playback speed. The video stays in place while fullscreen and returns to the same spot in the feed.
+- Landscape playback keeps the soft ambient backdrop. ShitTok also prioritizes playback buffers when returning to a feed.
 
 ## Sources, Spotlight and Shows
 

@@ -25,6 +25,7 @@ candidate uses 7.5.0, code 7005081.
 | --- | --- |
 | Critical | None confirmed. |
 | High | Fixed an Android 14 application-start crash recovered from public 7.4.0 diagnostics. The stack reached `FirebaseApp.getInstance()` from push registration in `Application.onCreate`. Startup now attempts standard Firebase initialization and tolerates unavailability without failing the process. Logout cleanup also tolerates an unavailable Firebase instance. Live notification delivery remains a device check. |
+| High | Fixed ShitTok landscape fullscreen. Portrait touch handlers and pager restoration could change the current clip, and the persistent progress rule kept a separate seek row visible. The dedicated fullscreen surface has its own shared tap-to-seek handling and one overlay for every control. It retains the selected player lease and suppresses feed paging and auto-advance until exit. |
 | High | Fixed the oldest-first limit on DM threads. A thread over 500 messages omitted newly received messages after reloading. The same bounded query now selects the latest 500, with a stable tie-breaker, and displays them in chronological order. The existing visibility RPC and cleanup cutoff still apply. Messages outside the recent window remain on the server. |
 | High | Unconfirmed historical Samsung OOM and vivo/Android layout crash. The reports lack a heap or reproducible app frame. Bounded ShitTok player leases, gallery worker queues and activity teardown are in source. Physical low-memory, rotation and long-session checks remain necessary. |
 | Medium | Fixed the previous-version What's New copy and the launch marker dropped during one-time XMegaDrive access repair. Ordinary upgrades still skip the wizard. A normal launcher handoff after repair now remains eligible for the popup. |
@@ -103,7 +104,10 @@ change or remote provider update is part of this branch.
    membership. Restore a 7.4 backup on a disposable install if available.
 4. Switch all five ShitTok feeds, then return to each. Confirm position,
    timestamp, pause/mute, buffering and ownership after Library, gallery,
-   rotation, fullscreen, gesture back and background transitions.
+   rotation, fullscreen, gesture back and background transitions. In fullscreen,
+   tap once to toggle the complete overlay, double-tap both sides to seek, drag
+   to a new timestamp, try the speed menu, and confirm that vertical and horizontal
+   drags stay on the clip. Exit with both Back controls and try a rapid re-entry.
 5. Search across Spotlight providers, switch Erome filters during a load, scroll
    Erome/Bunkr pagination, open a Pawchive/creator gallery, and drag the Favorite
    Creators alphabet. Check slow/offline behavior and that stale search results

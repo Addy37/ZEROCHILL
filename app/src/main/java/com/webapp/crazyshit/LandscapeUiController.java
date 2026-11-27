@@ -93,7 +93,7 @@ final class LandscapeUiController {
 
         boolean landscape = isLandscape(activity);
         int selected = state.bottomNavigation.getSelectedItemId();
-        boolean chaosFullscreen = landscape && selected == NAV_CHAOS;
+        boolean chaosFullscreen = activity.ownsChaosLandscapePlayer();
 
         ensureRail(activity, state);
         adaptTopBar(activity, state, landscape, chaosFullscreen, selected);
@@ -524,8 +524,7 @@ final class LandscapeUiController {
             }
 
             boolean landscape = isLandscape(activity);
-            boolean chaosFullscreen = landscape && state.bottomNavigation != null &&
-                    state.bottomNavigation.getSelectedItemId() == NAV_CHAOS;
+            boolean chaosFullscreen = activity.ownsChaosLandscapePlayer();
             top = resolveShellTopInset(
                     landscape,
                     top,

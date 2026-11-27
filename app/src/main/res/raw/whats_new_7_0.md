@@ -1,6 +1,7 @@
 # ZEROCHILL 7.5: The Experience Update
 
 - ShitTok has five independent feeds: Chaos, Straight, Gay, Trans and Groups. Pick up where you left off when you switch back.
+- Watch horizontal ShitTok clips in their own fullscreen player. Tap to hide controls or double-tap to skip 10 seconds.
 - Swipe into an Erome album or a creator gallery from eligible ShitTok clips, then return to your place in the feed.
 - Explore Pawchive photos and GIFs in OnlyFap, alongside matching Bunkr media where available.
 - Find Erome albums in Spotlight and choose the Erome preference you want to browse.

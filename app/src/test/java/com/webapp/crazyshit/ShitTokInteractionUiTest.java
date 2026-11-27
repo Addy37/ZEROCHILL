@@ -248,16 +248,199 @@ public class ShitTokInteractionUiTest {
             assertNull(ReflectionHelpers.getField(f.selected, "scrubPreview"));
         }
     }
-    @Test public void longLandscapeProgressSurvivesHiddenControlsWithoutOtherChrome() {
-        org.robolectric.RuntimeEnvironment.setQualifiers("w740dp-h360dp-land");
+    @Test public void fullscreenSurfaceTogglesAllChromeWithoutPausing() {
         try (ShitTokAudioOwnershipTest.Fixture f = fixture()) {
-            ReflectionHelpers.callInstanceMethod(f.selected, "syncOrientationChrome");
-            ReflectionHelpers.callInstanceMethod(f.selected, "hideControlsNow"); idle(400);
-            assertFalse(ReflectionHelpers.getField(f.selected, "controlsVisible"));
-            assertEquals(View.VISIBLE, root(f.selected).findViewWithTag("shittok_progress_row").getVisibility());
-            assertEquals(View.INVISIBLE, root(f.selected).findViewWithTag("shittok_landscape_header").getVisibility());
-            assertEquals(View.INVISIBLE, root(f.selected).findViewWithTag("shittok_elapsed").getVisibility());
+            enterLandscape(f, true);
+            View overlay = root(f.selected).findViewWithTag("shittok_fullscreen_controls");
+            View progress = root(f.selected).findViewWithTag("shittok_progress_row");
+            View surface = root(f.selected).findViewWithTag("shittok_fullscreen_surface");
+            assertSame(overlay, progress.getParent());
+            assertEquals(View.VISIBLE, overlay.getVisibility());
+
+            fullscreenTap(surface, .25f);
+            idle(350);
+            assertEquals(View.INVISIBLE, overlay.getVisibility());
+            assertTrue(f.selectedPlayer.readyToPlay);
+            assertEquals(0, f.selectedPlayer.pauses);
+
+            fullscreenTap(surface, .25f);
+            idle(350);
+            assertEquals(View.VISIBLE, overlay.getVisibility());
+            View playPause = root(f.selected).findViewWithTag("shittok_fullscreen_play_pause");
+            assertEquals("Pause video", playPause.getContentDescription());
+            assertTrue(playPause.performClick());
+            assertFalse(f.selectedPlayer.readyToPlay);
+            assertEquals("Play video", playPause.getContentDescription());
+            idle(3_500);
+            assertEquals(View.VISIBLE, overlay.getVisibility());
+            assertTrue(playPause.performClick());
+            assertTrue(f.selectedPlayer.readyToPlay);
+            idle(3_500);
+            assertEquals(View.INVISIBLE, overlay.getVisibility());
         }
+    }
+
+    @Test public void fullscreenDoubleTapsAccumulateAndSwipesCannotLeaveTheVideo() {
+        try (ShitTokAudioOwnershipTest.Fixture f = fixture()) {
+            enterLandscape(f, true);
+            f.selectedPlayer.reflectSeeks = true;
+            View surface = root(f.selected).findViewWithTag("shittok_fullscreen_surface");
+            ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            assertFalse(pager.isUserInputEnabled());
+            int sources = f.selectedPlayer.sources;
+            fullscreenTap(surface, .75f);
+            idle(50);
+            fullscreenTap(surface, .75f);
+            assertEquals(22_000L, f.selectedPlayer.seekPosition);
+            idle(50);
+            fullscreenTap(surface, .75f);
+            assertEquals(32_000L, f.selectedPlayer.seekPosition);
+            idle(700);
+            fullscreenTap(surface, .25f);
+            idle(50);
+            fullscreenTap(surface, .25f);
+            assertEquals(22_000L, f.selectedPlayer.seekPosition);
+            assertEquals(0, writes);
+
+            View fullscreenControls = root(f.selected).findViewWithTag("shittok_fullscreen_controls");
+            assertEquals(View.VISIBLE, fullscreenControls.getVisibility());
+            fullscreenDrag(surface, 0, -200);
+            fullscreenDrag(surface, -240, 0);
+            ReflectionHelpers.callInstanceMethod(f.feed, "requestAutoAdvance", from(int.class, 0));
+            idle(100);
+            assertEquals(0, pager.getCurrentItem());
+            assertFalse(pager.isUserInputEnabled());
+            assertNull(shadowOf(f.host.get()).getNextStartedActivity());
+            assertEquals(sources, f.selectedPlayer.sources);
+        }
+    }
+
+    @Test public void fullscreenScrubUsesSelectedPlayerAndRestoresPortraitState() {
+        try (ShitTokAudioOwnershipTest.Fixture f = fixture()) {
+            f.selectedPlayer.reflectSeeks = true;
+            f.selectedPlayer.speed = f.selectedPlayer.speed.withSpeed(1.25f);
+            ReflectionHelpers.setField(f.selected, "horizontalVideo", true);
+            assertTrue(root(f.selected).findViewWithTag("shittok_fullscreen").performClick());
+            assertFalse(((ViewPager2) ReflectionHelpers.getField(f.feed, "pager")).isUserInputEnabled());
+            enterLandscape(f, true);
+            View overlay = root(f.selected).findViewWithTag("shittok_fullscreen_controls");
+            SeekBar bar = ReflectionHelpers.getField(f.selected, "seekBar");
+            TextView elapsed = root(f.selected).findViewWithTag("shittok_elapsed");
+            TextView duration = root(f.selected).findViewWithTag("shittok_duration");
+            assertEquals(200, bar.getProgress());
+            assertEquals("0:12", elapsed.getText());
+            assertEquals("1:00", duration.getText());
+            SeekBar.OnSeekBarChangeListener seek = ReflectionHelpers.getField(bar, "mOnSeekBarChangeListener");
+            int pauses = f.selectedPlayer.pauses;
+            seek.onStartTrackingTouch(bar);
+            bar.setProgress(600);
+            seek.onProgressChanged(bar, 600, true);
+            ReflectionHelpers.callInstanceMethod(f.selected, "updateProgress");
+            assertEquals(600, bar.getProgress());
+            assertEquals("0:36", elapsed.getText());
+            assertEquals(pauses, f.selectedPlayer.pauses);
+            idle(3_500);
+            assertEquals(View.VISIBLE, overlay.getVisibility());
+            seek.onStopTrackingTouch(bar);
+            assertEquals(36_000L, f.selectedPlayer.seekPosition);
+            assertEquals("0:36", elapsed.getText());
+
+            f.selectedPlayer.seekAvailable = false;
+            ReflectionHelpers.callInstanceMethod(f.selected, "updateProgress");
+            assertFalse(bar.isEnabled());
+            f.selectedPlayer.durationMs = androidx.media3.common.C.TIME_UNSET;
+            ReflectionHelpers.callInstanceMethod(f.selected, "updateProgress");
+            assertEquals("–:––", duration.getText());
+            f.selectedPlayer.durationMs = 60_000L;
+
+            assertTrue(f.feed.exitSensorFullscreenForBack());
+            org.robolectric.RuntimeEnvironment.setQualifiers("w400dp-h800dp-port-xhdpi");
+            f.feed.onConfigurationChanged();
+            assertTrue(((ViewPager2) ReflectionHelpers.getField(f.feed, "pager")).isUserInputEnabled());
+            assertSame(root(f.selected), ((View) ReflectionHelpers.getField(f.selected, "progressRow")).getParent());
+            assertEquals(View.GONE, overlay.getVisibility());
+            assertSame(f.selectedPlayer.player, ReflectionHelpers.getField(f.selected, "player"));
+            assertEquals(36_000L, f.selectedPlayer.positionMs);
+            assertEquals(1.25f, f.selectedPlayer.speed.speed, 0f);
+            assertTrue(f.selectedPlayer.readyToPlay);
+            assertEquals(pauses, f.selectedPlayer.pauses);
+            View portraitSurface = ReflectionHelpers.getField(f.selected, "playerView");
+            assertTrue(portraitSurface.performClick());
+            assertFalse(f.selectedPlayer.readyToPlay);
+        }
+    }
+
+    @Test public void fullscreenSpeedMenuKeepsControlsAndUsesTheSamePlayer() {
+        try (ShitTokAudioOwnershipTest.Fixture f = fixture()) {
+            enterLandscape(f, true);
+            View overlay = root(f.selected).findViewWithTag("shittok_fullscreen_controls");
+            TextView speed = root(f.selected).findViewWithTag("shittok_fullscreen_speed");
+            assertTrue(speed.performClick());
+            idle(3_500);
+            assertEquals(View.VISIBLE, overlay.getVisibility());
+            android.app.AlertDialog dialog = ReflectionHelpers.getField(f.feed, "actionDialog");
+            assertTrue(dialog.isShowing());
+            android.widget.ListView choices = dialog.getListView();
+            assertTrue(choices.performItemClick(choices.getAdapter().getView(4, null, choices), 4,
+                    choices.getAdapter().getItemId(4)));
+            assertEquals(1.5f, f.selectedPlayer.speed.speed, 0f);
+            assertEquals("1.5×", speed.getText());
+            assertTrue(f.selectedPlayer.readyToPlay);
+            idle(3_500);
+            assertEquals(View.INVISIBLE, overlay.getVisibility());
+        }
+    }
+
+    @Test public void backBeforeRotationDoesNotReopenFullscreen() {
+        try (ShitTokAudioOwnershipTest.Fixture f = fixture()) {
+            ReflectionHelpers.setField(f.selected, "horizontalVideo", true);
+            View enter = root(f.selected).findViewWithTag("shittok_fullscreen");
+            assertTrue(enter.performClick());
+            assertTrue(f.feed.exitSensorFullscreenForBack());
+            org.robolectric.RuntimeEnvironment.setQualifiers("w740dp-h360dp-land-xhdpi");
+            f.feed.onConfigurationChanged();
+            assertFalse(f.feed.fullscreenInputLocked());
+            ViewPager2 pager = ReflectionHelpers.getField(f.feed, "pager");
+            assertTrue(pager.isUserInputEnabled());
+            assertEquals(View.GONE, root(f.selected).findViewWithTag("shittok_fullscreen_controls").getVisibility());
+            assertSame(f.selectedPlayer.player, ReflectionHelpers.getField(f.selected, "player"));
+        }
+    }
+
+    private static void enterLandscape(ShitTokAudioOwnershipTest.Fixture fixture, boolean reducedMotion) {
+        fixture.host.get().getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                .edit().putBoolean("immersive_motion_enabled", !reducedMotion).commit();
+        fixture.selectedPlayer.seekAvailable = true;
+        org.robolectric.RuntimeEnvironment.setQualifiers("w740dp-h360dp-land-xhdpi");
+        fixture.feed.onConfigurationChanged();
+        idle(100); // Apply the window's configuration before sending input to its resized surface.
+        ReflectionHelpers.callInstanceMethod(fixture.selected, "syncOrientationChrome");
+        View surface = root(fixture.selected).findViewWithTag("shittok_fullscreen_surface");
+        assertTrue("Fullscreen touch surface must be laid out", surface.getWidth() > 0);
+        assertTrue("Fixture must hold the selected player", ReflectionHelpers.callInstanceMethod(
+                fixture.selected, "ownsPlayback"));
+    }
+
+    private static void fullscreenTap(View surface, float fraction) {
+        fullscreenDrag(surface, 0, 0, fraction);
+    }
+
+    private static void fullscreenDrag(View surface, float dx, float dy) {
+        fullscreenDrag(surface, dx, dy, .75f);
+    }
+
+    private static void fullscreenDrag(View surface, float dx, float dy, float fraction) {
+        long down = android.os.SystemClock.uptimeMillis();
+        float x = surface.getWidth() * fraction, y = surface.getHeight() / 2f;
+        sendFullscreenTouch(surface, down, down, MotionEvent.ACTION_DOWN, x, y);
+        if (dx != 0 || dy != 0) sendFullscreenTouch(surface, down, down + 15, MotionEvent.ACTION_MOVE, x + dx, y + dy);
+        sendFullscreenTouch(surface, down, down + 25, MotionEvent.ACTION_UP, x + dx, y + dy);
+    }
+
+    private static void sendFullscreenTouch(View surface, long down, long time, int action, float x, float y) {
+        MotionEvent event = MotionEvent.obtain(down, time, action, x, y, 0);
+        surface.dispatchTouchEvent(event);
+        event.recycle();
     }
 
     @Test public void scrubCardClampsBothEdgesAndKeepsItsSizeAcrossCacheMisses() {

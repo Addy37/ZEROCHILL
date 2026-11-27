@@ -45,6 +45,11 @@ public class ShitTokFullscreenAccentTest {
             AppearanceTheme.setAccent(activity, AppearanceTheme.Accent.PURPLE);
             ReflectionHelpers.callInstanceMethod(holder, "refreshVisualTheme");
             assertAccent(fullscreen, AppearanceTheme.Accent.PURPLE.color);
+            android.widget.SeekBar seek = ReflectionHelpers.getField(holder, "seekBar");
+            assertEquals(AppearanceTheme.Accent.PURPLE.color,
+                    seek.getProgressTintList().getDefaultColor());
+            assertEquals(AppearanceTheme.Accent.PURPLE.color,
+                    seek.getThumbTintList().getDefaultColor());
         } finally {
             feed.close();
             AppearanceTheme.setAccent(activity, AppearanceTheme.Accent.CYAN);
