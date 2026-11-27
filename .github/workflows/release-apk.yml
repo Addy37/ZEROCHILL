@@ -1,9 +1,6 @@
 name: Publish ZeroChill Signed APK Release
 
 on:
-  push:
-    branches: [main]
-    paths: [.github/workflows/release-apk.yml]
   workflow_dispatch:
     inputs:
       version:
@@ -15,11 +12,8 @@ permissions:
 
 jobs:
   release:
-    # Explicitly owner-authorized one-shot 7.5.0 publication; all other releases remain manual.
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'workflow_dispatch' ||
-       (github.event_name == 'push' && github.event.head_commit.message == 'Retry ZEROCHILL 7.5.0 publication (7005085)'))
+    # All future releases require an explicit manual action on main.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       ZEROCHILL_V7_TRAFFIC: 'true'
@@ -125,7 +119,7 @@ jobs:
           PY
 
       - name: Build signed release APK
-        run: gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease
+        run: gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 :app:testReleaseUnitTest :app:assembleRelease
 
       - name: Prepare and verify release files
         run: |
