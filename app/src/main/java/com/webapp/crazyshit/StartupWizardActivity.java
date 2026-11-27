@@ -293,8 +293,8 @@ public final class StartupWizardActivity extends Activity {
         column.setGravity(Gravity.CENTER);
         column.setPadding(dp(24), dp(20), dp(24), dp(20));
 
-        FrameLayout mascot = mascot(dp(176));
-        LinearLayout.LayoutParams mascotParams = new LinearLayout.LayoutParams(dp(176), dp(176));
+        View mascot = new WizardMascotArt.Welcome(this, previewAccentColor);
+        LinearLayout.LayoutParams mascotParams = new LinearLayout.LayoutParams(dp(192), dp(192));
         mascotParams.bottomMargin = dp(14);
         column.addView(mascot, mascotParams);
 

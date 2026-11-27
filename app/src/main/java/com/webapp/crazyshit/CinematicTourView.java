@@ -177,7 +177,7 @@ final class CinematicTourView extends LinearLayout {
     private final class Phone extends View {
         final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         final RectF r = new RectF();
-        final Path path = new Path();
+        final WizardMascotArt mascot = new WizardMascotArt(getContext(), accent);
         final int[] artworkColors = {0xff344c61,0xff574763,0xff26545a,0xff414d70};
         final String[] tabs = {"Chaos","Straight","Gay","Trans","Groups"};
         final String[] letters = {"A","F","M","S","Z"};
@@ -235,8 +235,8 @@ final class CinematicTourView extends LinearLayout {
         void feed(Canvas c,float t) {
             c.save(); c.clipRect(44,42,176,287);
             float shift=Math.max(0,(t-.22f)/.78f)*245;
-            art(c,44,42-shift,176,287-shift,0);
-            art(c,44,287-shift,176,532-shift,1);
+            art(c,44,42-shift,176,287-shift,WizardMascotArt.SWIPE);
+            art(c,44,287-shift,176,532-shift,WizardMascotArt.SKATE);
             c.restore();
             box(c,44,23,176,42,4,0xff10151c);
             for(int i=0;i<5;i++) label(c,tabs[i],57+i*26,34,5.8f,i==(t<.45f?0:1)?accent:Color.WHITE);
@@ -249,17 +249,19 @@ final class CinematicTourView extends LinearLayout {
             label(c,"Spotlight",110,39,13,Color.WHITE);
             box(c,49,48,171,70,8,accent);
             box(c,50,49,170,69,7,0xff202632);
-            String query="Featured videos"; int n=Math.min(query.length(),(int)(t*28));
+            String query="Mascot moments"; int n=Math.min(query.length(),(int)(t*28));
             label(c,query.substring(0,n),110,62,8,Color.WHITE);
             for(int i=0;i<5;i++) {
                 float v=Math.max(0,Math.min(1,(t-.18f-i*.105f)*6));
                 if(v<=0)continue;
                 float y=79+i*40+(1-v)*10;
-                art(c,50,y,99,y+32,i);
+                art(c,50,y,99,y+32,(i==0?WizardMascotArt.SEARCH:i+1)%6);
                 box(c,105,y+4,166,y+8,2,0xffdae2eb);
                 box(c,105,y+15,140,y+19,2,accent);
                 box(c,105,y+25,155,y+28,1,0xff53616d);
             }
+            // A larger detective rises into view while the results arrive.
+            mascot.draw(c,93,185-t*8,79,WizardMascotArt.SEARCH,t);
         }
         void gallery(Canvas c,float t) {
             label(c,"OnlyFap · Gallery",110,40,11,Color.WHITE);
@@ -267,9 +269,9 @@ final class CinematicTourView extends LinearLayout {
             for(int i=0;i<8;i++) {
                 float x=lerp(50+(i%2)*60,50+(i%3)*41,f);
                 float y=lerp(55+(i/2)*55,55+(i/3)*72,f);
-                art(c,x,y,x+lerp(56,37,f),y+lerp(49,66,f),i);
+                art(c,x,y,x+lerp(56,37,f),y+lerp(49,66,f),(i+2)%6);
             }
-            if(t<.85f){circle(c,81-18*f,141,7,accent);circle(c,139+18*f,141,7,accent);}
+            mascot.draw(c,76,119+f*8,73,WizardMascotArt.GALLERY,t);
         }
         void library(Canvas c,float t) {
             label(c,"Your Library",110,40,12,Color.WHITE);
@@ -279,9 +281,10 @@ final class CinematicTourView extends LinearLayout {
                 float spread=1-t;
                 box(c,x+7+spread*8,y-6-spread*10,x+50+spread*8,y+48,6,0xff49606e);
                 box(c,x-5-spread*5,y-2,x+39,y+54,6,0xff36485a);
-                art(c,x,y,x+46,y+56,i);
+                art(c,x,y,x+46,y+56,(i+3)%6);
                 label(c,collections[i],x+23,y+69,8,Color.WHITE);
             }
+            mascot.draw(c,78,132-t*5,76,WizardMascotArt.STACK,t);
         }
         void creators(Canvas c,float t) {
             label(c,"Favorite creators",110,40,10.5f,Color.WHITE);
@@ -293,8 +296,7 @@ final class CinematicTourView extends LinearLayout {
             for(int i=0;i<12;i++) {
                 float x=62+i%3*38,y=81+i/3*64-offset;
                 circle(c,x,y,14,artworkColors[(i+index)%4]);
-                circle(c,x,y-4,5,0xff8293a4);
-                box(c,x-9,y+4,x+9,y+11,5,0xff8293a4);
+                mascot.draw(c,x-15,y-15,30,(i+index)%6,t);
                 box(c,x-10,y+20,x+10,y+23,2,0xff788794);
             }
             c.restore();
@@ -304,16 +306,18 @@ final class CinematicTourView extends LinearLayout {
                 label(c,letters[i],170,y,8,i==index?Color.BLACK:0xffa8b1bf);
             }
             float y=55+index*46;
+            mascot.draw(c,85,Math.max(45,Math.min(226,y-23)),58,WizardMascotArt.SKATE,t);
             box(c,128,y-9,159,y+22,9,accent);
             label(c,letters[index],143.5f,y+12,17,Color.BLACK);
         }
         float lerp(float a,float b,float t){return a+(b-a)*t;}
         void art(Canvas c,float l,float t,float rr,float b,int variant) {
+            if(b<42 || t>291)return;
             box(c,l,t,rr,b,5,artworkColors[variant%4]);
-            circle(c,l+(rr-l)*.72f,t+(b-t)*.25f,(rr-l)*.095f,0xffa5b4c3);
-            path.reset();path.moveTo(l+3,b-4);path.lineTo(l+(rr-l)*.32f,t+(b-t)*.38f);
-            path.lineTo(l+(rr-l)*.62f,t+(b-t)*.68f);path.lineTo(l+(rr-l)*.83f,t+(b-t)*.46f);
-            path.lineTo(rr-3,b-4);path.close();p.setColor(0xff728a99);c.drawPath(path,p);
+            float size=Math.min((rr-l)*.96f,(b-t)*.92f);
+            c.save();c.clipRect(l,t,rr,b);
+            mascot.draw(c,(l+rr-size)/2,(t+b-size)/2,size,variant%6,phase);
+            c.restore();
         }
         void box(Canvas c,float l,float t,float rr,float b,float rad,int color){r.set(l,t,rr,b);p.setColor(color);c.drawRoundRect(r,rad,rad,p);}
         void circle(Canvas c,float x,float y,float rad,int color){p.setColor(color);c.drawCircle(x,y,rad,p);}

@@ -104,6 +104,20 @@ public class StartupWizardUiTest {
         }
     }
 
+    @Test public void mascotCartoonsDrawAllSixPosesWithExistingAccents() {
+        Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(200, 200, android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
+        for (AppearanceTheme.Accent accent : AppearanceTheme.Accent.values()) {
+            WizardMascotArt art = new WizardMascotArt(context, accent.color);
+            for (int pose = 0; pose <= WizardMascotArt.POPCORN; pose++) {
+                for (float phase : new float[]{0f, .48f, 1f})
+                    art.draw(canvas, 0, 0, 200, pose, phase);
+            }
+        }
+        bitmap.recycle();
+    }
+
     @Test public void finalPageOffersOptionalCreateAndSignInEntries() throws Exception {
         StartupWizardActivity activity = create();
         showSettings(activity);
