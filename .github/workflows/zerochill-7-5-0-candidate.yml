@@ -144,6 +144,8 @@ jobs:
           --tests '*CreatorBackupTest'
           --tests '*MediaCollectionStoreTest'
           --tests '*PlayerSaveMenuTest'
+          --tests '*MoreMenuLayoutTest'
+          --tests '*SupportZeroChillDialogTest'
           --tests '*WhatsNewTest'
           --tests '*ReleaseNotesSummaryTest'
           --tests '*StartupWizardUiTest'
