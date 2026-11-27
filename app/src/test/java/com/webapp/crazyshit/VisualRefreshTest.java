@@ -358,7 +358,11 @@ public class VisualRefreshTest {
 
             assertNull(root.findViewWithTag("shittok_landscape_mute"));
             assertNull(root.findViewWithTag("shittok_landscape_download"));
-            assertNull(root.findViewWithTag("shittok_landscape_share"));
+            View more = root.findViewWithTag("shittok_landscape_share");
+            assertNotNull(more);
+            assertEquals("More video actions", String.valueOf(more.getContentDescription()));
+            assertSame(root.findViewWithTag("shittok_landscape_header"), more.getParent());
+            assertTrue(more.isClickable());
             View save = root.findViewWithTag("shittok_save");
             assertEquals("Save to Watch Later", String.valueOf(save.getContentDescription()));
             View fullscreen = root.findViewWithTag("shittok_fullscreen");

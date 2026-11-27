@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Config(application = Application.class, sdk = 35)
 public class ShitTokAutoScrollIntegrationTest {
     private ChaosFeedView feed(Activity activity, int size) {
+        ShitTokCategoryStrip.Tab.select(activity, ShitTokCategoryStrip.Tab.CHAOS);
         ChaosFeedView feed = new ChaosFeedView(activity, item -> { }, false);
         // Stop the constructor's asynchronous source request from altering the fake deck.
         ReflectionHelpers.setField(feed, "closed", true);
@@ -37,16 +38,20 @@ public class ShitTokAutoScrollIntegrationTest {
         for (int i = 0; i < size; i++) {
             items.add(new NativeContentItem(NativeContentItem.KIND_MEDIA,
                     "Video " + i, "https://example.invalid/video/" + i,
-                    "", "", "", ""));
+                    "", "", "Kaotic", ""));
         }
         RecyclerView.Adapter<?> adapter = ReflectionHelpers.getField(feed, "adapter");
         adapter.notifyDataSetChanged();
         ReflectionHelpers.setField(feed, "active", true);
         activity.setContentView(feed);
+        layoutFeed(feed);
+        return feed;
+    }
+
+    private void layoutFeed(ChaosFeedView feed) {
         feed.measure(android.view.View.MeasureSpec.makeMeasureSpec(400, android.view.View.MeasureSpec.EXACTLY),
                 android.view.View.MeasureSpec.makeMeasureSpec(800, android.view.View.MeasureSpec.EXACTLY));
         feed.layout(0, 0, 400, 800);
-        return feed;
     }
 
     private void request(ChaosFeedView feed, int from) {
@@ -152,12 +157,15 @@ public class ShitTokAutoScrollIntegrationTest {
             }
             List<NativeContentItem> items = ReflectionHelpers.getField(feed, "items");
             items.add(new NativeContentItem(NativeContentItem.KIND_MEDIA,
-                    "Next video", "https://example.invalid/video/next", "", "", "", ""));
+                    "Next video", "https://example.invalid/video/next", "", "", "Kaotic", ""));
             RecyclerView.Adapter<?> adapter = ReflectionHelpers.getField(feed, "adapter");
             adapter.notifyItemInserted(1);
+            // Commit the inserted page before the posted advance may run.
+            layoutFeed(feed);
             ReflectionHelpers.callInstanceMethod(feed, "tryPendingAutoAdvance");
-            shadowOf(Looper.getMainLooper()).idle();
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(350));
             assertEquals(1, pager.getCurrentItem());
+            assertFalse(ReflectionHelpers.getField(feed, "autoAdvancePending"));
         } finally {
             feed.close();
             host.pause().stop().destroy();

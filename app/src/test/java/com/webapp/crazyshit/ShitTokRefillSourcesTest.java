@@ -68,10 +68,12 @@ public class ShitTokRefillSourcesTest {
             ShitTokCategoryStrip.Tab.select(app, ShitTokCategoryStrip.Tab.CHAOS);
             ShitTokSourcePool pool = ReflectionHelpers.getField(mixer, "sourcePool");
             pool.putCached(baddieHubSource, Collections.singletonList(clip));
+            assertEquals(Collections.singletonList(clip), pool.peekCached(baddieHubSource));
             mixer.requestPreference(app, () -> {}, false);
             assertEquals(ShitTokSourcePool.Health.FILTERED, pool.health(baddieHubSource));
             assertTrue(mixer.takeReadyCandidates().isEmpty());
-            assertEquals(Collections.singletonList(clip), pool.peekCached(baddieHubSource));
+            // Category inventories have their own independent buffers.
+            assertTrue(pool.peekCached(baddieHubSource).isEmpty());
         } finally { mixer.stopPreference(); }
     }
 

@@ -40,12 +40,15 @@ import static org.robolectric.Shadows.shadowOf;
         shadows = BunkrGalleryResolutionLifecycleTest.BlockedBunkrPage.class)
 public class BunkrGalleryResolutionLifecycleTest {
     private static final String PAGE = "https://bunkr.cr/f/blocked-video";
+    private static final String SECOND_PAGE = "https://bunkr.cr/f/second-fixture";
     private static final String MAINTENANCE_PAGE = "https://bunkr.cr/f/maintenance-fixture";
 
     @Implements(value = Jsoup.class, isInAndroidSdk = false)
     public static class BlockedBunkrPage {
         static CountDownLatch entered;
         static CountDownLatch release;
+        static CountDownLatch secondEntered;
+        static CountDownLatch secondRelease;
 
         @Implementation protected static Connection connect(String url) {
             return (Connection) Proxy.newProxyInstance(Connection.class.getClassLoader(),
@@ -53,6 +56,12 @@ public class BunkrGalleryResolutionLifecycleTest {
                         if ("get".equals(method.getName())) {
                             if (url.endsWith("/f/maintenance-fixture")) {
                                 return Jsoup.parse(BunkrResolutionTest.MAINTENANCE_FILE_PAGE, url);
+                            }
+                            if (SECOND_PAGE.equals(url)) {
+                                secondEntered.countDown();
+                                try { secondRelease.await(5, TimeUnit.SECONDS); }
+                                catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+                                throw new IOException("independent second page fixture");
                             }
                             entered.countDown();
                             try {
@@ -107,7 +116,9 @@ public class BunkrGalleryResolutionLifecycleTest {
         BlockedBunkrPage.entered = new CountDownLatch(1);
         BlockedBunkrPage.release = new CountDownLatch(1);
         NativeContentItem first = video(PAGE);
-        NativeContentItem second = video("https://example.com/second-video");
+        BlockedBunkrPage.secondEntered = new CountDownLatch(1);
+        BlockedBunkrPage.secondRelease = new CountDownLatch(1);
+        NativeContentItem second = video(SECOND_PAGE);
         String session = BunkrGallerySessionStore.create("Gallery", "");
         BunkrGallerySessionStore.replace(session, Arrays.asList(first, second), 1, true);
         Intent intent = new Intent(RuntimeEnvironment.getApplication(), BunkrGalleryActivity.class)
@@ -128,15 +139,19 @@ public class BunkrGalleryResolutionLifecycleTest {
             pager.setCurrentItem(1, false);
             assertEquals(1, pager.getCurrentItem());
             BlockedBunkrPage.release.countDown();
-            worker.submit(() -> { }).get(2, TimeUnit.SECONDS);
+            // Swipe starts a separate resolution. Hold that request pending while
+            // the stale first result reaches the UI.
+            assertTrue("second resolver should start", BlockedBunkrPage.secondEntered.await(3, TimeUnit.SECONDS));
             shadowOf(Looper.getMainLooper()).idle();
 
             assertFalse(adapter.isFailed(0));
             assertFalse(adapter.isFailed(1));
+            assertTrue("second request must still be loading", adapter.isLoading(1));
             assertSame(previousDialog, ShadowDialog.getLatestDialog());
         } finally {
             BlockedBunkrPage.release.countDown();
             controller.destroy();
+            BlockedBunkrPage.secondRelease.countDown();
             worker.shutdownNow();
         }
     }
