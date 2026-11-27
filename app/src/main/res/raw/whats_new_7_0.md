@@ -12,6 +12,6 @@
 - Find a favorite creator faster by dragging across the alphabet beside the creator grid.
 - Gallery thumbnails appear in batches as you browse, so more of the gallery is ready when you reach it.
 - Notifications, messages and account screens share clearer headers and controls.
-- Search the redesigned Settings hub to jump straight to the setting you need.
+- Search the redesigned Settings hub or use the compact More menu to reach downloads, messages, settings and account controls.
 - New installs get a four-step cinematic tour starring the full animated ZEROCHILL mascot.
 - The splash screen lights up in your chosen accent, and the refreshed launcher icon keeps its signature cyan.
