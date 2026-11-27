@@ -1,10 +1,16 @@
-# ZEROCHILL 7.4.0
+# ZEROCHILL 7.5: The Experience Update
 
-- Screen-to-screen navigation now uses smoother fades and subtle depth, without changing the navigation dock.
-- ShitTok video stays visible when switching tabs instead of briefly turning black.
-- OnlyFap featured creator artwork appears sooner, and verified gallery content loads more efficiently.
-- Improved creator matching keeps unrelated profiles and media out of creator galleries.
-- Bunkr videos confirmed to be under maintenance now show a clear notice and Retry option. Some files may remain unavailable until Bunkr restores them. This is outside ZEROCHILL's control.
-- Favorite Creators galleries have smoother opening and closing animations.
-- ShitTok's OnlyFap filter avoids unnecessary BaddieHub requests; BaddieHub remains available in the All feed and supported creator links.
-- Regular WikiFeet is retired. WikiFeet X remains available, and existing saved records are preserved.
+- ShitTok has five independent feeds: Chaos, Straight, Gay, Trans and Groups. Pick up where you left off when you switch back.
+- Swipe into an Erome album or a creator gallery from eligible ShitTok clips, then return to your place in the feed.
+- Explore Pawchive photos and GIFs in OnlyFap, alongside matching Bunkr media where available.
+- Find Erome albums in Spotlight and choose the Erome preference you want to browse.
+- Spotlight now shows one clear list, with more results from Bunkr and Erome as you scroll.
+- Shows search finds more relevant matches across providers, and Continue Watching keeps your place in view.
+- Your Library puts saved media, Watch Later, history and downloads within easier reach.
+- Organize your favorite photos and videos into custom collections with their own cover artwork.
+- Find a favorite creator faster by dragging across the alphabet beside the creator grid.
+- Gallery thumbnails appear in batches as you browse, so more of the gallery is ready when you reach it.
+- Notifications, messages and account screens share clearer headers and controls.
+- Search the redesigned Settings hub to jump straight to the setting you need.
+- New installs get a four-step cinematic tour starring the full animated ZEROCHILL mascot.
+- The splash screen lights up in your chosen accent, and the refreshed launcher icon keeps its signature cyan.

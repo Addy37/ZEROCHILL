@@ -89,6 +89,16 @@ public class WhatsNewTest {
         assertFalse(WhatsNewPolicy.isLauncherEntry(launcher.putExtra("notification", true)));
     }
 
+    @Test public void launcherEntrySurvivesOneTimeSourceAccessRepair() {
+        Intent entry = new Intent().putExtra(WhatsNewPolicy.EXTRA_LAUNCHER_ENTRY, true);
+        XMegaDriveAccessSetupActivity repair =
+                Robolectric.buildActivity(XMegaDriveAccessSetupActivity.class, entry).get();
+        repair.onBackPressed();
+        Intent forwarded = Shadows.shadowOf(repair).getNextStartedActivity();
+        assertEquals(NativeMainActivity.class.getName(), forwarded.getComponent().getClassName());
+        assertTrue(WhatsNewPolicy.allowsAutomaticDisplay(forwarded));
+    }
+
     @Test public void mainGateRespectsOnboardingNavigationAndSettingsAcknowledgement() throws Exception {
         Intent launcher = new Intent().putExtra(WhatsNewPolicy.EXTRA_LAUNCHER_ENTRY, true);
         NativeMainActivity activity = Robolectric.buildActivity(NativeMainActivity.class, launcher).get();
@@ -155,18 +165,14 @@ public class WhatsNewTest {
         assertTrue(WhatsNewDialog.show(activity, false));
         WhatsNewDialog fragment = (WhatsNewDialog) activity.getFragmentManager().findFragmentByTag(WhatsNewDialog.TAG);
         java.util.List<String> notes = WhatsNewDialog.notes(activity, "7.0-test");
-        assertEquals(8, notes.size());
-        assertTrue(notes.get(0).contains("smoother fades"));
-        assertTrue(notes.get(0).contains("without changing the navigation dock"));
-        assertTrue(notes.get(1).contains("instead of briefly turning black"));
-        assertTrue(notes.get(2).contains("featured creator artwork appears sooner"));
-        assertTrue(notes.get(3).contains("unrelated profiles"));
-        assertTrue(notes.get(4).contains("Bunkr videos"));
-        assertTrue(notes.get(4).contains("outside ZEROCHILL's control"));
-        assertTrue(notes.get(4).contains("Retry"));
-        assertTrue(notes.get(5).contains("Favorite Creators"));
-        assertTrue(notes.get(6).contains("BaddieHub"));
-        assertTrue(notes.get(7).contains("WikiFeet X"));
+        assertEquals(14, notes.size());
+        assertTrue(notes.get(0).contains("five independent feeds"));
+        assertTrue(notes.stream().anyMatch(note -> note.contains("Pawchive")));
+        assertTrue(notes.stream().anyMatch(note -> note.contains("Erome")));
+        assertTrue(notes.stream().anyMatch(note -> note.contains("one clear list")));
+        assertTrue(notes.stream().anyMatch(note -> note.contains("custom collections")));
+        assertTrue(notes.stream().anyMatch(note -> note.contains("four-step cinematic tour")));
+        assertTrue(notes.get(13).contains("chosen accent"));
         assertEquals(notes, WhatsNewDialog.notes(activity, "6.0.1-dev"));
         find(fragment.getDialog().getWindow().getDecorView(), "LET’S GO").performClick();
         activity.getFragmentManager().executePendingTransactions();

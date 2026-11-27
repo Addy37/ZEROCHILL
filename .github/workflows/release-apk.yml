@@ -44,7 +44,7 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "APP_VERSION_NAME=$VERSION" >> "$GITHUB_ENV"
           python3 - "$VERSION" <<'PY'
-          import os, re, sys
+          import os, pathlib, re, sys
           match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", sys.argv[1])
           if not match:
               raise SystemExit("Stable version must be major.minor.patch")
@@ -53,38 +53,20 @@ jobs:
               raise SystemExit("Only ZEROCHILL 7.0.2+ releases are allowed")
           if minor >= 1000 or patch >= 1000:
               raise SystemExit("Minor and patch versions must be below 1000")
-          code = major * 1_000_000 + minor * 1000 + patch
+          declared = pathlib.Path('RELEASE_VERSION').read_text().strip()
+          if sys.argv[1] != declared:
+              raise SystemExit("Requested release must match RELEASE_VERSION")
+          code = int(pathlib.Path('RELEASE_VERSION_CODE').read_text().strip())
           if not 0 < code <= 2_100_000_000:
               raise SystemExit("Version code is outside Android limits")
           with open(os.environ["GITHUB_ENV"], "a") as output:
               output.write(f"APP_VERSION_CODE={code}\n")
           PY
           echo "APK_PRIMARY=ZeroChill.apk" >> "$GITHUB_ENV"
-          echo "RELEASE_TITLE=ZeroChill v${VERSION}" >> "$GITHUB_ENV"
+          echo "RELEASE_TITLE=$(sed -n '1s/^# //p' RELEASE_NOTES.md)" >> "$GITHUB_ENV"
 
       - name: Validate release version and update-dialog copy
-        env:
-          INPUT_VERSION: ${{ inputs.version }}
-        run: |
-          python3 - <<'PY'
-          import os, pathlib
-          version = os.environ['INPUT_VERSION'].strip()
-          declared = pathlib.Path('RELEASE_VERSION').read_text().strip()
-          release = pathlib.Path('RELEASE_NOTES.md').read_text()
-          bundled = pathlib.Path('app/src/main/res/raw/whats_new_7_0.md').read_text()
-          assert version == declared == '7.4.0', 'Release version differs from approved notes'
-          assert release.startswith('# ZEROCHILL 7.4.0\n'), 'Release title mismatch'
-          assert bundled.startswith('# ZEROCHILL 7.4.0\n'), 'Bundled title mismatch'
-          def bullets(s):
-              return [line[2:].strip() for line in s.splitlines() if line.startswith('- ')]
-          assert len(bullets(release)) == 8, 'Unexpected release highlight count'
-          assert bullets(release) == bullets(bundled), "GitHub / offline What\'s New mismatch"
-          paragraph = release.split('\n\n')[1].strip()
-          assert len(paragraph) <= 180, 'Updater summary will be truncated'
-          assert 'Bunkr' in paragraph and "outside ZEROCHILL's control" in paragraph
-          assert any('Retry' in line and 'maintenance' in line for line in bullets(release))
-          print('Updater summary, bundled What’s New, and Bunkr notice validated')
-          PY
+        run: python3 tools/verify_release_7_5_notes.py "$VERSION" "$APP_VERSION_CODE"
 
       - name: Set up Java toolchains for Android 7 tests
         uses: actions/setup-java@v5

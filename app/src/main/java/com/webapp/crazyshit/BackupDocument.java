@@ -86,6 +86,12 @@ final class BackupDocument {
                 requireText(content, "referer", 4096, true);
                 requireUrl(content.getString("url"), false);
                 requireUrl(content.optString("image"), true);
+                for (String key : new String[]{"sourceMediaUrl", "sourcePageUrl"}) {
+                    if (content.has(key)) {
+                        requireText(content, key, 4096, true);
+                        requireUrl(content.getString(key), true);
+                    }
+                }
                 for (String key : new String[]{"query", "referer"}) {
                     String value = content.getString(key);
                     if (value.contains("://")) requireUrl(value, false);

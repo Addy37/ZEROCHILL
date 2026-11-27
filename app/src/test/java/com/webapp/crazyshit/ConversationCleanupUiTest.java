@@ -21,6 +21,20 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(application = Application.class, sdk = 35)
 public class ConversationCleanupUiTest {
+    @Test public void boundedThreadLoadsNewestMessagesInDisplayOrder() throws Exception {
+        assertTrue(ZeroChillSocialRepository.recentDirectMessagesPath("user", "partner")
+                .endsWith("&order=created_at.desc,id.desc&limit=500"));
+        org.json.JSONArray newestFirst = new org.json.JSONArray()
+                .put(new org.json.JSONObject().put("id", "newest"))
+                .put(new org.json.JSONObject().put("id", "earlier"));
+        ArrayList<ZeroChillSocialRepository.DirectMessage> messages =
+                ZeroChillSocialRepository.chronologicalThread(newestFirst, "clear-cutoff");
+
+        assertEquals("earlier", messages.get(0).id);
+        assertEquals("newest", messages.get(1).id);
+        assertEquals("clear-cutoff", ((ZeroChillSocialRepository.ClearedMessageList) messages).cutoff);
+    }
+
     @Test public void longPressEntersSelectionAndBrandedConfirmationCancelKeepsConversation() throws Exception {
         ZeroChillInboxActivity activity = shell();
         RecyclerView recycler = (RecyclerView) field(activity, "recycler");
