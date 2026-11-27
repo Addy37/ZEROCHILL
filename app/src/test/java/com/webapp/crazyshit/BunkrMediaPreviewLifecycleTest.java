@@ -35,6 +35,7 @@ public class BunkrMediaPreviewLifecycleTest {
     public static class Preview {
         static int calls;
         static int cacheChecks;
+        static int pawchiveCalls;
         static File cached;
         static Consumer<File> callback;
         static BunkrMediaPreview.Task task;
@@ -46,22 +47,31 @@ public class BunkrMediaPreviewLifecycleTest {
                 NativeContentItem item, Consumer<File> ready) {
             calls++; callback = ready; task = new BunkrMediaPreview.Task(); return task;
         }
+        @Implementation protected static BunkrMediaPreview.Task requestPawchiveVideo(Context context,
+                NativeContentItem item, Consumer<File> ready) {
+            pawchiveCalls++;
+            task = new BunkrMediaPreview.Task();
+            return task;
+        }
     }
     @Before public void reset() {
         Metadata.calls = 0;
         Preview.calls = 0;
         Preview.cacheChecks = 0;
+        Preview.pawchiveCalls = 0;
         Preview.cached = null;
         Preview.callback = null;
     }
     private BunkrGalleryAdapter adapter(String url) {
+        return adapter(new NativeContentItem(NativeContentItem.KIND_MEDIA, "video", url, "", "", "", ""));
+    }
+    private BunkrGalleryAdapter adapter(NativeContentItem item) {
         Context context = RuntimeEnvironment.getApplication();
         BunkrGalleryAdapter adapter = new BunkrGalleryAdapter(context, new BunkrGalleryAdapter.Listener() {
             public void onOpen(int position, NativeContentItem item, View anchor) { }
             public void onLongPress(NativeContentItem item, View anchor) { }
         });
-        adapter.replace(Collections.singletonList(new NativeContentItem(NativeContentItem.KIND_MEDIA,
-                "video", url, "", "", "", "")), false);
+        adapter.replace(Collections.singletonList(item), false);
         return adapter;
     }
     private BunkrGalleryAdapter.Holder holder(BunkrGalleryAdapter adapter) {
@@ -79,6 +89,26 @@ public class BunkrMediaPreviewLifecycleTest {
         assertTrue(old.canceled);
         adapter.onViewAttachedToWindow(holder);
         assertEquals(2, Preview.calls);
+    }
+    @Test public void pawchiveCreatorTileStartsOnlyWhenVisibleAndPausesWithGallery() {
+        NativeContentItem video = new NativeContentItem(NativeContentItem.KIND_MEDIA, "video",
+                "https://file.pawchive.pw/data/ab/cd/clip.mp4", "", "", "", "")
+                .withSourceMedia("https://n3.pawchive.pw/data/ab/cd/clip.mp4", "");
+        BunkrGalleryAdapter adapter = adapter(video);
+        adapter.setPawchiveVideoPreviews(true);
+        BunkrGalleryAdapter.Holder holder = holder(adapter);
+        adapter.onBindViewHolder(holder, 0);
+        assertEquals(0, Preview.pawchiveCalls);
+        adapter.onViewAttachedToWindow(holder);
+        assertEquals(1, Preview.pawchiveCalls);
+        BunkrMediaPreview.Task first = Preview.task;
+        adapter.setPreviewsActive(false);
+        assertTrue(first.canceled);
+        adapter.setPreviewsActive(true);
+        assertEquals(2, Preview.pawchiveCalls);
+        assertEquals(0, Metadata.calls);
+        assertEquals(0, Preview.calls);
+        adapter.onViewRecycled(holder);
     }
     @Test public void cachedPreviewRebindSkipsRepairAndGeneration() throws Exception {
         Context context = RuntimeEnvironment.getApplication();

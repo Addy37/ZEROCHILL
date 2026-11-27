@@ -1399,6 +1399,8 @@ public class NativeFeedBrowserActivity extends Activity {
         );
         if (galleryThumbnailPipeline == null) galleryThumbnailPipeline = new GalleryThumbnailPipeline(this);
         galleryAdapter.setThumbnailPipeline(galleryThumbnailPipeline);
+        galleryAdapter.setPawchiveVideoPreviews(isCreatorGallery() && !creatorAvatarPickerMode
+                && PawchiveRepository.isProfile(fapelloProfileUrl));
         galleryAdapter.setBatchEnabled(isCreatorGallery() && !creatorAvatarPickerMode);
         galleryAdapter.setBatchActive(!isCreatorGallery());
         if (isCreatorGallery()) galleryAdapter.setFavoriteUrls(mediaFavoriteUrls);

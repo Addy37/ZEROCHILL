@@ -27,7 +27,8 @@ import org.robolectric.annotation.GraphicsMode;
 @RunWith(RobolectricTestRunner.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = Application.class, sdk = 35,
-        shadows = { BunkrMediaPreviewTest.Repository.class, BunkrMediaPreviewTest.Retriever.class, BunkrMediaPreviewTest.Network.class })
+        shadows = { BunkrMediaPreviewTest.Repository.class, BunkrMediaPreviewTest.Retriever.class,
+                BunkrMediaPreviewTest.Network.class, BunkrMediaPreviewTest.IndexedPreview.class })
 public class BunkrMediaPreviewTest {
     @Implements(value = BunkrRepository.class, isInAndroidSdk = false)
     public static class Repository {
@@ -42,6 +43,20 @@ public class BunkrMediaPreviewTest {
         @Implementation protected BunkrPreviewDataSource.Block range(String url,
                 java.util.Map<String, String> headers, long start, int size) {
             return new BunkrPreviewDataSource.Block(new byte[size], 512_000);
+        }
+    }
+    @Implements(value = PawchiveIndexedPreview.class, isInAndroidSdk = false)
+    public static class IndexedPreview {
+        static final AtomicInteger calls = new AtomicInteger();
+        @Implementation protected static Bitmap extract(Context context, String url,
+                BunkrPreviewDataSource.Reader reader, PawchiveIndexedPreview.Check check,
+                java.util.function.Consumer<String> trace) throws Exception {
+            calls.incrementAndGet();
+            assertEquals("https://n3.pawchive.pw/data/ab/cd/visible.mp4", url);
+            check.run();
+            Bitmap frame = Bitmap.createBitmap(96, 54, Bitmap.Config.ARGB_8888);
+            frame.eraseColor(android.graphics.Color.GREEN);
+            return frame;
         }
     }
     @Implements(MediaMetadataRetriever.class)
@@ -62,6 +77,7 @@ public class BunkrMediaPreviewTest {
     }
     @Before public void reset() {
         Repository.calls.set(0); Retriever.calls.set(0); Retriever.releases.set(0);
+        IndexedPreview.calls.set(0);
     }
     private NativeContentItem video(String id) {
         return new NativeContentItem(NativeContentItem.KIND_MEDIA, "video", "https://bunkr.cr/f/" + id,
@@ -155,6 +171,37 @@ public class BunkrMediaPreviewTest {
         assertFalse(cached.exists());
         assertEquals(0, Repository.calls.get());
         assertEquals(0, Retriever.calls.get());
+        assertEquals(0, IndexedPreview.calls.get());
+    }
+
+    @Test public void pawchiveCreatorPreviewExtractsFromItsVideoAndReusesCachedPoster() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        NativeContentItem item = new NativeContentItem(NativeContentItem.KIND_MEDIA, "visible clip",
+                "https://file.pawchive.pw/data/ab/cd/visible.mp4", "", "", "", "")
+                .withSourceMedia("https://n3.pawchive.pw/data/ab/cd/visible.mp4", "");
+        File file = BunkrMediaPreview.cacheFile(context, item);
+        file.delete();
+        try {
+            AtomicInteger delivered = new AtomicInteger();
+            AtomicReference<File> result = new AtomicReference<>();
+            BunkrMediaPreview.requestPawchiveVideo(context, item, ready -> {
+                result.set(ready);
+                delivered.incrementAndGet();
+            });
+            await(delivered, 1);
+            assertEquals(file, result.get());
+            assertTrue(file.length() > 0);
+            BunkrMediaPreview.requestPawchiveVideo(context, item, ready -> {
+                result.set(ready);
+                delivered.incrementAndGet();
+            });
+            await(delivered, 2);
+            assertEquals(file, result.get());
+            assertEquals(1, IndexedPreview.calls.get());
+            assertEquals(0, Repository.calls.get());
+        } finally {
+            file.delete();
+        }
     }
 
     @Test public void canceledRequestNeverCallsRecycledTile() throws Exception {

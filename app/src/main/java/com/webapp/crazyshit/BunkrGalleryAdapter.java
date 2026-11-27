@@ -276,6 +276,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     void setThumbnailPipeline(GalleryThumbnailPipeline pipeline) { thumbnailPipeline = pipeline; }
+    void setPawchiveVideoPreviews(boolean enabled) { pawchiveVideoPreviews = enabled; }
     void setBatchEnabled(boolean enabled) { batchEnabled = enabled; }
     void setBatchActive(boolean active) {
         batchActive = active;
@@ -419,6 +420,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private final LinkedHashSet<View> favoriteMovingTiles = new LinkedHashSet<>();
     private int favoriteMoveGeneration;
     private boolean previewsActive = true;
+    private boolean pawchiveVideoPreviews;
     private final java.util.function.Consumer<String> playbackPreviewListener = this::showPlaybackPreview;
     private final LinkedHashSet<Holder> previewHolders = new LinkedHashSet<>();
     private final Rect previewBounds = new Rect();
@@ -986,6 +988,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             holder.image.setImageDrawable(new ColorDrawable(Color.rgb(20, 20, 23)));
             if (PawchiveRepository.isDirectMedia(item.url)) {
                 if (item.isImage()) holder.unavailable.setVisibility(View.VISIBLE);
+                else if (pawchiveVideoPreviews && pawchiveVideo) requestMediaPreview(holder, item);
             } else repairArtwork(holder, item, item.imageUrl);
         } else {
             loadArtwork(holder, item, item.imageUrl, true);
@@ -1253,21 +1256,17 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
 
     private void requestMediaPreview(Holder holder, NativeContentItem item) {
         boolean pawchive = PawchiveRepository.isNativeVideo(item);
-        if (pawchive) {
-            File saved = BunkrMediaPreview.cached(context, item);
-            if (saved != null) loadMediaPreview(holder, item, saved);
-            return;
-        }
-        if (!BunkrRepository.isBunkrUrl(item.url) || (!item.isImage() && !item.isVideo())) return;
+        if (pawchive ? !pawchiveVideoPreviews || !pawchiveVideoPreview(item)
+                : !BunkrRepository.isBunkrUrl(item.url) || (!item.isImage() && !item.isVideo())) return;
         holder.wantsMediaPreview = true;
         if (!previewVisible(holder) || holder.previewAttempted) return;
-        if (item.isVideo() && BunkrMaintenance.isKnown(item.url)) {
+        if (!pawchive && item.isVideo() && BunkrMaintenance.isKnown(item.url)) {
             holder.maintenance.refresh();
             return;
         }
         holder.previewAttempted = true;
         int binding = holder.bindGeneration;
-        holder.preview = BunkrMediaPreview.request(context, item, file -> {
+        java.util.function.Consumer<File> ready = file -> {
             if (binding != holder.bindGeneration || !previewVisible(holder)) return;
             holder.preview = null;
             holder.maintenance.refresh();
@@ -1277,7 +1276,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 return;
             }
             loadMediaPreview(holder, item, file);
-        });
+        };
+        holder.preview = pawchive ? BunkrMediaPreview.requestPawchiveVideo(context, item, ready)
+                : BunkrMediaPreview.request(context, item, ready);
     }
 
     private void showPlaybackPreview(String url) {
