@@ -15,6 +15,13 @@ jobs:
     timeout-minutes: 45
     env:
       ZEROCHILL_V7_TRAFFIC: 'true'
+      SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ANON_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/dynamic-api
+      SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
+      ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ''
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@v6
