@@ -19,7 +19,7 @@ jobs:
     if: >-
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
-       (github.event_name == 'push' && github.event.head_commit.message == 'Publish ZEROCHILL 7.5.0 (7005085)'))
+       (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'Publish ZEROCHILL 7.5.0 (7005085)')))
     runs-on: ubuntu-latest
     env:
       ZEROCHILL_V7_TRAFFIC: 'true'
