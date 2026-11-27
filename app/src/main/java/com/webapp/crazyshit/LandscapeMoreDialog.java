@@ -2,6 +2,15 @@ package com.webapp.crazyshit;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.app.DownloadManager;
+import android.os.Build;
+import android.graphics.drawable.RippleDrawable;
+import android.widget.FrameLayout;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.Context;
@@ -30,6 +39,8 @@ import java.util.List;
 /** Compact top-right overflow surface used by the app header and OnlyFap hero. */
 @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 final class LandscapeMoreDialog {
+    private static final ExecutorService DOWNLOAD_BADGE_LOADER = Executors.newSingleThreadExecutor();
+
     private LandscapeMoreDialog() {
     }
 
@@ -55,14 +66,14 @@ final class LandscapeMoreDialog {
     }
 
     static void show(NativeMainActivity activity, View anchor) {
-        if (activity == null || activity.isFinishing()) return;
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
 
         Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
         LinearLayout panel = new LinearLayout(activity);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(activity, 10), dp(activity, 8), dp(activity, 10), dp(activity, 8));
+        panel.setPadding(dp(activity, 14), dp(activity, 14), dp(activity, 14), dp(activity, 10));
         panel.setBackground(compactPanelBackground(activity));
         panel.setClipToOutline(true);
 
@@ -119,10 +130,24 @@ final class LandscapeMoreDialog {
                 )
         );
 
-        for (int i = 0; i < actions.size(); i++) {
-            addActionRow(activity, dialog, content, actions.get(i));
-            if (i < actions.size() - 1) addDivider(activity, content);
+        TextView downloadBadge = null;
+        for (int i = 0; i < 4; i += 2) {
+            LinearLayout gridRow = new LinearLayout(activity);
+            gridRow.setOrientation(LinearLayout.HORIZONTAL);
+            gridRow.setBaselineAligned(false);
+            for (int j = i; j < i + 2; j++) {
+                TextView badge = addActionTile(activity, dialog, gridRow, actions.get(j), j == i);
+                if (j == 0) downloadBadge = badge;
+            }
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+            rowParams.topMargin = dp(activity, i == 0 ? 10 : 8);
+            content.addView(gridRow, rowParams);
         }
+        addDivider(activity, content);
+        for (int i = 4; i < actions.size(); i++) {
+            addActionRow(activity, dialog, content, actions.get(i));
+        }
+        final TextView activeBadge = downloadBadge;
 
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
         LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(-1, -2);
@@ -137,59 +162,86 @@ final class LandscapeMoreDialog {
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
 
+        Rect visible = new Rect();
+        activity.getWindow().getDecorView().getWindowVisibleDisplayFrame(visible);
         int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
         int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
-        int panelWidth = Math.min(dp(activity, 286), screenWidth - dp(activity, 20));
-        int maxHeight = Math.min(dp(activity, 430), (int) (screenHeight * 0.66f));
-
-        ViewGroup.LayoutParams panelParams = panel.getLayoutParams();
-        if (panelParams != null) {
-            panelParams.width = panelWidth;
-            panelParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
-            panel.setLayoutParams(panelParams);
-        }
-        int actionContentHeight = actions.size() * 48 + Math.max(0, actions.size() - 1);
-        scroll.getLayoutParams().height = Math.min(
-                maxHeight - dp(activity, 58),
-                dp(activity, actionContentHeight)
-        );
-
-        WindowManager.LayoutParams attrs = window.getAttributes();
-        attrs.width = panelWidth;
-        attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
-        attrs.gravity = Gravity.TOP | Gravity.END;
-        attrs.dimAmount = 0.22f;
-
+        int visibleWidth = visible.width() > 0 ? visible.width() : screenWidth;
+        int visibleHeight = visible.height() > 0 ? visible.height() : screenHeight;
+        int panelWidth = Math.min(dp(activity, 352), Math.max(1, visibleWidth - dp(activity, 20)));
         int y = fallbackTopOffset(activity);
         int x = dp(activity, 8);
         if (anchor != null && anchor.isAttachedToWindow()) {
             int[] location = new int[2];
             anchor.getLocationOnScreen(location);
-            Rect visible = new Rect();
-            activity.getWindow().getDecorView().getWindowVisibleDisplayFrame(visible);
-            int anchorRight = location[0] + anchor.getWidth();
-            x = Math.max(dp(activity, 6), screenWidth - anchorRight);
-            y = Math.max(
-                    dp(activity, 2),
-                    location[1] + anchor.getHeight() - visible.top - dp(activity, 4)
-            );
+            x = Math.max(dp(activity, 6), screenWidth - location[0] - anchor.getWidth());
+            y = Math.max(dp(activity, 2), location[1] + anchor.getHeight() - visible.top - dp(activity, 4));
         }
+        x = Math.max(0, Math.min(x, visibleWidth - panelWidth));
+        // Keep the grid reachable on short landscape displays and at large font scales.
+        y = Math.max(0, Math.min(y, visibleHeight / 3));
+        int availableHeight = Math.max(1, visibleHeight - y - dp(activity, 12));
+        int innerWidth = Math.max(1, panelWidth - panel.getPaddingLeft() - panel.getPaddingRight());
+        int widthSpec = View.MeasureSpec.makeMeasureSpec(innerWidth, View.MeasureSpec.EXACTLY);
+        int naturalHeight = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        content.measure(widthSpec, naturalHeight);
+        View header = panel.getChildAt(0);
+        header.measure(widthSpec, naturalHeight);
+        scroll.getLayoutParams().height = Math.max(1, Math.min(content.getMeasuredHeight(),
+                availableHeight - header.getMeasuredHeight() - panel.getPaddingTop() - panel.getPaddingBottom()));
+
+        WindowManager.LayoutParams attrs = window.getAttributes();
+        attrs.width = panelWidth;
+        attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        attrs.gravity = Gravity.TOP | Gravity.END;
+        attrs.dimAmount = 0.26f;
         attrs.x = x;
         attrs.y = y;
+        attrs.windowAnimations = 0;
+        if (Build.VERSION.SDK_INT >= 31 && AppearanceTheme.glassBlur(activity) > 0f) {
+            attrs.flags |= WindowManager.LayoutParams.FLAG_BLUR_BEHIND;
+            attrs.setBlurBehindRadius(dp(activity, Math.min(12,
+                    Math.round(8 * AppearanceTheme.glassBlur(activity)))));
+        }
         window.setAttributes(attrs);
 
-        panel.setAlpha(0f);
-        panel.setScaleX(0.94f);
-        panel.setScaleY(0.94f);
-        panel.setPivotX(panelWidth);
-        panel.setPivotY(0f);
-        panel.animate()
-                .alpha(1f)
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(ZeroChillMotion.duration(activity, ZeroChillMotion.QUICK_MS))
-                .setInterpolator(ZeroChillMotion.EASE_OUT)
-                .start();
+        if (ZeroChillMotion.animationsEnabled(activity)) {
+            panel.setAlpha(0f);
+            panel.setScaleX(0.94f);
+            panel.setScaleY(0.94f);
+            panel.setPivotX(panelWidth);
+            panel.setPivotY(0f);
+            panel.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                    .setDuration(ZeroChillMotion.duration(activity, ZeroChillMotion.QUICK_MS))
+                    .setInterpolator(ZeroChillMotion.EASE_OUT).start();
+        }
+        if (activeBadge != null) loadDownloadBadge(activity, dialog, activeBadge);
+    }
+
+    private static void loadDownloadBadge(NativeMainActivity activity, Dialog dialog, TextView badge) {
+        Context app = activity.getApplicationContext();
+        DOWNLOAD_BADGE_LOADER.execute(() -> {
+            int count = 0;
+            try {
+                for (VideoDownloadStore.Entry entry : VideoDownloadStore.entries(app)) {
+                    if (entry.status == DownloadManager.STATUS_PENDING
+                            || entry.status == DownloadManager.STATUS_RUNNING) count++;
+                }
+            } catch (RuntimeException ignored) {
+                return;
+            }
+            final int active = count;
+            activity.runOnUiThread(() -> {
+                if (!dialog.isShowing() || activity.isFinishing() || activity.isDestroyed()) return;
+                updateBadge(badge, active);
+                if (active > 0 && badge.getParent() instanceof View) {
+                    View icons = (View) badge.getParent();
+                    if (icons.getParent() instanceof View) {
+                        ((View) icons.getParent()).setContentDescription("Downloads, " + active + " active");
+                    }
+                }
+            });
+        });
     }
 
     private static void showSupportDialog(NativeMainActivity activity) {
@@ -373,99 +425,104 @@ final class LandscapeMoreDialog {
         LinearLayout labels = new LinearLayout(activity);
         labels.setOrientation(LinearLayout.VERTICAL);
 
-        TextView title = text(activity, "More", 18, Color.WHITE, true);
-        TextView subtitle = text(
-                activity,
-                "ZeroChill " + BuildConfig.VERSION_NAME,
-                9,
-                Color.rgb(136, 136, 146),
-                false
-        );
+        TextView title = text(activity, "ZEROCHILL", 23, Color.WHITE, false);
+        SpannableString wordmark = new SpannableString("ZEROCHILL");
+        wordmark.setSpan(new ForegroundColorSpan(AppearanceTheme.accent(activity)),
+                4, 9, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        title.setText(wordmark);
+        TextView subtitle = text(activity, "Version " + BuildConfig.VERSION_NAME,
+                13, AppearanceTheme.secondaryText(activity), false);
         labels.addView(title);
         labels.addView(subtitle);
         header.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        ImageView close = iconView(activity, R.drawable.ic_more_close, 34, 8);
+        ImageView close = iconView(activity, R.drawable.ic_more_close, 48, 15);
         close.setContentDescription("Close More");
         close.setOnClickListener(v -> dialog.dismiss());
         ZeroChillMotion.installPressFeedback(close);
-        header.addView(close, new LinearLayout.LayoutParams(dp(activity, 34), dp(activity, 34)));
+        header.addView(close, new LinearLayout.LayoutParams(dp(activity, 48), dp(activity, 48)));
 
         panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
     }
 
-    private static void addActionRow(
-            NativeMainActivity activity,
-            Dialog dialog,
-            LinearLayout parent,
-            Action action
-    ) {
+    private static TextView addActionTile(NativeMainActivity activity, Dialog dialog,
+            LinearLayout row, Action action, boolean first) {
+        LinearLayout tile = new LinearLayout(activity);
+        tile.setOrientation(LinearLayout.VERTICAL);
+        tile.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        tile.setPadding(dp(activity, 12), dp(activity, 10), dp(activity, 12), dp(activity, 12));
+        tile.setMinimumHeight(dp(activity, 82));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.rgb(21, 21, 25));
+        background.setCornerRadius(dp(activity, 17));
+        tile.setBackground(background);
+        tile.setClipToOutline(true);
+
+        FrameLayout icons = new FrameLayout(activity);
+        ImageView icon = iconView(activity, action.iconRes, 30, 3);
+        icons.addView(icon, new FrameLayout.LayoutParams(dp(activity, 30), dp(activity, 30),
+                Gravity.START | Gravity.CENTER_VERTICAL));
+        TextView badge = text(activity, "", 11, AppearanceTheme.onAccent(activity), true);
+        badge.setGravity(Gravity.CENTER);
+        badge.setMinWidth(dp(activity, 23));
+        badge.setPadding(dp(activity, 6), 0, dp(activity, 6), 0);
+        badge.setBackground(ZeroChillUi.rounded(activity, AppearanceTheme.accent(activity),
+                Color.TRANSPARENT, R.dimen.zc_radius_pill));
+        badge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        icons.addView(badge, new FrameLayout.LayoutParams(-2, dp(activity, 22),
+                Gravity.END | Gravity.CENTER_VERTICAL));
+        updateBadge(badge, action.badgeCount);
+        tile.addView(icons, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView title = text(activity, action.title, 16, Color.WHITE, true);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(-1, -2);
+        labelParams.topMargin = dp(activity, 8);
+        tile.addView(title, labelParams);
+        bindAction(activity, dialog, tile, action);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -2, 1f);
+        if (first) params.setMarginEnd(dp(activity, 8));
+        row.addView(tile, params);
+        return badge;
+    }
+
+    private static void updateBadge(TextView badge, int count) {
+        badge.setText(count > 99 ? "99+" : String.valueOf(count));
+        badge.setVisibility(count > 0 ? View.VISIBLE : View.GONE);
+    }
+
+    private static void addActionRow(NativeMainActivity activity, Dialog dialog,
+            LinearLayout parent, Action action) {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(activity, 7), dp(activity, 3), dp(activity, 5), dp(activity, 3));
-        row.setClickable(true);
-        row.setFocusable(true);
-        row.setContentDescription(action.title + ". " + action.subtitle);
-        applySelectableForeground(activity, row);
+        row.setMinimumHeight(dp(activity, 48));
+        row.setPadding(dp(activity, 4), dp(activity, 6), dp(activity, 4), dp(activity, 6));
+        ImageView icon = iconView(activity, action.iconRes, 26, 4);
+        row.addView(icon, new LinearLayout.LayoutParams(dp(activity, 26), dp(activity, 32)));
+        TextView title = text(activity, action.title, 15, Color.WHITE, false);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1f);
+        titleParams.setMarginStart(dp(activity, 10));
+        row.addView(title, titleParams);
+        ImageView chevron = iconView(activity, R.drawable.ic_more_chevron, 24, 5);
+        chevron.setImageTintList(ColorStateList.valueOf(AppearanceTheme.mutedText(activity)));
+        row.addView(chevron, new LinearLayout.LayoutParams(dp(activity, 24), dp(activity, 32)));
+        bindAction(activity, dialog, row, action);
+        parent.addView(row, new LinearLayout.LayoutParams(-1, -2));
+    }
 
-        ImageView icon = iconView(activity, action.iconRes, 32, 7);
-        icon.setImageTintList(ColorStateList.valueOf(Color.WHITE));
-        icon.setBackground(circle(Color.rgb(29, 29, 34)));
-        row.addView(icon, new LinearLayout.LayoutParams(dp(activity, 32), dp(activity, 40)));
-
-        LinearLayout labels = new LinearLayout(activity);
-        labels.setOrientation(LinearLayout.VERTICAL);
-        labels.setPadding(dp(activity, 9), 0, dp(activity, 4), 0);
-
-        TextView title = text(activity, action.title, 13, Color.WHITE, true);
-        title.setMaxLines(1);
-        labels.addView(title, new LinearLayout.LayoutParams(-1, -2));
-
-        TextView subtitle = text(
-                activity,
-                action.subtitle,
-                9,
-                Color.rgb(136, 136, 146),
-                false
-        );
-        subtitle.setMaxLines(1);
-        labels.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
-        row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        if (action.badgeCount > 0) {
-            TextView badge = text(
-                    activity,
-                    action.badgeCount > 99 ? "99+" : String.valueOf(action.badgeCount),
-                    10,
-                    AppearanceTheme.onAccent(activity),
-                    true
-            );
-            badge.setGravity(Gravity.CENTER);
-            badge.setMinWidth(dp(activity, 24));
-            badge.setPadding(dp(activity, 6), 0, dp(activity, 6), 0);
-            badge.setBackground(ZeroChillUi.rounded(
-                    activity,
-                    AppearanceTheme.accent(activity),
-                    Color.TRANSPARENT,
-                    R.dimen.zc_radius_pill
-            ));
-            LinearLayout.LayoutParams badgeParams = new LinearLayout.LayoutParams(-2, dp(activity, 22));
-            badgeParams.setMargins(dp(activity, 2), 0, dp(activity, 4), 0);
-            row.addView(badge, badgeParams);
-        }
-
-        ImageView chevron = iconView(activity, R.drawable.ic_more_chevron, 22, 5);
-        chevron.setImageTintList(ColorStateList.valueOf(
-                ZeroChillUi.color(activity, R.color.zc_text_muted)
-        ));
-        row.addView(chevron, new LinearLayout.LayoutParams(dp(activity, 22), dp(activity, 40)));
-
-        ZeroChillMotion.installPressFeedback(row);
-        row.setOnClickListener(v -> {
+    private static void bindAction(NativeMainActivity activity, Dialog dialog, View view, Action action) {
+        view.setClickable(true);
+        view.setFocusable(true);
+        view.setContentDescription(action.title + ". " + action.subtitle);
+        GradientDrawable mask = new GradientDrawable();
+        mask.setColor(Color.WHITE);
+        mask.setCornerRadius(dp(activity, 17));
+        view.setForeground(new RippleDrawable(ColorStateList.valueOf(
+                (AppearanceTheme.accent(activity) & 0x00FFFFFF) | 0x33000000), null, mask));
+        ZeroChillMotion.installPressFeedback(view);
+        view.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
             if ("Support ZEROCHILL".equals(action.title)) {
-                // Avoid overlapping the More menu's exit and Support's entrance.
                 dialog.setOnDismissListener(ignored -> {
                     if (!activity.isFinishing() && !activity.isDestroyed()) {
                         activity.getWindow().getDecorView().post(action.run);
@@ -477,31 +534,21 @@ final class LandscapeMoreDialog {
                 action.run.run();
             }
         });
-
-        parent.addView(row, new LinearLayout.LayoutParams(-1, dp(activity, 48)));
     }
 
     private static void addDivider(NativeMainActivity activity, LinearLayout parent) {
         View divider = new View(activity);
-        divider.setBackgroundColor(ZeroChillUi.color(activity, R.color.zc_divider));
+        divider.setBackgroundColor(AppearanceTheme.outline(activity));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(activity, 1));
-        params.setMargins(dp(activity, 44), 0, dp(activity, 6), 0);
+        params.setMargins(0, dp(activity, 14), 0, dp(activity, 6));
         parent.addView(divider, params);
     }
 
     private static GradientDrawable compactPanelBackground(NativeMainActivity activity) {
         GradientDrawable background = new GradientDrawable();
-        background.setShape(GradientDrawable.RECTANGLE);
-        background.setColor(Color.rgb(8, 8, 10));
-        background.setCornerRadius(dp(activity, 20));
-        background.setStroke(dp(activity, 1), Color.rgb(43, 43, 50));
-        return background;
-    }
-
-    private static GradientDrawable circle(int color) {
-        GradientDrawable background = new GradientDrawable();
-        background.setShape(GradientDrawable.OVAL);
-        background.setColor(color);
+        background.setColor(Color.rgb(10, 10, 12));
+        background.setCornerRadius(dp(activity, 23));
+        background.setStroke(dp(activity, 1), Color.rgb(54, 54, 60));
         return background;
     }
 
@@ -539,19 +586,6 @@ final class LandscapeMoreDialog {
         view.setTextColor(color);
         if (bold) view.setTypeface(null, android.graphics.Typeface.BOLD);
         return view;
-    }
-
-    private static void applySelectableForeground(NativeMainActivity activity, View view) {
-        TypedValue typed = new TypedValue();
-        if (!activity.getTheme().resolveAttribute(
-                android.R.attr.selectableItemBackground,
-                typed,
-                true
-        )) return;
-        try {
-            view.setForeground(activity.getDrawable(typed.resourceId));
-        } catch (Exception ignored) {
-        }
     }
 
     private static int fallbackTopOffset(NativeMainActivity activity) {
