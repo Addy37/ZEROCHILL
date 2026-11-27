@@ -289,53 +289,68 @@ public class ContentPreferenceTest {
 
         assertTrue(ShitTokPreferenceMix.order(original, item -> false).isEmpty());
     }
-    @Test public void preferenceChangePreservesPlayingGenerationAndDropsEvenPreparedNext() {
+    @Test public void switchingToNewFeedStoresOutgoingQueueWithoutLeakingClips() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
-        org.robolectric.util.ReflectionHelpers.setField(feed, "queuePreference", ContentPreference.ALL);
-        org.robolectric.util.ReflectionHelpers.setField(feed, "feedGeneration", 7);
-        ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
-        NativeContentItem current = clip("current"), next = clip("next"), future = clip("future");
-        items.add(current); items.add(next); items.add(future);
-        ShitTokContentPreference.set(activity, ContentPreference.MEN);
-        org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
-        assertEquals(7, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "feedGeneration"));
-        assertEquals(Arrays.asList(current), items);
-        assertEquals(0, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "selectedPosition"));
-        assertEquals(ContentPreference.MEN, org.robolectric.util.ReflectionHelpers.getField(feed, "queuePreference"));
-        feed.close();
+        try {
+            org.robolectric.util.ReflectionHelpers.setField(feed, "queuePreference", ContentPreference.ALL);
+            org.robolectric.util.ReflectionHelpers.setField(feed, "queueSources", ShitTokSourceMode.ALL);
+            ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
+            NativeContentItem current = clip("current"), next = clip("next"), future = clip("future");
+            items.addAll(Arrays.asList(current, next, future));
+            ShitTokCategoryStrip.Tab.select(activity, ShitTokCategoryStrip.Tab.GUYS);
+            org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
+            assertTrue(items.isEmpty());
+            assertEquals(ContentPreference.MEN, org.robolectric.util.ReflectionHelpers.getField(feed, "queuePreference"));
+            ShitTokFeedSessionStore store = org.robolectric.util.ReflectionHelpers.getField(feed, "feedSessions");
+            ShitTokFeedSessionStore.Session outgoing = store.get(ShitTokSourceMode.ALL, ContentPreference.ALL);
+            assertNotNull(outgoing);
+            assertEquals(Arrays.asList(current, next, future), outgoing.queue);
+            assertEquals(current.url, outgoing.selectedUrl);
+            assertNull(store.get(ShitTokSourceMode.ALL, ContentPreference.MEN));
+        } finally { feed.close(); }
     }
 
-    @Test public void preferenceSwitchRetainsCurrentPlayerObjectAndFocusState() {
+    @Test public void preferenceSwitchRetainsOutgoingCheckpointAndFocusState() {
         try (ShitTokAudioOwnershipTest.Fixture fixture = new ShitTokAudioOwnershipTest.Fixture()) {
             org.robolectric.util.ReflectionHelpers.setField(fixture.feed, "queuePreference", ContentPreference.ALL);
-            fixture.install(fixture.selected, fixture.selectedPlayer);
+            org.robolectric.util.ReflectionHelpers.setField(fixture.feed, "queueSources", ShitTokSourceMode.ALL);
             org.robolectric.util.ReflectionHelpers.setField(fixture.feed, "clearDisplay", true);
-            Object player = org.robolectric.util.ReflectionHelpers.getField(fixture.selected, "player");
-            ShitTokContentPreference.set(fixture.host.get(), ContentPreference.MEN);
-            org.robolectric.util.ReflectionHelpers.callInstanceMethod(fixture.feed, "applyContentPreference");
-            assertSame(player, org.robolectric.util.ReflectionHelpers.getField(fixture.selected, "player"));
-            assertTrue((boolean) org.robolectric.util.ReflectionHelpers.getField(fixture.feed, "clearDisplay"));
             ArrayList<NativeContentItem> queue = org.robolectric.util.ReflectionHelpers.getField(fixture.feed, "items");
-            assertEquals(1, queue.size());
+            NativeContentItem selected = queue.get(0);
+            ShitTokCategoryStrip.Tab.select(fixture.host.get(), ShitTokCategoryStrip.Tab.GUYS);
+            org.robolectric.util.ReflectionHelpers.callInstanceMethod(fixture.feed, "applyContentPreference");
+            assertTrue((boolean) org.robolectric.util.ReflectionHelpers.getField(fixture.feed, "clearDisplay"));
+            assertTrue(queue.isEmpty());
+            ShitTokFeedSessionStore store = org.robolectric.util.ReflectionHelpers.getField(fixture.feed, "feedSessions");
+            ShitTokFeedSessionStore.Session outgoing = store.get(ShitTokSourceMode.ALL, ContentPreference.ALL);
+            assertNotNull(outgoing);
+            assertEquals(selected.url, outgoing.selectedUrl);
+            assertEquals(12000L, outgoing.positionMs);
         }
     }
 
-    @Test public void switchingFromLaterPageRemovesIncompatibleHistoryWithoutChangingPlaybackGeneration() {
+    @Test public void switchingFromLaterPageRetainsHistoryOnlyInOutgoingFeed() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
-        org.robolectric.util.ReflectionHelpers.setField(feed, "queuePreference", ContentPreference.ALL);
-        org.robolectric.util.ReflectionHelpers.setField(feed, "feedGeneration", 9);
-        ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
-        NativeContentItem current = clip("playing");
-        items.addAll(Arrays.asList(clip("past0"), clip("past1"), current, clip("prepared")));
-        org.robolectric.util.ReflectionHelpers.setField(feed, "selectedPosition", 2);
-        ShitTokContentPreference.set(activity, ContentPreference.WOMEN);
-        org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
-        assertEquals(Arrays.asList(current), items);
-        assertEquals(0, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "selectedPosition"));
-        assertEquals(9, (int) org.robolectric.util.ReflectionHelpers.getField(feed, "feedGeneration"));
-        feed.close();
+        try {
+            org.robolectric.util.ReflectionHelpers.setField(feed, "queuePreference", ContentPreference.ALL);
+            org.robolectric.util.ReflectionHelpers.setField(feed, "queueSources", ShitTokSourceMode.ALL);
+            ArrayList<NativeContentItem> items = org.robolectric.util.ReflectionHelpers.getField(feed, "items");
+            NativeContentItem current = clip("playing");
+            List<NativeContentItem> original = Arrays.asList(clip("past0"), clip("past1"), current, clip("prepared"));
+            items.addAll(original);
+            org.robolectric.util.ReflectionHelpers.setField(feed, "selectedPosition", 2);
+            ShitTokCategoryStrip.Tab.select(activity, ShitTokCategoryStrip.Tab.LADIES);
+            org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
+            assertTrue(items.isEmpty());
+            ShitTokFeedSessionStore store = org.robolectric.util.ReflectionHelpers.getField(feed, "feedSessions");
+            ShitTokFeedSessionStore.Session saved = store.get(ShitTokSourceMode.ALL, ContentPreference.ALL);
+            assertNotNull(saved);
+            assertEquals(original, saved.queue);
+            assertEquals(2, saved.selectedIndex);
+            assertEquals(current.url, saved.selectedUrl);
+        } finally { feed.close(); }
     }
 
     @Test public void latePreferenceAdmissionKeepsHistoricalContentButRejectsStaleBlockedAndDuplicateItems() {
@@ -370,7 +385,7 @@ public class ContentPreferenceTest {
         feed.close();
     }
 
-    @Test public void womenMenWomenRestoresVerifiedFutureStreamsAndKeepsCurrentClip() {
+    @Test public void womenMenWomenRestoresOwnQueueAndVerifiedFutureStreams() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ShitTokContentPreference.set(activity, ContentPreference.WOMEN);
         ChaosFeedView feed = new ChaosFeedView(activity, item -> {}, false);
@@ -386,7 +401,8 @@ public class ContentPreferenceTest {
         org.robolectric.util.ReflectionHelpers.setField(feed, "queuePreference", ContentPreference.WOMEN);
         ShitTokContentPreference.set(activity, ContentPreference.MEN);
         org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
-        assertEquals(Arrays.asList(current), items);
+        assertTrue(items.isEmpty());
+        assertFalse(streams.containsKey(future.url));
         ShitTokContentPreference.set(activity, ContentPreference.WOMEN);
         org.robolectric.util.ReflectionHelpers.callInstanceMethod(feed, "applyContentPreference");
         assertEquals(Arrays.asList(current, future), items);

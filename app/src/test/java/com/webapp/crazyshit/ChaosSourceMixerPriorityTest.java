@@ -7,9 +7,9 @@ import org.junit.Test;
 public final class ChaosSourceMixerPriorityTest {
     @Test public void shittokUsesApprovedSessionSourcesWithoutPermanentMixQuotas() throws Exception {
         String mixer = new String(Files.readAllBytes(Paths.get("src/main/java/com/webapp/crazyshit/ChaosSourceMixer.java")), java.nio.charset.StandardCharsets.UTF_8);
-        for (String source : new String[] {"KAOTIC", "FAPELLO", "REGULAR", "BADDIEHUB", "ONLY_HAVEN", "SHIT_SHOW"})
+        for (String source : new String[] {"KAOTIC", "REGULAR", "EFUKT", "SHIT_SHOW"})
             assertTrue(source, mixer.contains("sourcePool.request(BATCH_" + source));
-        for (String excluded : new String[] {"XMEGADRIVE", "EFUKT"})
+        for (String excluded : new String[] {"XMEGADRIVE", "FAPELLO", "ONLY_HAVEN", "BADDIEHUB"})
             assertFalse(excluded, mixer.contains("sourcePool.request(BATCH_" + excluded));
         assertFalse(mixer.contains("mixAvailable("));
         assertFalse(mixer.contains("new BunkrRepository"));

@@ -197,6 +197,10 @@ public class ShitTokShareSheetTest {
         ShitTokShareSheet.Actions actions = new ShitTokShareSheet.Actions();
         AtomicInteger calls = new AtomicInteger();
         actions.autoScrollOn = true;
+        actions.notInterested = () -> {};
+        actions.blockCreator = () -> {};
+        actions.report = () -> {};
+        actions.details = () -> {};
         actions.autoScroll = calls::incrementAndGet;
         ShitTokShareSheet sheet = new ShitTokShareSheet(activity, item(), null, actions);
         try {

@@ -344,12 +344,9 @@ public class VisualRefreshTest {
                     "shittok_download",
                     "shittok_share",
                     "shittok_mute",
-                    "shittok_landscape_mute",
                     "shittok_landscape_like",
                     "shittok_landscape_comments",
-                    "shittok_landscape_save",
-                    "shittok_landscape_download",
-                    "shittok_landscape_share"
+                    "shittok_landscape_save"
             }) {
                 View control = root.findViewWithTag(tag);
                 assertNotNull(tag, control);
@@ -359,6 +356,13 @@ public class VisualRefreshTest {
                 assertNotNull(tag, control.getContentDescription());
             }
 
+            assertNull(root.findViewWithTag("shittok_landscape_mute"));
+            assertNull(root.findViewWithTag("shittok_landscape_download"));
+            View more = root.findViewWithTag("shittok_landscape_share");
+            assertNotNull(more);
+            assertEquals("More video actions", String.valueOf(more.getContentDescription()));
+            assertSame(root.findViewWithTag("shittok_landscape_header"), more.getParent());
+            assertTrue(more.isClickable());
             View save = root.findViewWithTag("shittok_save");
             assertEquals("Save to Watch Later", String.valueOf(save.getContentDescription()));
             View fullscreen = root.findViewWithTag("shittok_fullscreen");
@@ -372,117 +376,35 @@ public class VisualRefreshTest {
         }
     }
 
-    @Test public void shitTokAutoScrollIsSessionOnlyAndLandscapeHasOwnControls() throws Exception {
+    @Test public void shitTokAutoScrollPersistsAndDedicatedFullscreenOwnsControls() {
         ActivityController<Activity> host = Robolectric.buildActivity(Activity.class).setup();
         host.get().setTheme(R.style.Theme_CrazyShit);
-        ChaosFeedView feed = new ChaosFeedView(host.get(), item -> { }, false);
+        ChaosFeedView feed = new ChaosFeedView(host.get(), item -> {}, false);
         try {
             RecyclerView.Adapter<?> adapter = ReflectionHelpers.getField(feed, "adapter");
-            RecyclerView.ViewHolder holder = adapter.onCreateViewHolder(
-                    new RecyclerView(host.get()), 0);
+            RecyclerView.ViewHolder holder = adapter.onCreateViewHolder(new RecyclerView(host.get()), 0);
             View root = holder.itemView;
             assertNull(root.findViewWithTag("shittok_auto_scroll"));
             assertNull(root.findViewWithTag("shittok_landscape_auto_scroll"));
+            View overlay = root.findViewWithTag("shittok_fullscreen_controls");
+            assertNotNull(overlay);
+            assertEquals(View.GONE, overlay.getVisibility());
+            assertNotNull(overlay.findViewWithTag("shittok_landscape_header"));
+            assertNotNull(overlay.findViewWithTag("shittok_landscape_actions"));
+            assertNotNull(overlay.findViewWithTag("shittok_fullscreen_play_pause"));
+            assertNotNull(overlay.findViewWithTag("shittok_fullscreen_speed"));
             ReflectionHelpers.callInstanceMethod(feed, "setAutoScrollEnabled",
                     ReflectionHelpers.ClassParameter.from(boolean.class, true));
-            assertEquals(Boolean.TRUE, ReflectionHelpers.getField(feed, "autoScrollEnabled"));
+            ChaosFeedView fresh = new ChaosFeedView(host.get(), item -> {}, false);
+            try {
+                assertTrue((boolean) ReflectionHelpers.getField(fresh, "autoScrollEnabled"));
+                ReflectionHelpers.callInstanceMethod(fresh, "setAutoScrollEnabled",
+                        ReflectionHelpers.ClassParameter.from(boolean.class, false));
+                assertFalse((boolean) ReflectionHelpers.getField(fresh, "autoScrollEnabled"));
+            } finally { fresh.close(); }
+        } finally {
             ReflectionHelpers.callInstanceMethod(feed, "setAutoScrollEnabled",
                     ReflectionHelpers.ClassParameter.from(boolean.class, false));
-            assertEquals(Boolean.FALSE, ReflectionHelpers.getField(feed, "autoScrollEnabled"));
-
-            NativeContentItem sample = new NativeContentItem(NativeContentItem.KIND_MEDIA,
-                    "Alex Rivera #12345", "https://fapello.com/video/12345/",
-                    "", "", "Alex Rivera", "", "OnlyFap");
-            ReflectionHelpers.callInstanceMethod(holder, "bind",
-                    ReflectionHelpers.ClassParameter.from(NativeContentItem.class, sample),
-                    ReflectionHelpers.ClassParameter.from(int.class, 0));
-
-            android.content.res.Configuration original = new android.content.res.Configuration(
-                    host.get().getResources().getConfiguration());
-            android.content.res.Configuration landscape = new android.content.res.Configuration(original);
-            landscape.orientation = android.content.res.Configuration.ORIENTATION_LANDSCAPE;
-            host.get().getResources().updateConfiguration(landscape,
-                    host.get().getResources().getDisplayMetrics());
-            ReflectionHelpers.setField(feed, "manualFullscreen", true);
-            ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
-            View header = root.findViewWithTag("shittok_landscape_header");
-            View actions = root.findViewWithTag("shittok_landscape_actions");
-            View portraitRail = root.findViewWithTag("shittok_action_rail");
-            View topScrim = root.findViewWithTag("shittok_landscape_top_scrim");
-            View bottomScrim = root.findViewWithTag("shittok_landscape_bottom_scrim");
-            assertNotNull(topScrim);
-            assertNotNull(bottomScrim);
-            assertEquals(View.VISIBLE, header.getVisibility());
-            assertEquals(View.VISIBLE, actions.getVisibility());
-            assertEquals(View.VISIBLE, topScrim.getVisibility());
-            assertEquals(View.VISIBLE, bottomScrim.getVisibility());
-            assertTrue(topScrim.getBackground() instanceof android.graphics.drawable.GradientDrawable);
-            assertTrue(bottomScrim.getBackground() instanceof android.graphics.drawable.GradientDrawable);
-            assertEquals(View.GONE, ((View) portraitRail.getParent()).getVisibility());
-            capture(root, "shittok-landscape-controls", 740, 360);
-            root.measure(View.MeasureSpec.makeMeasureSpec(740, View.MeasureSpec.EXACTLY),
-                    View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY));
-            root.layout(0, 0, 740, 360);
-            assertTrue(header.getBottom() < actions.getTop());
-            View progress = root.findViewWithTag("shittok_progress_row");
-            View media = ReflectionHelpers.getField(holder, "mediaLayer");
-            assertEquals(0, media.getTop());
-            assertEquals(root.getHeight(), media.getBottom());
-            assertTrue(progress.getTop() < media.getBottom());
-            assertTrue(progress.getBottom() <= actions.getTop());
-            FrameLayout.LayoutParams actionParams =
-                    (FrameLayout.LayoutParams) actions.getLayoutParams();
-            assertEquals(BrowseUi.dp(host.get(), 4), actionParams.bottomMargin);
-            assertEquals(View.VISIBLE, root.findViewWithTag("shittok_elapsed").getVisibility());
-            assertEquals(View.VISIBLE, root.findViewWithTag("shittok_remaining").getVisibility());
-            host.get().getResources().updateConfiguration(original,
-                    host.get().getResources().getDisplayMetrics());
-            ReflectionHelpers.setField(feed, "manualFullscreen", false);
-            ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
-            assertEquals(View.GONE, header.getVisibility());
-            assertEquals(View.GONE, topScrim.getVisibility());
-            assertEquals(View.GONE, bottomScrim.getVisibility());
-            assertEquals(View.VISIBLE, ((View) portraitRail.getParent()).getVisibility());
-            ReflectionHelpers.setField(holder, "videoAspectRatio", 2f);
-            ReflectionHelpers.setField(holder, "horizontalVideo", true);
-            ReflectionHelpers.callInstanceMethod(holder, "syncOrientationChrome");
-            capture(root, "shittok-portrait-controls", 400, 900);
-            View fittedMedia = ReflectionHelpers.getField(holder, "mediaLayer");
-            View fittedPlayer = ReflectionHelpers.getField(holder, "playerView");
-            int capturedInset = ((FrameLayout.LayoutParams) fittedPlayer.getLayoutParams()).bottomMargin;
-            int capturedViewport = Math.max(0, fittedMedia.getHeight() - capturedInset);
-            int capturedVideoBottom = fittedMedia.getTop() + fittedPlayer.getTop()
-                    + (capturedViewport + Math.min(capturedViewport, Math.round(fittedPlayer.getWidth() / 2f))) / 2;
-            assertTrue(root.findViewWithTag("shittok_fullscreen").getTop() >= capturedVideoBottom
-                    + BrowseUi.dp(host.get(), 8));
-            root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
-                    View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY));
-            root.layout(0, 0, 400, 900);
-            FrameLayout.LayoutParams promptParams = (FrameLayout.LayoutParams)
-                    root.findViewWithTag("shittok_fullscreen").getLayoutParams();
-            media = ReflectionHelpers.getField(holder, "mediaLayer");
-            View player = ReflectionHelpers.getField(holder, "playerView");
-            int playerInset = ((FrameLayout.LayoutParams) player.getLayoutParams()).bottomMargin;
-            int viewportHeight = Math.max(0, media.getHeight() - playerInset);
-            int fittedHeight = Math.min(viewportHeight, Math.round(player.getWidth() / 2f));
-            int videoBottom = media.getTop() + player.getTop() + (viewportHeight + fittedHeight) / 2;
-            assertTrue(promptParams.topMargin >= videoBottom + BrowseUi.dp(host.get(), 8));
-            progress = root.findViewWithTag("shittok_progress_row");
-            android.widget.SeekBar bar = ReflectionHelpers.getField(holder, "seekBar");
-            int content = progress.getHeight() - bar.getPaddingTop() - bar.getPaddingBottom();
-            int track = Math.min(BrowseUi.dp(host.get(), 2), Math.max(1, content));
-            int trackTop = progress.getTop() + bar.getPaddingTop() + Math.max(0, content - track) / 2;
-            assertTrue(media.getBottom() >= trackTop - 1);
-            assertTrue(player.getBottom() + media.getTop() < trackTop);
-            assertEquals(View.GONE, root.findViewWithTag("shittok_elapsed").getVisibility());
-            assertEquals(View.GONE, root.findViewWithTag("shittok_remaining").getVisibility());
-            ChaosFeedView fresh = new ChaosFeedView(host.get(), item -> { }, false);
-            try {
-                assertEquals(Boolean.FALSE, ReflectionHelpers.getField(fresh, "autoScrollEnabled"));
-            } finally {
-                fresh.close();
-            }
-        } finally {
             feed.close();
             host.pause().stop().destroy();
         }

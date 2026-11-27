@@ -187,7 +187,13 @@ public class ShitTokCreatorMetadataLoaderTest {
     @Test public void feedAdmissionAndHolderBindDoNotWaitForCreatorLookup() {
         try (org.robolectric.android.controller.ActivityController<Activity> host =
                 Robolectric.buildActivity(Activity.class).setup()) {
+            ShitTokCategoryStrip.Tab.select(host.get(), ShitTokCategoryStrip.Tab.LADIES);
             ChaosFeedView feed = new ChaosFeedView(host.get(), item -> {}, false);
+            ChaosSourceMixer mixer = ReflectionHelpers.getField(feed, "sourceMixer");
+            ReflectionHelpers.setField(mixer, "poolMode", ContentPreference.WOMEN);
+            ReflectionHelpers.setField(mixer, "filtered",
+                    ShitTokFilteredInventoryTest.seed(ContentPreference.WOMEN,
+                            java.util.Collections.singletonList(clip())));
             ShitTokCreatorMetadataLoader original = ReflectionHelpers.getField(feed, "creatorMetadata");
             original.close();
             Queue worker = new Queue();

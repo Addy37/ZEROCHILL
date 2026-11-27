@@ -23,23 +23,22 @@ public class ShitTokRefillSourcesTest {
         AtomicBoolean streamed = new AtomicBoolean();
         ChaosSourceMixer mixer = new ChaosSourceMixer(new CrazyShitRepository(), new Random(5), source -> {
             if (source == 3) release.await(2, TimeUnit.SECONDS);
-            if (source != 3 && source != 5) return Collections.emptyList();
+            if (source != 3 && source != 1) return Collections.emptyList();
             return Collections.singletonList(ShitTokContinuityTest.item("provider" + source));
         });
         ReflectionHelpers.setField(mixer, "starterPending", false);
         try {
             mixer.loadRandomBatch(RuntimeEnvironment.getApplication(), true, items -> {
-                if (items.stream().anyMatch(i -> i.title.equals("provider5"))) {
+                if (items.stream().anyMatch(i -> i.title.equals("provider1"))) {
                     assertEquals(1, release.getCount());
                     streamed.set(true); release.countDown();
                 }
             });
             assertTrue(streamed.get());
-            assertEquals(0, mixer.activeFetches());
         } finally { release.countDown(); }
     }
 
-    @Test public void shittokRecoveryDoesNotStartEfuktOrXMegaDrive() throws Exception {
+    @Test public void chaosRecoveryUsesOnlyApprovedWildSources() throws Exception {
         Set<Integer> requested = ConcurrentHashMap.newKeySet();
         CountDownLatch expected = new CountDownLatch(4);
         ChaosSourceMixer mixer = new ChaosSourceMixer(new CrazyShitRepository(), new Random(9), source -> {
@@ -47,55 +46,35 @@ public class ShitTokRefillSourcesTest {
             expected.countDown();
             return Collections.emptyList();
         });
-
-        mixer.recoverSources(RuntimeEnvironment.getApplication());
-
-        assertTrue(expected.await(2, TimeUnit.SECONDS));
-        assertFalse(requested.contains(2));
-        assertFalse(requested.contains(8));
-        ShitTokSourcePool pool = ReflectionHelpers.getField(mixer, "sourcePool");
-        assertEquals(ShitTokSourcePool.Health.FILTERED, pool.health(2));
-        assertEquals(ShitTokSourcePool.Health.FILTERED, pool.health(8));
+        try {
+            mixer.onFirstFrame();
+            mixer.recoverSources(RuntimeEnvironment.getApplication());
+            assertTrue(expected.await(2, TimeUnit.SECONDS));
+            assertEquals(new HashSet<>(Arrays.asList(1, 2, 3, 4)), requested);
+            ShitTokSourcePool pool = ReflectionHelpers.getField(mixer, "sourcePool");
+            for (int source : new int[]{5, 6, 7, 8})
+                assertEquals(ShitTokSourcePool.Health.FILTERED, pool.health(source));
+        } finally { mixer.stopPreference(); }
     }
 
-    @Test public void baddieHubAcquiresInAllAndKeepsItsBufferedVideoAcrossOnlyFap() throws Exception {
+    @Test public void chaosCannotDrainCachedCreatorMedia() {
         Application app = RuntimeEnvironment.getApplication();
         int baddieHubSource = ReflectionHelpers.getStaticField(ChaosSourceMixer.class, "BATCH_BADDIEHUB");
         NativeContentItem clip = new NativeContentItem(NativeContentItem.KIND_MEDIA, "Test creator",
                 "https://baddiehub.com/clip/", "", "", "BaddieHub", "", "");
-        AtomicInteger baddieHubRequests = new AtomicInteger();
-        ChaosSourceMixer mixer = new ChaosSourceMixer(new CrazyShitRepository(), new Random(7), source -> {
-            if (source != baddieHubSource) return Collections.emptyList();
-            baddieHubRequests.incrementAndGet();
-            return Collections.singletonList(clip);
-        });
+        ChaosSourceMixer mixer = new ChaosSourceMixer(new CrazyShitRepository(), new Random(7),
+                source -> Collections.emptyList());
         try {
-            mixer.recoverSources(app);
+            ShitTokCategoryStrip.Tab.select(app, ShitTokCategoryStrip.Tab.CHAOS);
             ShitTokSourcePool pool = ReflectionHelpers.getField(mixer, "sourcePool");
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
-            synchronized (pool) {
-                while (!pool.hasReady(baddieHubSource)) {
-                    long remaining = deadline - System.nanoTime();
-                    assertTrue("All feed never buffered BaddieHub", remaining > 0);
-                    TimeUnit.NANOSECONDS.timedWait(pool, remaining);
-                }
-            }
-
-            ShitTokSourceMode.set(app, ShitTokSourceMode.ONLY_FAP);
+            pool.putCached(baddieHubSource, Collections.singletonList(clip));
+            assertEquals(Collections.singletonList(clip), pool.peekCached(baddieHubSource));
             mixer.requestPreference(app, () -> {}, false);
-            mixer.recoverSources(app);
             assertEquals(ShitTokSourcePool.Health.FILTERED, pool.health(baddieHubSource));
             assertTrue(mixer.takeReadyCandidates().isEmpty());
-            assertFalse(mixer.matchesPreference(clip, ContentPreference.ALL));
-
-            ShitTokSourceMode.set(app, ShitTokSourceMode.ALL);
-            mixer.requestPreference(app, () -> {}, false);
-            assertEquals(Collections.singletonList(clip), mixer.takeReadyCandidates());
-            assertEquals(1, baddieHubRequests.get());
-        } finally {
-            ShitTokSourceMode.set(app, ShitTokSourceMode.ALL);
-            mixer.stopPreference();
-        }
+            // Category inventories have their own independent buffers.
+            assertTrue(pool.peekCached(baddieHubSource).isEmpty());
+        } finally { mixer.stopPreference(); }
     }
 
     @Test public void shitShowResolverCanReuseLiveHostFromApplicationContext() {

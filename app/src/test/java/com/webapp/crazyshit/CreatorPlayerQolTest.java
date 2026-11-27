@@ -410,7 +410,7 @@ public class CreatorPlayerQolTest {
         RecyclerView.ViewHolder tile = rows.createViewHolder(recycler, rows.getItemViewType(1));
         rows.bindViewHolder(tile, 1);
         layout(tile.itemView, 104, 130);
-        assertEquals(130, tile.itemView.getMeasuredHeight());
+        assertEquals(Math.round(104 * 1.02f), tile.itemView.getMeasuredHeight());
         assertEquals(View.VISIBLE, ((ViewGroup) tile.itemView).getChildAt(1).getVisibility());
         assertEquals(View.VISIBLE, ((ViewGroup) tile.itemView).getChildAt(2).getVisibility());
         assertEquals(2, UpdateInboxActivity.creatorGridColumns(280));

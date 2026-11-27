@@ -1,0 +1,89 @@
+name: ZEROCHILL 7.5 release regression recovery
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+concurrency:
+  group: release-recovery-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  focused:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/zerochill-7.5-release-validation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ZEROCHILL_V7_TRAFFIC: 'true'
+      SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ANON_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/dynamic-api
+      SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
+      ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ''
+      ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+      - name: Re-run all failing classes and nearby approved contracts
+        run: >-
+          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
+          :app:testDebugUnitTest
+          --tests '*HeaderGlassMaterialTest'
+          --tests '*BunkrGalleryResolutionLifecycleTest'
+          --tests '*ChaosSourceMixerPriorityTest'
+          --tests '*ContentPreferenceTest'
+          --tests '*CreatorPlayerQolTest'
+          --tests '*HeaderProfileAvatarTest'
+          --tests '*OnlyFapGalleryLayoutTest'
+          --tests '*OnlyFapGalleryGlideTest'
+          --tests '*ShitTokAutoScrollIntegrationTest'
+          --tests '*ShitTokCreatorMetadataLoaderTest'
+          --tests '*ShitTokOrientationQueueTest'
+          --tests '*ShitTokRefillSourcesTest'
+          --tests '*ShitTokShareSheetTest'
+          --tests '*VisualRefreshTest'
+          --tests '*ShitTokFeedSessionStoreTest'
+          --tests '*ShitTokFeedSourcesTest'
+          --tests '*ShitTokFiveFeedInventoryTest'
+          --tests '*ShitTokInteractionUiTest'
+          --tests '*PlayerSaveMenuTest'
+          --tests '*WhatsNewTest'
+      - name: Report exact failures
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import pathlib, xml.etree.ElementTree as ET
+          for path in sorted(pathlib.Path('app/build/test-results/testDebugUnitTest').glob('TEST-*.xml')):
+              root = ET.parse(path).getroot()
+              for case in root.findall('testcase'):
+                  for failure in list(case.findall('failure')) + list(case.findall('error')):
+                      print(case.get('classname'), case.get('name'), failure.get('message'))
+                      print((failure.text or '')[:4000])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-regression-results
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 7
