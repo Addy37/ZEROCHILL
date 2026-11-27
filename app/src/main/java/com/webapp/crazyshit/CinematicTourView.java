@@ -6,12 +6,10 @@ import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -228,7 +226,7 @@ final class CinematicTourView extends LinearLayout {
             c.restoreToCount(layer);
             c.restore();
             box(c,61,294,159,308,7,0xff202632);
-            for(int i=0;i<5;i++) circle(c,72+i*19,301,3.5f,i==Math.min(scene,3)?accent:0xff7d8996);
+            for(int i=0;i<5;i++) circle(c,72+i*19,301,3.5f,i==scene?accent:0xff7d8996);
             c.restore();
         }
         float ease(float t) { return t*t*(3-2*t); }
@@ -239,7 +237,7 @@ final class CinematicTourView extends LinearLayout {
             art(c,44,287-shift,176,532-shift,WizardMascotArt.SKATE);
             c.restore();
             box(c,44,23,176,42,4,0xff10151c);
-            for(int i=0;i<5;i++) label(c,tabs[i],57+i*26,34,5.8f,i==(t<.45f?0:1)?accent:Color.WHITE);
+            for(int i=0;i<5;i++) label(c,tabs[i],57+i*26,34,5.8f,i==Math.min(4,(int)(t*5))?accent:Color.WHITE);
             for(int i=0;i<4;i++) circle(c,164,155+i*23,7,0xffc6d1d9);
             box(c,50,256,111,261,2,Color.WHITE);
             box(c,50,266,92,270,2,0xffbac3cf);

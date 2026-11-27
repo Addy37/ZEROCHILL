@@ -49,12 +49,13 @@ final class WizardMascotArt {
         float action=(float)Math.sin(t*Math.PI*2);
         c.translate(0,bob);
         if(pose==SKATE)c.rotate(-9+action*5,50,65);
+        if(pose==SWIPE)c.rotate(action*4,50,60);
         // Tail, soft halo and compact body.
         oval(c,17,19,85,83,soft);
         path.reset();path.moveTo(29,69);path.cubicTo(2,73,1,44,15,42);
         strokePath(c,accent,2.3f);
         triangle(c,8,36,21,40,13,50,accent);
-        body(c,pose);
+        body(c);
         if(pose==POPCORN) {
             oval(c,8,75,93,98,0xff14232c);
             oval(c,17,74,80,94,soft);
@@ -126,7 +127,7 @@ final class WizardMascotArt {
         }
         c.restore();
     }
-    private void body(Canvas c,int pose){oval(c,28,51,73,84,accent);oval(c,30,53,71,82,dark);}
+    private void body(Canvas c){oval(c,28,51,73,84,accent);oval(c,30,53,71,82,dark);}
     private void limb(Canvas c,float x,float y,float xx,float yy){line(c,x,y,xx,yy,accent,8);line(c,x,y,xx,yy,dark,5);circle(c,xx,yy,4,accent);circle(c,xx,yy,2.7f,dark);}
     private void mediaCard(Canvas c,float x,float y,float w,float h){round(c,x,y,x+w,y+h,3,accent);round(c,x+1,y+1,x+w-1,y+h-1,2,0xff25394a);triangle(c,x+w*.4f,y+h*.24f,x+w*.4f,y+h*.76f,x+w*.73f,y+h*.5f,Color.WHITE);}
     private void oval(Canvas c,float l,float t,float r,float b,int color){p.setStyle(Paint.Style.FILL);p.setColor(color);rect.set(l,t,r,b);c.drawOval(rect,p);}
@@ -147,6 +148,9 @@ final class WizardMascotArt {
         private void start(){if(animator!=null||!ZeroChillMotion.animationsEnabled(getContext()))return;animator=ValueAnimator.ofFloat(0,1);animator.setDuration(2800);animator.setRepeatCount(1);animator.addUpdateListener(a->{phase=(float)a.getAnimatedValue();invalidate();});animator.start();}
         private void stop(){if(animator!=null)animator.cancel();animator=null;phase=.7f;invalidate();}
         @Override protected void onDetachedFromWindow(){stop();super.onDetachedFromWindow();}
-        @Override protected void onDraw(Canvas c){super.onDraw(c);float s=Math.min(getWidth(),getHeight());art.draw(c,(getWidth()-s)/2,(getHeight()-s)/2,s,POPCORN,phase);}
+        @Override protected void onDraw(Canvas c){
+            super.onDraw(c);float s=Math.min(getWidth(),getHeight());
+            art.draw(c,(getWidth()-s)/2,(getHeight()-s)/2,s,POPCORN,phase);
+        }
     }
 }
