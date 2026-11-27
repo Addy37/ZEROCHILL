@@ -20,7 +20,7 @@ New sources. Smarter search. Your content, your way. Explore five ShitTok feeds,
 ## Library, collections and creators
 
 - Find saved photos and videos, Watch Later, history and downloads in the updated Library. Saved Library media can start playing while its album context loads.
-- Create and manage custom collections of favorite photos and videos. Collections display artwork from their contents and are included in new ZEROCHILL backups.
+- Create and manage custom collections of favorite photos and videos. Collections display artwork from their contents and are included in new ZEROCHILL backups. In ShitTok and Shows, tap the bookmark to save directly to Watch Later or a collection.
 - Favorite Creators has an adaptive grid and a draggable alphabet. The index previews the letter while you drag through populated sections.
 - Library destinations use consistent headers and inline search. Grid layouts adapt to the available width.
 
@@ -45,6 +45,6 @@ New sources. Smarter search. Your content, your way. Explore five ShitTok feeds,
 
 ## Updating
 
-Install **ZeroChill.apk** over your existing ZEROCHILL installation to keep your saved data. Version 7.5.0 uses Android version code `7005081` and the established production package and signing identity.
+Install **ZeroChill.apk** over your existing ZEROCHILL installation to keep your saved data. Version 7.5.0 uses Android version code `7005082` and the established production package and signing identity.
 
 [Compare the changes since 7.4.0](https://github.com/Addy37/ZEROCHILL/compare/v7.4.0...23e3229adb7b997d66f9298988f82a4277351e7f)

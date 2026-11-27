@@ -9,21 +9,26 @@ final class MediaCollectionPicker {
     private MediaCollectionPicker() { }
 
     static void show(Activity activity, NativeContentItem item, String galleryKey, Runnable changed) {
+        show(activity, item, galleryKey, changed, null);
+    }
+
+    static void show(Activity activity, NativeContentItem item, String galleryKey, Runnable changed,
+            java.util.function.Consumer<android.app.Dialog> track) {
         if (item == null || activity.isFinishing() || activity.isDestroyed()) return;
         Set<String> selected = new LinkedHashSet<>();
         for (MediaCollectionStore.Group group : MediaCollectionStore.load(activity))
             if (group.urls.contains(item.url)) selected.add(group.id);
-        showSelection(activity, item, galleryKey, selected, changed);
+        showSelection(activity, item, galleryKey, selected, changed, track);
     }
 
     private static void showSelection(Activity activity, NativeContentItem item, String galleryKey,
-            Set<String> selected, Runnable changed) {
+            Set<String> selected, Runnable changed, java.util.function.Consumer<android.app.Dialog> track) {
         List<MediaCollectionStore.Group> groups = MediaCollectionStore.load(activity);
         if (groups.isEmpty()) {
             name(activity, "New collection", "", value -> {
                 selected.add(MediaCollectionStore.create(activity, value));
-                showSelection(activity, item, galleryKey, selected, changed);
-            });
+                showSelection(activity, item, galleryKey, selected, changed, track);
+            }, track);
             return;
         }
         String[] labels = new String[groups.size()];
@@ -32,7 +37,7 @@ final class MediaCollectionPicker {
             labels[i] = groups.get(i).name;
             checked[i] = selected.contains(groups.get(i).id);
         }
-        new ZeroChillDialog.Builder(activity).setTitle("Save to collections")
+        android.app.AlertDialog selection = new ZeroChillDialog.Builder(activity).setTitle("Save to collections")
                 .setMultiChoiceItems(labels, checked, (dialog, index, value) -> {
                     String id = groups.get(index).id;
                     if (value) selected.add(id); else selected.remove(id);
@@ -40,8 +45,8 @@ final class MediaCollectionPicker {
                 .setNeutralButton("+ New collection", (dialog, which) ->
                         name(activity, "New collection", "", value -> {
                             selected.add(MediaCollectionStore.create(activity, value));
-                            showSelection(activity, item, galleryKey, selected, changed);
-                        }))
+                            showSelection(activity, item, galleryKey, selected, changed, track);
+                        }, track))
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Done", (dialog, which) -> {
                     try {
@@ -49,11 +54,17 @@ final class MediaCollectionPicker {
                         if (changed != null) changed.run();
                     } catch (Exception error) { failure(activity); }
                 }).show();
+        if (track != null) track.accept(selection);
     }
 
     interface NameAction { void accept(String name) throws Exception; }
 
     static void name(Activity activity, String title, String initial, NameAction action) {
+        name(activity, title, initial, action, null);
+    }
+
+    private static void name(Activity activity, String title, String initial, NameAction action,
+            java.util.function.Consumer<android.app.Dialog> track) {
         EditText input = new ZeroChillEditText(activity);
         input.setSingleLine(true);
         input.setHint("Collection name");
@@ -74,6 +85,7 @@ final class MediaCollectionPicker {
                     catch (Exception error) { input.setError("Couldn't save collection"); }
                 }));
         dialog.show();
+        if (track != null) track.accept(dialog);
     }
 
     static void failure(Activity activity) {

@@ -116,7 +116,11 @@ final class VideoActionSheet {
 
 
     static void showCompact(Activity activity, String videoTitle, Section... sections) {
-        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+        showCompactWithTitle(activity, videoTitle, "More", sections);
+    }
+
+    static Dialog showCompactWithTitle(Activity activity, String videoTitle, String headerTitle, Section... sections) {
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return null;
         boolean sidePanel = activity.getResources().getConfiguration().orientation ==
                 Configuration.ORIENTATION_LANDSCAPE;
         Dialog dialog = sidePanel ? new Dialog(activity) : new BottomSheetDialog(activity);
@@ -143,7 +147,7 @@ final class VideoActionSheet {
                 : "Video actions for " + videoTitle);
 
         if (!sidePanel) addDragHandle(activity, panel);
-        addCompactHeader(activity, dialog, panel);
+        addCompactHeader(activity, dialog, panel, headerTitle);
 
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(false);
@@ -160,7 +164,7 @@ final class VideoActionSheet {
         dialog.show();
 
         Window window = dialog.getWindow();
-        if (window == null) return;
+        if (window == null) return dialog;
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         WindowManager.LayoutParams attrs = window.getAttributes();
@@ -185,19 +189,21 @@ final class VideoActionSheet {
         } else {
             ZeroChillMotion.enterFromEnd(panel, dp(activity, 18));
         }
+        return dialog;
     }
 
     private static void addCompactHeader(
             Activity activity,
             Dialog dialog,
-            LinearLayout panel
+            LinearLayout panel,
+            String headerTitle
     ) {
         LinearLayout header = new LinearLayout(activity);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(activity, 4), 0, 0, dp(activity, 4));
 
-        TextView title = text(activity, "More", 18, Color.WHITE, true);
+        TextView title = text(activity, headerTitle, 18, Color.WHITE, true);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
 
         ImageView close = icon(activity, R.drawable.ic_more_close, 34, 8);

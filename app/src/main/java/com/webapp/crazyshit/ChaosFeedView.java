@@ -240,6 +240,7 @@ public final class ChaosFeedView extends FrameLayout {
     private InlineCommentsDialog commentsDialog;
     private ShitTokShareSheet shareSheet;
     private AlertDialog actionDialog;
+    private final PlayerSaveMenu saveMenu = new PlayerSaveMenu();
     private volatile boolean active;
     private volatile boolean hostResumed = true;
     private boolean poolLoading;
@@ -1038,6 +1039,7 @@ public final class ChaosFeedView extends FrameLayout {
         setFeedPagingEnabled(active && hostResumed && !searchCoverActive && !pendingCategoryActivation);
         if (shareSheet != null) shareSheet.dismiss();
         if (actionDialog != null) actionDialog.dismiss();
+        saveMenu.dismiss();
         resetTemporaryPinch();
         resetCreatorSwipePreview();
         if (commentsDialog != null && commentsDialog.isShowing()) commentsDialog.dismiss();
@@ -1115,6 +1117,7 @@ public final class ChaosFeedView extends FrameLayout {
         removeCallbacks(showCategoryWait);
         if (shareSheet != null) shareSheet.dismiss();
         if (actionDialog != null) actionDialog.dismiss();
+        saveMenu.dismiss();
         searchCoverActive = false;
         playbackOwner.setSearchCovered(false);
         resetTemporaryPinch();
@@ -3351,6 +3354,7 @@ public final class ChaosFeedView extends FrameLayout {
 
     private boolean interactionOverlayOpen() {
         return (shareSheet != null && shareSheet.isShowing())
+                || saveMenu.isOpen()
                 || (actionDialog != null && actionDialog.isShowing())
                 || (commentsDialog != null && commentsDialog.isShowing());
     }
@@ -3509,6 +3513,12 @@ public final class ChaosFeedView extends FrameLayout {
         activity.startActivity(Intent.createChooser(share, "Share playback report"));
     }
 
+    private void showSaveOptions(NativeContentItem target) {
+        if (target == null || target.url.isEmpty() || closed || interactionOverlayOpen()) return;
+        cancelPendingAutoAdvance();
+        saveMenu.show(activity, target, () -> toggleSaved(target, null), this::resumeAutoAfterOverlay);
+    }
+
     private void toggleSaved(NativeContentItem item, TextView button) {
         if (item == null) return;
         if (FavoriteStore.contains(activity, item.url)) {
@@ -3523,6 +3533,7 @@ public final class ChaosFeedView extends FrameLayout {
         ChaosHolder selected = holderAt(selectedPosition);
         if (selected != null && selected.item != null
                 && selected.item.url.equals(item.url)) {
+            updateSaveButton(item, selected.save);
             updateSaveButton(item, selected.landscapeSave);
         }
     }
@@ -3537,7 +3548,7 @@ public final class ChaosFeedView extends FrameLayout {
                 0
         );
         button.setCompoundDrawableTintList(ColorStateList.valueOf(saved ? AppearanceTheme.accent(activity) : Color.WHITE));
-        button.setContentDescription(saved ? "Remove from Watch Later" : "Save to Watch Later");
+        button.setContentDescription(saved ? "Saved to Watch Later, save options" : "Save options");
     }
 
     private void openInlineComments(NativeContentItem item) {
@@ -4352,7 +4363,7 @@ public final class ChaosFeedView extends FrameLayout {
             landscapeFavorite.setOnClickListener(this::favoriteCreator);
 
             landscapeLike.setOnClickListener(v -> { haptic(v); toggleVideoLike(); showControlsTemporarily(); });
-            landscapeSave.setOnClickListener(v -> { haptic(v); toggleSaved(item, save); showControlsTemporarily(); });
+            landscapeSave.setOnClickListener(v -> { haptic(v); showSaveOptions(item); showControlsTemporarily(); });
             landscapeComments.setOnClickListener(v -> { haptic(v); if (item != null) openInlineComments(item); });
 
             fullscreenGestures = new FullscreenVideoGestures(fullscreenSurface, () -> player,
@@ -4642,7 +4653,7 @@ public final class ChaosFeedView extends FrameLayout {
             });
             save.setOnClickListener(v -> {
                 haptic(v);
-                toggleSaved(item, save);
+                showSaveOptions(item);
                 showControlsTemporarily();
             });
             comments.setOnClickListener(v -> {

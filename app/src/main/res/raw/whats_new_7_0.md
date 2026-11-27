@@ -8,7 +8,7 @@
 - Spotlight now shows one clear list, with more results from Bunkr and Erome as you scroll.
 - Shows search finds more relevant matches across providers, and Continue Watching keeps your place in view.
 - Your Library puts saved media, Watch Later, history and downloads within easier reach.
-- Organize your favorite photos and videos into custom collections with their own cover artwork.
+- Organize photos and videos into custom collections. Tap the bookmark in ShitTok or Shows to save to Watch Later or a collection.
 - Find a favorite creator faster by dragging across the alphabet beside the creator grid.
 - Gallery thumbnails appear in batches as you browse, so more of the gallery is ready when you reach it.
 - Notifications, messages and account screens share clearer headers and controls.

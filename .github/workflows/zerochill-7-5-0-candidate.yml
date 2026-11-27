@@ -143,6 +143,7 @@ jobs:
           --tests '*ConversationCleanupUiTest'
           --tests '*CreatorBackupTest'
           --tests '*MediaCollectionStoreTest'
+          --tests '*PlayerSaveMenuTest'
           --tests '*WhatsNewTest'
           --tests '*ReleaseNotesSummaryTest'
           --tests '*StartupWizardUiTest'

@@ -252,10 +252,15 @@ final class ShowsFullscreenControls {
     }
 
     void syncSaved(boolean saved) {
+        syncSaved(saved, false);
+    }
+
+    void syncSaved(boolean saved, boolean options) {
         ImageButton save = view.findViewById(R.id.shows_save);
         save.setImageResource(saved ? R.drawable.ic_action_save_outline : R.drawable.ic_action_save_outline);
         save.setColorFilter(saved ? AppearanceTheme.accent(view.getContext()) : Color.WHITE);
-        save.setContentDescription(saved ? "Remove from Watch Later" : "Save to Watch Later");
+        save.setContentDescription(options ? (saved ? "Saved to Watch Later, save options" : "Save options")
+                : (saved ? "Remove from Watch Later" : "Save to Watch Later"));
     }
 
     void syncLiked(boolean liked, boolean enabled) {

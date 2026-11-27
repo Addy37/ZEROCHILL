@@ -140,6 +140,7 @@ public class VideoDetailActivity extends Activity {
     private TextView videoLikeButton;
     private TextView commentButton;
     private TextView watchLaterButton;
+    private final PlayerSaveMenu saveMenu = new PlayerSaveMenu();
     private ImageButton portraitFullscreenButton;
     private ProgressBar loading;
     private ImageView startupPoster;
@@ -261,6 +262,10 @@ public class VideoDetailActivity extends Activity {
     private final Runnable showsCountdownTick = new Runnable() {
         @Override public void run() {
             if (showsNextOverlay == null || showsCountdownItem == null || !recoveryResumed) return;
+            if (saveMenu.isOpen()) {
+                showsNextOverlay.postDelayed(this, 250L);
+                return;
+            }
             long remaining = Math.max(0L, showsCountdownDeadline - SystemClock.uptimeMillis());
             showsNextText.setText(getString(R.string.shows_watch_countdown,
                     Math.max(1L, (remaining + 999L) / 1000L)));
@@ -637,7 +642,7 @@ public class VideoDetailActivity extends Activity {
             showsLandscapeActions.addView(actionIconButton(R.drawable.ic_action_comments,
                     this::openComments, "Open comments"), new LinearLayout.LayoutParams(dp(48), dp(48)));
             showsLandscapeSave = actionIconButton(R.drawable.ic_action_save_outline,
-                    this::toggleWatchLater, "Save to Watch Later");
+                    this::showSaveOptions, "Save options");
             showsLandscapeActions.addView(showsLandscapeSave, new LinearLayout.LayoutParams(dp(48), dp(48)));
             showsLandscapeActions.addView(actionIconButton(R.drawable.ic_action_share,
                     this::sharePage, "Share video"), new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -654,7 +659,7 @@ public class VideoDetailActivity extends Activity {
         fullscreenOverlay.findViewById(R.id.player_back).setOnClickListener(v -> { haptic(v); handleBack(); });
         fullscreenOverlay.findViewById(R.id.player_menu).setOnClickListener(v -> { haptic(v); showPlayerMenu(); });
         fullscreenOverlay.findViewById(R.id.shows_save).setOnClickListener(v -> {
-            haptic(v); toggleWatchLater(); fullscreenControls.show();
+            haptic(v); showSaveOptions(); fullscreenControls.show();
         });
         fullscreenOverlay.findViewById(R.id.shows_download).setOnClickListener(v -> {
             haptic(v); downloadCurrentVideo(); fullscreenControls.show();
@@ -747,8 +752,8 @@ public class VideoDetailActivity extends Activity {
                 FavoriteStore.contains(this, pageUrl)
                         ? R.drawable.ic_nav_saved
                         : R.drawable.ic_action_save_outline,
-                this::toggleWatchLater,
-                "Save to Watch Later"
+                this::showSaveOptions,
+                showsOrigin ? "Save options" : "Save to Watch Later"
         );
         actions.addView(watchLaterButton, actionParams());
         actions.addView(actionIconButton(
@@ -2879,7 +2884,8 @@ public class VideoDetailActivity extends Activity {
         watchLaterButton.setText(" ");
         watchLaterButton.setTextColor(Color.TRANSPARENT);
         watchLaterButton.setContentDescription(
-                saved ? "Remove from Watch Later" : "Save to Watch Later"
+                showsOrigin ? (saved ? "Saved to Watch Later, save options" : "Save options")
+                        : (saved ? "Remove from Watch Later" : "Save to Watch Later")
         );
         if (showsLandscapeSave != null) {
             showsLandscapeSave.setCompoundDrawablesWithIntrinsicBounds(0,
@@ -2942,17 +2948,34 @@ public class VideoDetailActivity extends Activity {
         );
     }
 
+    private void showSaveOptions() {
+        if (!showsOrigin) {
+            toggleWatchLater();
+            return;
+        }
+        NativeContentItem target = currentContent();
+        saveMenu.show(this, target, () -> toggleWatchLater(target), () -> {
+            if (!isFinishing() && !isDestroyed() && fullscreenControls != null && fullscreenChromeActive)
+                fullscreenControls.show();
+        });
+    }
+
     private void toggleWatchLater() {
-        if (pageUrl.isEmpty()) return;
-        if (FavoriteStore.contains(this, pageUrl)) {
-            FavoriteStore.remove(this, pageUrl);
+        toggleWatchLater(currentContent());
+    }
+
+    private void toggleWatchLater(NativeContentItem target) {
+        if (target == null || target.url.isEmpty()) return;
+        if (FavoriteStore.contains(this, target.url)) {
+            FavoriteStore.remove(this, target.url);
             ZeroChillToast.makeText(this, "Removed from Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         } else {
-            FavoriteStore.add(this, currentContent());
+            FavoriteStore.add(this, target);
             ZeroChillToast.makeText(this, "Saved to Watch Later.", ZeroChillToast.LENGTH_SHORT).show();
         }
+        if (!target.url.equals(pageUrl)) return;
         updateWatchLaterButton();
-        if (fullscreenControls != null) fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
+        if (fullscreenControls != null) fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl), showsOrigin);
     }
 
     private void sharePage() {
@@ -3162,6 +3185,7 @@ public class VideoDetailActivity extends Activity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        saveMenu.dismiss();
         ShowsWatchLaunch.cancel(root);
         if (showsOrigin && showsSavedOnExit) {
             finish();
@@ -3261,7 +3285,7 @@ public class VideoDetailActivity extends Activity {
         if (fullscreen) {
             ((TextView) fullscreenOverlay.findViewById(R.id.player_title)).setText(
                     isBunkrAlbumWatch() ? BunkrAlbumTitles.display(currentContent()) : title);
-            fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl));
+            fullscreenControls.syncSaved(FavoriteStore.contains(this, pageUrl), showsOrigin);
             View toggle = fullscreenOverlay.findViewById(R.id.shows_fullscreen_toggle);
             toggle.setVisibility(showsOrigin || (!landscape && !portraitVideo) ? View.VISIBLE : View.GONE);
             fullscreenOverlay.post(() -> fullscreenControls.applyInsets(
@@ -3922,6 +3946,7 @@ public class VideoDetailActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        saveMenu.dismiss();
         ShowsWatchLaunch.cancel(root);
         ShowsWatchLaunch.release(getIntent());
         if (showsLandscapeMotion != null) showsLandscapeMotion.leave();
