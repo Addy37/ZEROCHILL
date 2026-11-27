@@ -1,5 +1,9 @@
 # ZEROCHILL 7.5 release handoff
 
+## Candidate 7005084: More menu redesign
+
+Owner explicitly approved the ShitTok and Shows Save To update and requested the compact More menu mockup. Incorporates PR #501's two-column grid, theme accents, active-download and unread badges, secondary actions, and anchored panel. Existing callbacks and player save behavior preserved. Production package, signing, backend, and data unchanged. Added MoreMenuLayoutTest and retained SupportZeroChillDialogTest in focused CI. Previous 7005083 signed artifact was built but its emulator upgrade test failed. New signed candidate and physical testing pending; no production merge or publication authorized.
+
 ## Candidate 7005083: save sheet polish
 
 Owner confirmed build 7005082's save functionality and requested a dedicated visual treatment. The new Save to sheet uses two natural-height rows, 48dp icon tiles, an accent-colored collection action, saved checkmark, and a portrait bottom sheet or landscape side panel. It retains the existing callbacks, picker, and storage. This supersedes the old APK for acceptance. The 7005082 focused tests, signing and artifact upload passed; its emulator upgrade job failed and must not be counted as passed. Build 7005083 requires fresh signed verification and phone acceptance. No publication authorized.
