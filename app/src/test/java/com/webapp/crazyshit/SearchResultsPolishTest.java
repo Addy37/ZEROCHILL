@@ -32,7 +32,7 @@ public class SearchResultsPolishTest {
         static List<String> queries = new CopyOnWriteArrayList<>();
         static CountDownLatch partial, finish;
         static volatile FapzoneCreatorSearchRepository.ResultListener listener;
-        @Implementation protected List<NativeContentItem> search(Context context, String query, int limit,
+        @Implementation protected List<NativeContentItem> searchAllCreators(Context context, String query, int limit,
                 FapzoneCreatorSearchRepository.ResultListener callback) throws Exception {
             queries.add(query);
             listener = callback;
@@ -110,6 +110,7 @@ public class SearchResultsPolishTest {
 
     @Test public void livePartialAndFinalResultsShareOneListAndStaleResponsesAreRejected() throws Exception {
         var host = Robolectric.buildActivity(Activity.class).setup();
+        ContentPreference.setOnlyFap(host.get(), ContentPreference.PAWCHIVE);
         SearchPanel panel = new SearchPanel(host.get(), new Intent().putExtra("scope", "bunkr"), true, () -> {});
         panel.create(null);
         try {
@@ -128,6 +129,7 @@ public class SearchResultsPolishTest {
             SearchSource.finish.countDown();
             await(() -> ((int) ReflectionHelpers.getField(panel, "pendingSources")) == 0);
             assertEquals(3, list.getAdapter().getItemCount());
+            assertEquals(ContentPreference.PAWCHIVE, ContentPreference.getOnlyFap(host.get()));
             assertSame(list, ReflectionHelpers.getField(panel, "recycler"));
             assertEquals(View.GONE, ((View) ReflectionHelpers.getField(panel, "progress")).getVisibility());
             assertTrue(RecentSearchStore.load(host.get()).isEmpty());
