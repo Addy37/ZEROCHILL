@@ -30,7 +30,6 @@ public final class GalleryIndexWorker extends Worker {
     private static final String PREFS = "gallery_index_queue_v1";
     private static final Object LOCK = new Object();
     private static final int MAX_RECORDS = 32;
-    private static final int MAX_ITEMS = 10000;
     private static final long SLICE_MS = 7 * 60 * 1000L;
     private static final String WAITING = "Waiting";
     private static final String RUNNING = "Fetching";
@@ -40,7 +39,7 @@ public final class GalleryIndexWorker extends Worker {
     private static final String PARTIAL = "Partial";
     private static final String FAILED = "Failed";
     private static final java.util.concurrent.Semaphore SLOTS =
-            new java.util.concurrent.Semaphore(2, true);
+            new java.util.concurrent.Semaphore(GalleryIndexQueue.MAX_ACTIVE, true);
 
     public GalleryIndexWorker(Context context, WorkerParameters parameters) {
         super(context, parameters);
@@ -58,7 +57,7 @@ public final class GalleryIndexWorker extends Worker {
     private static boolean active(JSONObject value) {
         if (value == null) return false;
         String status = value.optString("status");
-        return WAITING.equals(status) || RUNNING.equals(status) || STOPPING.equals(status);
+        return GalleryIndexQueue.active(status);
     }
 
     static boolean owns(Context context, String key, String session) {
@@ -104,7 +103,7 @@ public final class GalleryIndexWorker extends Worker {
                     }
                 }
                 if (records.size() >= MAX_RECORDS && read(app, key) == null) return false;
-                int lane = lanes[0] <= lanes[1] ? 0 : 1;
+                int lane = GalleryIndexQueue.chooseLane(lanes[0], lanes[1]);
                 String token = UUID.randomUUID().toString();
                 BunkrGallerySessionStore.Snapshot current = BunkrGallerySessionStore.snapshot(session);
                 JSONObject value = new JSONObject().put("key", key).put("session", session)
@@ -150,10 +149,10 @@ public final class GalleryIndexWorker extends Worker {
             JSONObject value = read(context, key);
             if (value == null || !token.equals(value.optString("token"))) return false;
             String old = value.optString("status");
-            if (STOPPING.equals(old) || CANCELLED.equals(old)) status = CANCELLED;
+            status = GalleryIndexQueue.transition(old, status);
             try {
                 value.put("status", status).put("items", Math.max(0, items)).put("detail", detail);
-                prefs(context).edit().putString(key, value.toString()).commit();
+                if (!prefs(context).edit().putString(key, value.toString()).commit()) return false;
                 return !CANCELLED.equals(status);
             } catch (Exception ignored) { return false; }
         }
@@ -208,9 +207,9 @@ public final class GalleryIndexWorker extends Worker {
                     update(app, key, token, PARTIAL, count, "Local cache limit reached");
                     return Result.success();
                 }
-                if (count >= MAX_ITEMS || snapshot.endReached) {
-                    update(app, key, token, count >= MAX_ITEMS ? PARTIAL : COMPLETE, count,
-                            count >= MAX_ITEMS ? "Local item limit reached" : "Available pages indexed");
+                if (count >= GalleryIndexQueue.MAX_ITEMS || snapshot.endReached) {
+                    update(app, key, token, count >= GalleryIndexQueue.MAX_ITEMS ? PARTIAL : COMPLETE, count,
+                            count >= GalleryIndexQueue.MAX_ITEMS ? "Local item limit reached" : "Available pages indexed");
                     return Result.success();
                 }
                 BunkrCreatorGalleryRepository.Batch batch = repository.fetchNext(app, session,
@@ -226,7 +225,7 @@ public final class GalleryIndexWorker extends Worker {
                 empty = nextCount == count ? empty + 1 : 0;
                 count = nextCount;
                 if (!update(app, key, token, RUNNING, count, "")) return Result.success();
-                if (batch.fapelloFailure != null || empty >= 6) {
+                if (GalleryIndexQueue.partial(count, empty, batch.fapelloFailure != null)) {
                     update(app, key, token, PARTIAL, count, "Source incomplete; reopen or retry");
                     return Result.success();
                 }
