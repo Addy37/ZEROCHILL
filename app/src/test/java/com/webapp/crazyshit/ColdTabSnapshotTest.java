@@ -118,6 +118,7 @@ public class ColdTabSnapshotTest {
         assertEquals(2, f.root.getChildCount());
         f.ready = true;
         ColdTabSnapshot controller = f.controller;
+        ShadowSystemClock.advanceBy(Duration.ofMillis(100));
         controller.onPreDraw();
         ShadowSystemClock.advanceBy(Duration.ofMillis(600));
         controller.onPreDraw();
