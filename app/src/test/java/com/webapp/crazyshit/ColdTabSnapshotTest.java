@@ -24,6 +24,7 @@ import java.io.File;
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -98,14 +99,24 @@ public class ColdTabSnapshotTest {
     }
 
     @Test public void coldCoverFadesAfterArtworkAndDoesNotReturnOnWarmRecreation() throws Exception {
-        Fixture f = new Fixture("test-ready", true);
+        Fixture f = new Fixture("test-ready", false);
         Bitmap saved = Bitmap.createBitmap(64, 128, Bitmap.Config.ARGB_8888);
         saved.eraseColor(Color.BLUE);
         ColdTabSnapshot.write(f.file, saved);
         saved.recycle();
-        f.install();
+        // Attach the view before its asynchronous cover load posts back to it.
+        ExecutorService io = ReflectionHelpers.getStaticField(ColdTabSnapshot.class, "IO");
+        CountDownLatch attached = new CountDownLatch(1);
+        var attachGate = io.submit(() -> attached.await(5, TimeUnit.SECONDS));
+        try {
+            f.install();
+        } finally {
+            attached.countDown();
+        }
+        assertTrue(attachGate.get(5, TimeUnit.SECONDS));
         drainIo();
         assertEquals(2, f.root.getChildCount());
+        f.ready = true;
         ColdTabSnapshot controller = f.controller;
         controller.onPreDraw();
         ShadowSystemClock.advanceBy(Duration.ofMillis(600));

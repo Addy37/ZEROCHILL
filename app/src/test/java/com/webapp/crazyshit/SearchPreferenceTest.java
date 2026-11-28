@@ -43,7 +43,7 @@ public final class SearchPreferenceTest {
         }
     }
 
-    @Test public void modeChangeClearsVisibleCreatorCardsSynchronouslyInBothSearchSurfaces() {
+    @Test public void startingNewQueriesClearsVisibleCardsSynchronouslyInBothSearchSurfaces() {
         try (org.robolectric.android.controller.ActivityController<Activity> host =
                 Robolectric.buildActivity(Activity.class).setup()) {
             ContentPreference.set(host.get(), ContentPreference.ALL);
@@ -71,7 +71,6 @@ public final class SearchPreferenceTest {
                         card, GlobalSearchAdapter.SOURCE_REMOTE)));
                 assertEquals(1, globalAdapter.getItemCount());
                 ReflectionHelpers.setField(globalPanel, "activeQuery", "nolan");
-                ReflectionHelpers.setField(globalPanel, "searchPreference", ContentPreference.ALL);
                 ContentPreference.set(host.get(), ContentPreference.MEN);
                 ReflectionHelpers.callInstanceMethod(globalPanel, "startShowsSearch",
                         from(String.class, "nolan"));
