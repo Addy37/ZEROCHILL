@@ -204,6 +204,17 @@ public class NativeFeedBrowserActivity extends Activity {
     private boolean memeMode;
     private boolean creatorAvatarPickerMode;
     private boolean loading;
+    private TextView galleryIndexAction;
+    private boolean indexWasActive;
+    private int indexSeenPage = -1;
+    private int indexSeenCount = -1;
+    private final Runnable indexTick = new Runnable() {
+        @Override public void run() {
+            if (isDestroyed() || isFinishing()) return;
+            syncGalleryIndex();
+            galleryThumbnailUi.postDelayed(this, 1200);
+        }
+    };
     private boolean endReached;
     private boolean fapelloFailureShown;
     private int currentPage;
@@ -485,6 +496,10 @@ public class NativeFeedBrowserActivity extends Activity {
             browserSnapshot = state.getString("browser_snapshot", browserSnapshot);
             bunkrGallerySessionId = state.getString("gallery_session", bunkrGallerySessionId);
         }
+        if (isCreatorGallery() && !creatorAvatarPickerMode) {
+            String indexedSession = GalleryIndexWorker.activeSession(this, creatorGallerySessionKey);
+            if (!indexedSession.isEmpty()) bunkrGallerySessionId = indexedSession;
+        }
         buildUi();
         if (state == null) {
             BunkrGallerySessionStore.Snapshot warm = isCreatorGallery()
@@ -637,6 +652,15 @@ public class NativeFeedBrowserActivity extends Activity {
                         new AppBarLayout.LayoutParams(-1, dp(32));
                 notificationParams.setScrollFlags(AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL);
                 creatorAppBar.addView(notificationContext, notificationParams);
+            }
+
+            if (!creatorAvatarPickerMode) {
+                galleryIndexAction = text("Load entire gallery", 13, AppearanceTheme.accent(this));
+                galleryIndexAction.setGravity(Gravity.CENTER);
+                galleryIndexAction.setPadding(dp(12), dp(8), dp(12), dp(8));
+                galleryIndexAction.setVisibility(View.GONE);
+                galleryIndexAction.setOnClickListener(v -> requestGalleryIndex());
+                creatorAppBar.addView(galleryIndexAction, new AppBarLayout.LayoutParams(-1, dp(40)));
             }
 
             creatorTabs = new TabLayout(this);
@@ -1541,6 +1565,11 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private void reload() {
+        if (isCreatorGallery() && GalleryIndexWorker.owns(this, creatorGallerySessionKey, bunkrGallerySessionId)) {
+            refresh.setRefreshing(false);
+            syncGalleryIndex();
+            return;
+        }
         galleryThumbnailUi.removeCallbacks(flushImageOmissions);
         pendingImageOmissions.clear();
         if (galleryThumbnailPipeline != null) galleryThumbnailPipeline.reset();
@@ -1591,7 +1620,52 @@ public class NativeFeedBrowserActivity extends Activity {
         load(false);
     }
 
+    private void requestGalleryIndex() {
+        if (GalleryIndexWorker.owns(this, creatorGallerySessionKey, bunkrGallerySessionId)) {
+            GalleryIndexWorker.showQueue(this);
+            return;
+        }
+        if (loading || restoringBrowser || endReached) return;
+        if (GalleryIndexWorker.enqueue(this, creatorGallerySessionKey, bunkrGallerySessionId, title,
+                creatorQuery, fapelloProfileUrl, creatorGalleryCacheKey, creatorSeedNames,
+                creatorSeedUrls, creatorSeedImages, creatorAliases)) {
+            indexWasActive = true;
+            syncGalleryIndex();
+        } else {
+            ZeroChillToast.makeText(this, "Could not queue this gallery. Try again.",
+                    ZeroChillToast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void syncGalleryIndex() {
+        if (galleryIndexAction == null || bunkrGallerySessionId == null) return;
+        boolean active = GalleryIndexWorker.owns(this, creatorGallerySessionKey, bunkrGallerySessionId);
+        if (active || indexWasActive) {
+            BunkrGallerySessionStore.Snapshot snapshot = BunkrGallerySessionStore.snapshot(bunkrGallerySessionId);
+            if (!loading && snapshot != null && (snapshot.currentPage != indexSeenPage
+                    || snapshot.items.size() != indexSeenCount)) {
+                appendBunkrItems(snapshot.items);
+                currentPage = snapshot.currentPage;
+                endReached = snapshot.endReached;
+                indexSeenPage = currentPage;
+                indexSeenCount = snapshot.items.size();
+                progress.setVisibility(View.GONE);
+                if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.GONE);
+                updateCreatorEmptyState();
+            }
+        }
+        indexWasActive = active;
+        galleryIndexAction.setText(GalleryIndexWorker.label(this, creatorGallerySessionKey, itemCount(), endReached));
+        galleryIndexAction.setTextColor(AppearanceTheme.accent(this));
+        galleryIndexAction.setVisibility(active || (!loading && !restoringBrowser && !endReached && itemCount() > 0)
+                ? View.VISIBLE : View.GONE);
+    }
+
     private void load(boolean append) {
+        if (isCreatorGallery() && GalleryIndexWorker.owns(this, creatorGallerySessionKey, bunkrGallerySessionId)) {
+            syncGalleryIndex();
+            return;
+        }
         if (restoringBrowser || loading || endReached) return;
         loading = true;
         updateEpisodeRangeUi();
@@ -3509,6 +3583,7 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        galleryThumbnailUi.removeCallbacks(indexTick);
         if (creatorProfile != null) creatorProfile.setActive(false);
         if (creatorGalleryReveal != null) creatorGalleryReveal.cancelAndShow();
         favoriteReadGeneration++;
@@ -3523,6 +3598,10 @@ public class NativeFeedBrowserActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (galleryIndexAction != null) {
+            galleryThumbnailUi.removeCallbacks(indexTick);
+            galleryThumbnailUi.post(indexTick);
+        }
         setGalleryPreviewsActive(true);
         refreshMediaFavorites();
         showsBrowserResumed = true;
@@ -3580,6 +3659,7 @@ public class NativeFeedBrowserActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        galleryThumbnailUi.removeCallbacks(indexTick);
         galleryThumbnailUi.removeCallbacks(flushImageOmissions);
         pendingImageOmissions.clear();
         if (galleryThumbnailPipeline != null) galleryThumbnailPipeline.close();
