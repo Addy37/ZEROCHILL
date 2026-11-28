@@ -57,6 +57,7 @@ final class BunkrCreatorGalleryRepository {
         final ArrayList<NativeContentItem> items;
         final boolean endReached;
         final FapelloSourceException fapelloFailure;
+        boolean indexIncomplete;
 
         Batch(ArrayList<NativeContentItem> items, boolean endReached) {
             this(items, endReached, null);
@@ -160,6 +161,7 @@ final class BunkrCreatorGalleryRepository {
             State guard = state(context, sessionId, query);
             synchronized (guard) {
                 Batch batch = fetchPawchiveWithBunkr(context, guard, paw, listener);
+                batch.indexIncomplete = guard.indexIncomplete;
                 saveCursor(context, sessionId, guard, batch);
                 return batch;
             }
@@ -168,6 +170,7 @@ final class BunkrCreatorGalleryRepository {
         synchronized (state) {
             seedKnownProfiles(state, sourceProfileUrl, creatorName, seedNames, seedUrls, seedImages, aliases);
             Batch batch = fetchNextLocked(context, state, listener);
+            batch.indexIncomplete = state.indexIncomplete;
             saveCursor(context, sessionId, state, batch);
             return batch;
         }
@@ -225,6 +228,7 @@ final class BunkrCreatorGalleryRepository {
                 state.bunkrSearchFailures = 0;
             } catch (IOException failure) {
                 if (++state.bunkrSearchFailures >= 2) {
+                    state.indexIncomplete = true;
                     state.searchFinished = true;
                     state.nextBunkrAlias = state.discoveryQueries.size();
                 }
@@ -283,7 +287,10 @@ final class BunkrCreatorGalleryRepository {
                 state.lastFapelloFailure = fapelloFailure(error);
                 state.fapelloSearchFailures++;
                 if (!retryableFapello(state.lastFapelloFailure) ||
-                        state.fapelloSearchFailures >= 2) state.fapelloCatalogLoaded = true;
+                        state.fapelloSearchFailures >= 2) {
+                    state.fapelloCatalogLoaded = true;
+                    state.indexIncomplete = true;
+                }
                 return error;
             }
         });
@@ -295,6 +302,7 @@ final class BunkrCreatorGalleryRepository {
             } catch (IOException error) {
                 state.bunkrSearchFailures++;
                 if (state.bunkrSearchFailures >= 2) {
+                    state.indexIncomplete = true;
                     state.searchFinished = true;
                     state.nextBunkrAlias = state.discoveryQueries.size();
                 }
@@ -610,7 +618,10 @@ final class BunkrCreatorGalleryRepository {
             state.onlyHavenSearchFailures = 0;
             return null;
         } catch (IOException error) {
-            if (++state.onlyHavenSearchFailures >= 2) state.onlyHavenCatalogLoaded = true;
+            if (++state.onlyHavenSearchFailures >= 2) {
+                state.onlyHavenCatalogLoaded = true;
+                state.indexIncomplete = true;
+            }
             return error;
         }
     }
@@ -634,7 +645,10 @@ final class BunkrCreatorGalleryRepository {
             state.wikiFeetXSearchFailures = 0;
             return null;
         } catch (IOException error) {
-            if (++state.wikiFeetXSearchFailures >= 2) state.wikiFeetXCatalogLoaded = true;
+            if (++state.wikiFeetXSearchFailures >= 2) {
+                state.wikiFeetXCatalogLoaded = true;
+                state.indexIncomplete = true;
+            }
             return error;
         }
     }
@@ -678,6 +692,7 @@ final class BunkrCreatorGalleryRepository {
         if (cursor == null) return;
         cursor.failures++;
         if (cursor.failures <= 1) state.pending.addLast(cursor);
+        else state.indexIncomplete = true;
     }
 
     private FapelloPage fetchFapelloPage(Context context, FapelloCursor cursor) {
@@ -745,9 +760,10 @@ final class BunkrCreatorGalleryRepository {
 
     private void retryFapello(State state, FapelloCursor cursor) {
         if (cursor == null) return;
-        if (!retryableFapello(state.lastFapelloFailure)) return;
+        if (!retryableFapello(state.lastFapelloFailure)) { state.indexIncomplete = true; return; }
         cursor.failures++;
         if (cursor.failures <= 1) state.fapelloPending.addLast(cursor);
+        else state.indexIncomplete = true;
     }
 
     private boolean retryableFapello(FapelloSourceException failure) {
@@ -802,6 +818,7 @@ final class BunkrCreatorGalleryRepository {
         if (cursor == null) return;
         cursor.failures++;
         if (cursor.failures <= 1) state.onlyHavenPending.addLast(cursor);
+        else state.indexIncomplete = true;
     }
 
     private void applyWikiFeetPage(
@@ -833,6 +850,7 @@ final class BunkrCreatorGalleryRepository {
         if (cursor == null) return;
         cursor.failures++;
         if (cursor.failures <= 1) state.wikiFeetPending.addLast(cursor);
+        else state.indexIncomplete = true;
     }
 
     private ArrayList<NativeContentItem> interleave(
@@ -1026,6 +1044,7 @@ final class BunkrCreatorGalleryRepository {
     private void saveCursor(Context context, String id, State state, Batch batch) {
         try {
             org.json.JSONObject json = new org.json.JSONObject().put("query", state.query).put("version", CURSOR_VERSION)
+                    .put("indexIncomplete", state.indexIncomplete)
                     .put("next", state.nextSearchPage).put("searchFinished", state.searchFinished)
                     .put("pawProfile", state.pawProfile).put("pawOffset", state.pawOffset)
                     .put("pawFinished", state.pawFinished)
@@ -1085,6 +1104,7 @@ final class BunkrCreatorGalleryRepository {
         if (json == null || json.optInt("version") != CURSOR_VERSION
                 || !query.equalsIgnoreCase(json.optString("query"))) return state;
         state.initialized = true;
+        state.indexIncomplete = json.optBoolean("indexIncomplete");
         state.pawProfile = json.optString("pawProfile");
         state.pawOffset = Math.max(0, json.optInt("pawOffset"));
         state.pawFinished = json.optBoolean("pawFinished");
@@ -1260,6 +1280,7 @@ final class BunkrCreatorGalleryRepository {
         boolean wikiFeetXCatalogLoaded;
         boolean onlyHavenCatalogLoaded;
         FapelloSourceException lastFapelloFailure;
+        volatile boolean indexIncomplete;
 
         State(String query) {
             this.query = query == null ? "" : query.trim();
