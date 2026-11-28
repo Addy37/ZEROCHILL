@@ -1158,7 +1158,11 @@ final class BunkrCreatorGalleryRepository {
 
     private void trimLocked() {
         while (STATES.size() > MAX_SESSIONS) {
-            String oldest = STATES.keySet().iterator().next();
+            String oldest = null;
+            for (String id : STATES.keySet()) {
+                if (!BunkrGallerySessionStore.isIndexPinned(id)) { oldest = id; break; }
+            }
+            if (oldest == null) break;
             STATES.remove(oldest);
         }
     }
