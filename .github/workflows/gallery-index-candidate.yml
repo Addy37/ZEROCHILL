@@ -23,8 +23,8 @@ jobs:
     env:
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
       ZEROCHILL_SOURCE_BRANCH: ${{ github.head_ref }}
-      APP_VERSION_NAME: '7.5.1-gallery-index.2'
-      APP_VERSION_CODE: '7005102'
+      APP_VERSION_NAME: '7.5.1-gallery-index.3'
+      APP_VERSION_CODE: '7005103'
       ZEROCHILL_V7_TRAFFIC: 'true'
       SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
       SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs

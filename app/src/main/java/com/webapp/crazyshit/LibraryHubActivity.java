@@ -23,6 +23,20 @@ public final class LibraryHubActivity extends Activity {
         super.onCreate(state);
         ZeroChillUi.applySystemBars(this);
         setContentView(buildContent());
+        openQueueIfRequested(getIntent());
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        openQueueIfRequested(intent);
+    }
+
+    private void openQueueIfRequested(Intent intent) {
+        if (intent != null && intent.getBooleanExtra(GalleryIndexNotifications.EXTRA_OPEN_QUEUE, false)) {
+            intent.removeExtra(GalleryIndexNotifications.EXTRA_OPEN_QUEUE);
+            getWindow().getDecorView().post(() -> GalleryIndexWorker.showQueue(this));
+        }
     }
 
     private View buildContent() {

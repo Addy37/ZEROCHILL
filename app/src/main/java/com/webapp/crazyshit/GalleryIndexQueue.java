@@ -13,7 +13,7 @@ final class GalleryIndexQueue {
     }
 
     static boolean active(String status) {
-        return "Waiting".equals(status) || "Fetching".equals(status)
+        return "Waiting".equals(status) || "Fetching".equals(status) || "Preparing thumbnails".equals(status)
                 || "Cancelling".equals(status);
     }
 

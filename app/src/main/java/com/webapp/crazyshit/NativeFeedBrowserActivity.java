@@ -1634,7 +1634,12 @@ public class NativeFeedBrowserActivity extends Activity {
             GalleryIndexWorker.showQueue(this);
             return;
         }
-        if (loading || restoringBrowser || endReached) return;
+        if (loading || restoringBrowser) return;
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                        != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 9422);
+        }
         if (GalleryIndexWorker.enqueue(this, creatorGallerySessionKey, bunkrGallerySessionId, title,
                 creatorQuery, fapelloProfileUrl, creatorGalleryCacheKey, creatorSeedNames,
                 creatorSeedUrls, creatorSeedImages, creatorAliases)) {
@@ -1668,7 +1673,7 @@ public class NativeFeedBrowserActivity extends Activity {
         String indexLabel = GalleryIndexWorker.label(this, creatorGallerySessionKey, bunkrGallerySessionId);
         if (!indexLabel.contentEquals(galleryIndexAction.getText())) galleryIndexAction.setText(indexLabel);
         galleryIndexAction.setTextColor(AppearanceTheme.accent(this));
-        galleryIndexAction.setVisibility(hasIndex || (!loading && !restoringBrowser && !endReached && itemCount() > 0)
+        galleryIndexAction.setVisibility(hasIndex || (!loading && !restoringBrowser && itemCount() > 0)
                 ? View.VISIBLE : View.GONE);
     }
 

@@ -14,6 +14,8 @@ public final class GalleryIndexQueueChecks {
         check(GalleryIndexQueue.chooseLane(2, 1) == 1);
         check(GalleryIndexQueue.active("Waiting"));
         check(GalleryIndexQueue.active("Fetching"));
+        check(GalleryIndexQueue.active("Preparing thumbnails"));
+        check(!GalleryIndexQueue.active("Ready"));
         check(GalleryIndexQueue.active("Cancelling"));
         check(!GalleryIndexQueue.active("Cancelled"));
         check(!GalleryIndexQueue.active("Indexed"));

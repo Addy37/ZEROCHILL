@@ -123,6 +123,19 @@ final class BunkrMediaPreview {
         return task;
     }
 
+    /** Background preparation reuses the normal bounded preview extractor. */
+    static File generateForIndex(Context context, NativeContentItem item) throws Exception {
+        if (!item.isVideo()) return null;
+        Task task = new Task();
+        task.deadline = SystemClock.elapsedRealtime() + (PawchiveRepository.isNativeVideo(item)
+                ? PAWCHIVE_TIMEOUT_MS : BunkrRepository.requestTimeoutMs());
+        task.traceIdentity = item.url;
+        try {
+            return PawchiveRepository.isNativeVideo(item)
+                    ? generatePawchiveVideo(context, item, task) : generate(context, item, task);
+        } finally { task.cancel(); }
+    }
+
     private static File generatePawchiveVideo(Context context, NativeContentItem item, Task task)
             throws Exception {
         String url = PawchiveRepository.original(item);
