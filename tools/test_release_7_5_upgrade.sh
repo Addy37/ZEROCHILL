@@ -10,7 +10,11 @@ if adb shell pm path "$launcher" | grep -q '^package:'; then
     adb shell pm disable-user --user 0 "$launcher"
 fi
 status=0
-for release in 7.4.0=7004000 7.3.0=7003000; do
+baselines=(7.4.0=7004000 7.3.0=7003000)
+if [[ "$APP_VERSION_NAME" == 7.5.1 ]]; then
+    baselines=(7.5.0=7005085)
+fi
+for release in "${baselines[@]}"; do
     baseline="${release%=*}"
     previous_code="${release#*=}"
     adb uninstall "$package" || true  # Disposable emulator only.

@@ -165,7 +165,9 @@ def main():
         (args.output / 'whats-new-ui.xml').write_text(dump)
         root = ET.fromstring(dump)
         assert any(node.get('text') == 'What’s New' for node in root.iter('node'))
-        assert any('five independent feeds' in node.get('text', '') for node in root.iter('node'))
+        expected_highlight = ('Better previews. Smarter search.' if args.version == '7.5.1'
+                              else 'five independent feeds')
+        assert any(expected_highlight in node.get('text', '') for node in root.iter('node'))
         for _ in range(5):
             acknowledge = next((node for node in root.iter('node')
                                 if node.get('text') == 'LET’S GO'), None)

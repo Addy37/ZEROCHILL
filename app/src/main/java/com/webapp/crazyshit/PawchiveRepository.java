@@ -366,13 +366,14 @@ final class PawchiveRepository {
                     detailFailure = error;
                 }
             }
+            // Preserve video attachments on mixed posts. Matched Bunkr albums still
+            // supply standalone videos for the creator gallery.
+            boolean hasImages = assets.stream().anyMatch(media -> !media.video);
             for (Media media : assets) {
-                // Creator galleries use Pawchive for pictures/GIFs and Bunkr for videos.
-                // Keep the raw parser and resolver intact for previously saved video identities.
-                if (media.video) continue;
+                if (media.video && !hasImages) continue;
                 String title = post.title.isEmpty() ? media.name : post.title;
                 NativeContentItem item = new NativeContentItem(
-                        NativeContentItem.KIND_IMAGE,
+                        media.video ? NativeContentItem.KIND_MEDIA : NativeContentItem.KIND_IMAGE,
                         title, media.url, media.thumbnailUrl, "", creator.profileUrl(),
                         "", "OnlyFap · Pawchive", creator.name).withSourceMedia(media.originalUrl, post.postUrl());
                 items.putIfAbsent(item.url, item);

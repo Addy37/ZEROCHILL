@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="whats_new_summary">Better previews. Smarter search.</string>
+    <string name="pawchive_preview_notice_title">A note about Pawchive</string>
+    <string name="pawchive_preview_notice_body">Pawchive doesn\'t provide video thumbnails. ZEROCHILL generates them from each video while respecting server request limits. Previews may take longer to appear, but normal playback is unaffected.</string>
+    <string name="pawchive_preview_notice_dismiss">Got it</string>
+</resources>

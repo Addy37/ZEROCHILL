@@ -56,6 +56,7 @@ final class FapzoneCreatorSearchRepository {
     private final List<SourceSearch> sources;
     private final CategorySourceSearch categorySource;
     private final Map<String, CachedSearch> cache;
+    private final ConfirmedSourceSearch pawchiveSource;
 
     FapzoneCreatorSearchRepository() {
         searchIo = SEARCH_IO;
@@ -64,6 +65,7 @@ final class FapzoneCreatorSearchRepository {
         sources.add(this::fromWikiFeetX);
         sources.add(this::fromOnlyHaven);
         categorySource = this::fromOnlyHaven;
+        pawchiveSource = FapzoneCreatorSearchRepository::fromPawchive;
         cache = SHARED_CACHE;
     }
 
@@ -73,9 +75,15 @@ final class FapzoneCreatorSearchRepository {
 
     FapzoneCreatorSearchRepository(ExecutorService searchIo, List<SourceSearch> sources,
                                    CategorySourceSearch categorySource) {
+        this(searchIo, sources, categorySource, FapzoneCreatorSearchRepository::fromPawchive);
+    }
+
+    FapzoneCreatorSearchRepository(ExecutorService searchIo, List<SourceSearch> sources,
+                                   CategorySourceSearch categorySource, ConfirmedSourceSearch pawchiveSource) {
         this.searchIo = searchIo;
         this.sources = new ArrayList<>(sources);
         this.categorySource = categorySource == null ? this::fromOnlyHaven : categorySource;
+        this.pawchiveSource = pawchiveSource;
         cache = new LinkedHashMap<String, CachedSearch>(64, .75f, true) {
             @Override protected boolean removeEldestEntry(Map.Entry<String, CachedSearch> eldest) {
                 return size() > CACHE_CAPACITY;
@@ -93,12 +101,23 @@ final class FapzoneCreatorSearchRepository {
             int limit,
             ResultListener listener
     ) throws IOException {
+        ContentPreference preference = context == null ? ContentPreference.ALL
+                : ContentPreference.onlyFapMode(ContentPreference.get(context));
+        return search(context, query, limit, listener, preference, false);
+    }
+
+    List<NativeContentItem> searchAllCreators(Context context, String query, int limit,
+                                             ResultListener listener) throws IOException {
+        return search(context, query, limit, listener, ContentPreference.ALL, true);
+    }
+
+    private List<NativeContentItem> search(Context context, String query, int limit,
+            ResultListener listener, ContentPreference preference, boolean includePawchive) throws IOException {
         String cleanQuery = query == null ? "" : query.trim();
         if (cleanQuery.length() < 2 || CreatorNameMatcher.normalized(cleanQuery).isEmpty()) {
             return new ArrayList<>();
         }
         int safeLimit = Math.max(1, Math.min(20, limit));
-        ContentPreference preference = context == null ? ContentPreference.ALL : ContentPreference.onlyFapMode(ContentPreference.get(context));
         ArrayList<NativeContentItem> learned = new ArrayList<>();
         if (context != null) {
             for (NativeContentItem item : CreatorCatalog.matching(context, cleanQuery, false, safeLimit)) {
@@ -107,7 +126,7 @@ final class FapzoneCreatorSearchRepository {
             }
         }
         if (listener != null && !learned.isEmpty()) publish(listener, learned, false);
-        String cacheKey = cacheKey(cleanQuery, preference);
+        String cacheKey = cacheKey(cleanQuery, preference) + (includePawchive ? "|pawchive" : "");
         CachedSearch cached;
         synchronized (cache) { cached = cache.get(cacheKey); }
         if (cached != null && SystemClock.elapsedRealtime() - cached.storedAt < CACHE_TTL_MS) {
@@ -120,7 +139,10 @@ final class FapzoneCreatorSearchRepository {
                 new ExecutorCompletionService<>(searchIo);
         ArrayList<Future<List<NativeContentItem>>> requests = new ArrayList<>();
         List<SourceSearch> selectedSources;
-        if (preference == ContentPreference.ALL) selectedSources = sources;
+        if (includePawchive) {
+            selectedSources = new ArrayList<>(sources);
+            selectedSources.add(pawchiveSource);
+        } else if (preference == ContentPreference.ALL) selectedSources = sources;
         else if (preference == ContentPreference.TRANS) selectedSources = java.util.Arrays.asList(
                 (c, q, n) -> categorySource.search(c, q, n, ContentPreference.TRANS_WOMEN),
                 (c, q, n) -> categorySource.search(c, q, n, ContentPreference.TRANS_MEN));
@@ -237,6 +259,11 @@ final class FapzoneCreatorSearchRepository {
             int limit
     ) throws IOException {
         return fromOnlyHaven(context, query, limit, ContentPreference.ALL);
+    }
+
+    private static List<NativeContentItem> fromPawchive(Context context, String query, int limit)
+            throws IOException {
+        return new PawchiveRepository().shelf(query, 0, limit).items;
     }
 
     private List<NativeContentItem> fromOnlyHaven(Context context, String query, int limit,

@@ -44,7 +44,8 @@ final class BunkrMediaPreview {
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final ThreadPoolExecutor IO = new ThreadPoolExecutor(2, 2, 0L,
             TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(24));
-    private static final ThreadPoolExecutor PAWCHIVE_IO = new ThreadPoolExecutor(1, 1, 10L,
+    // Overlap frame decoding and range reads while PawchiveMediaRequests paces every request start.
+    private static final ThreadPoolExecutor PAWCHIVE_IO = new ThreadPoolExecutor(4, 4, 10L,
             TimeUnit.SECONDS, new ArrayBlockingQueue<>(12));
 
     static {
@@ -71,7 +72,17 @@ final class BunkrMediaPreview {
     }
 
     static Task request(Context context, NativeContentItem item, Consumer<File> callback) {
+        return request(context, item, false, callback);
+    }
+
+    static Task requestPawchiveVideo(Context context, NativeContentItem item, Consumer<File> callback) {
+        return request(context, item, true, callback);
+    }
+
+    private static Task request(Context context, NativeContentItem item, boolean allowPawchiveVideo,
+            Consumer<File> callback) {
         boolean pawchive = PawchiveRepository.isDirectMedia(item.url);
+        boolean pawchiveVideo = PawchiveRepository.isNativeVideo(item);
         Task task = new Task(pawchive ? PAWCHIVE_IO : IO);
         if (pawchive) task.traceIdentity = item.url;
         Context app = context.getApplicationContext();
@@ -86,12 +97,10 @@ final class BunkrMediaPreview {
                     if (cached != null) {
                         result = cached;
                         task.trace("poster cache hit");
-                    } else if (PawchiveRepository.isNativeVideo(item)) {
-                        // Saved videos may use a cached playback frame, but never fetch video bytes
-                        // for a cold gallery thumbnail.
-                    } else if (!recentFailure(item.url)) {
+                    } else if ((!pawchiveVideo || allowPawchiveVideo) && !recentFailure(item.url)) {
                         task.trace("poster extraction start");
-                        result = generate(app, item, task);
+                        result = pawchiveVideo ? generatePawchiveVideo(app, item, task)
+                                : generate(app, item, task);
                         if (result == null && !task.canceled) {
                             task.trace("poster no usable frame");
                             rememberFailure(item.url);
@@ -112,6 +121,16 @@ final class BunkrMediaPreview {
             MAIN.post(() -> { if (!task.canceled) callback.accept(null); });
         }
         return task;
+    }
+
+    private static File generatePawchiveVideo(Context context, NativeContentItem item, Task task)
+            throws Exception {
+        String url = PawchiveRepository.original(item);
+        if (url.isEmpty()) return null;
+        Map<String, String> headers = pawchiveHeaders();
+        Bitmap bitmap = PawchiveIndexedPreview.extract(context, url,
+                (start, size) -> task.range(url, headers, start, size), task::check, task::trace);
+        return bitmap == null ? null : writePreview(context, item, scale(bitmap), task);
     }
 
     static File generate(Context context, NativeContentItem item, Task task) throws Exception {
@@ -180,7 +199,7 @@ final class BunkrMediaPreview {
         }
     }
 
-    private static boolean hasVisiblePixels(Bitmap bitmap) {
+    static boolean hasVisiblePixels(Bitmap bitmap) {
         for (int y = 1; y <= 7; y++) {
             for (int x = 1; x <= 7; x++) {
                 int color = bitmap.getPixel(bitmap.getWidth() * x / 8, bitmap.getHeight() * y / 8);

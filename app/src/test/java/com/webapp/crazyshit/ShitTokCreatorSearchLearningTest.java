@@ -36,7 +36,7 @@ public class ShitTokCreatorSearchLearningTest {
     @Implements(value = FapzoneCreatorSearchRepository.class, isInAndroidSdk = false)
     public static class LiveSearch {
         static boolean unavailable;
-        @Implementation protected List<NativeContentItem> search(Context context, String query,
+        @Implementation protected List<NativeContentItem> searchAllCreators(Context context, String query,
                 int limit, FapzoneCreatorSearchRepository.ResultListener listener) throws IOException {
             if (unavailable) throw new IOException("Partial source failure");
             return Collections.emptyList();

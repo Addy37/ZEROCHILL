@@ -29,7 +29,8 @@ import java.util.function.Consumer;
 /** Cold posters for ordinary AVC MP4: index and a bounded independent sample, decoded locally. */
 @UnstableApi
 final class PawchiveIndexedPreview {
-    static final int PREFIX = 64 * 1024;
+    static final int PREFIX = 256 * 1024;
+    private static final int HEADER_LOOKAHEAD = 64 * 1024;
     static final int MAX_INDEX = 2 * 1024 * 1024;
     static final int MAX_BYTES = 8 * 1024 * 1024;
     static final int MAX_OPENS = 5;
@@ -72,15 +73,51 @@ final class PawchiveIndexedPreview {
         if (i == C.INDEX_UNSET) i = table.getIndexOfLaterOrEqualSynchronizationSample(0);
         if (i < 0 || i >= table.sampleCount || (table.flags[i] & C.BUFFER_FLAG_KEY_FRAME) == 0)
             throw new IOException("No independent video sample");
+        // Prefer the usual frame when it is already available. An earlier keyframe
+        // can save a paced request if its complete sample arrived with the prefix.
+        int earlier = cachedAlternative(spans, table, i);
+        if (earlier != C.INDEX_UNSET) {
+            try {
+                Bitmap preview = decodeSample(context, spans, table, earlier, check, trace);
+                if (preview != null) {
+                    if (BunkrMediaPreview.hasVisiblePixels(preview)) return preview;
+                    preview.recycle();
+                }
+            } catch (Exception error) {
+                check.run();
+                trace.accept("cached keyframe could not be decoded");
+            }
+        }
+        return decodeSample(context, spans, table, i, check, trace);
+    }
+
+    static int cachedAlternative(Spans spans, TrackSampleTable table, int preferred) {
+        if (hasCachedSample(spans, table, preferred)) return C.INDEX_UNSET;
+        int earlier = table.getIndexOfEarlierOrEqualSynchronizationSample(1_000_000L);
+        if (hasCachedSample(spans, table, earlier)) return earlier;
+        int first = table.getIndexOfLaterOrEqualSynchronizationSample(0);
+        if (first != C.INDEX_UNSET && table.timestampsUs[first] <= 1_000_000L
+                && hasCachedSample(spans, table, first)) return first;
+        return C.INDEX_UNSET;
+    }
+
+    private static boolean hasCachedSample(Spans spans, TrackSampleTable table, int index) {
+        return index >= 0 && index < table.sampleCount
+                && table.sizes[index] <= MAX_SAMPLE_BYTES
+                && spans.contains(table.offsets[index], table.sizes[index]);
+    }
+
+    private static Bitmap decodeSample(Context context, Spans spans, TrackSampleTable table, int i,
+            Check check, Consumer<String> trace) throws Exception {
         long offset = table.offsets[i];
         int size = table.sizes[i];
         if (size <= 0 || size > MAX_SAMPLE_BYTES || offset < 0 || offset > spans.total - size)
             throw new IOException("Invalid sync sample");
         trace.accept("indexed AVC sample offset=" + offset + " size=" + size);
-        byte[] sample = annexB(spans.read(offset, size), track.nalUnitLengthFieldLength);
+        byte[] sample = annexB(spans.read(offset, size), table.track.nalUnitLengthFieldLength);
         trace.accept("indexed reads=" + spans.opens + " bytes=" + spans.received);
         check.run();
-        return decode(context, format, sample);
+        return decode(context, table.track.format, sample);
     }
 
     /** Skip media payloads by their declared box size; no scan through a large mdat. */
@@ -124,7 +161,24 @@ final class PawchiveIndexedPreview {
                 if (pos >= span.start && pos + minimum <= span.start + span.bytes.length)
                     return read(pos, minimum);
             }
-            return read(pos, (int) Math.min(PREFIX, total - pos));
+            return read(pos, (int) Math.min(HEADER_LOOKAHEAD, total - pos));
+        }
+        boolean contains(long start, int size) {
+            if (start < 0 || size <= 0 || start > total - size) return false;
+            long position = start;
+            long end = start + size;
+            while (position < end) {
+                long covered = position;
+                for (Span span : cached) {
+                    if (position >= span.start && position < span.start + span.bytes.length) {
+                        covered = span.start + span.bytes.length;
+                        break;
+                    }
+                }
+                if (covered == position) return false;
+                position = covered;
+            }
+            return true;
         }
         byte[] read(long start, int size) throws IOException {
             check.run();

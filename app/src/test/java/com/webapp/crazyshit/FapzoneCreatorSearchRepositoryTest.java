@@ -39,6 +39,41 @@ public final class FapzoneCreatorSearchRepositoryTest {
         ContentPreference.set(context, ContentPreference.ALL);
     }
 
+    @Test public void explicitOnlyFapSearchIncludesPawchiveAndOtherSourcesWithAnyPreference() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        NativeContentItem pawchive = PawchiveRepository.creatorItem(
+                new PawchiveRepository.Creator("patreon", "123", "Nolan", 1));
+        NativeContentItem other = creator("Nolan", "Fapello");
+        AtomicInteger pawchiveCalls = new AtomicInteger();
+        FapzoneCreatorSearchRepository repository = new FapzoneCreatorSearchRepository(executor,
+                Collections.singletonList((ignored, query, limit) ->
+                        Collections.singletonList(other)),
+                (ignored, query, limit, mode) -> Collections.emptyList(),
+                (ignored, query, limit) -> {
+                    pawchiveCalls.incrementAndGet();
+                    return Collections.singletonList(pawchive);
+                });
+        try {
+            assertEquals(1, repository.search(context, "Nolan", 8).size());
+            assertEquals(0, pawchiveCalls.get());
+            for (ContentPreference mode : Arrays.asList(ContentPreference.MEN, ContentPreference.PAWCHIVE,
+                    ContentPreference.WOMEN, ContentPreference.TRANS, ContentPreference.GROUPS,
+                    ContentPreference.ALL)) {
+                ContentPreference.setOnlyFap(context, mode);
+                List<NativeContentItem> found = repository.searchAllCreators(context, "Nolan", 20, null);
+                assertEquals(2, found.size());
+                assertTrue(found.stream().anyMatch(item -> pawchive.url.equals(item.url)));
+                assertTrue(found.stream().anyMatch(item -> other.url.equals(item.url)));
+                assertEquals(mode, ContentPreference.getOnlyFap(context));
+            }
+            assertEquals(1, pawchiveCalls.get());
+        } finally {
+            ContentPreference.setOnlyFap(context, ContentPreference.ALL);
+            executor.shutdownNow();
+        }
+    }
+
     @Test public void completedSuggestionReusesLiveResultsForFullSearchButModeAndConfigRefetch() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         ExecutorService executor = Executors.newSingleThreadExecutor();
