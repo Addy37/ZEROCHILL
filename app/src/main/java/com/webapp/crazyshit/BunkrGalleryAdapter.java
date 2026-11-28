@@ -260,7 +260,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     }
 
     private void queueReveal(Holder holder, NativeContentItem item) {
-        if (hasRevealed(item.url) || !ZeroChillMotion.animationsEnabled(context)) {
+        if (PreparedGalleryThumbnails.cached(context, item) != null || hasRevealed(item.url) || !ZeroChillMotion.animationsEnabled(context)) {
             cancelReveal(holder, false);
             finishReveal(holder);
             return;
@@ -974,7 +974,10 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         File cachedPreview = BunkrRepository.isBunkrUrl(item.url) || pawchiveVideo
                 ? BunkrMediaPreview.cached(context, item) : null;
         String eromeArtwork = EromeRepository.gridArtwork(item);
-        if (thumbnailPipeline != null && GalleryThumbnailPipeline.supports(item)) {
+        File prepared = PreparedGalleryThumbnails.cached(context, item);
+        if (prepared != null) {
+            loadMediaPreview(holder, item, prepared);
+        } else if (thumbnailPipeline != null && GalleryThumbnailPipeline.supports(item)) {
             prepareThumbnail(holder, item);
         } else if (!eromeArtwork.isEmpty()) {
             loadArtwork(holder, item, eromeArtwork, true);
@@ -1474,7 +1477,9 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
             if (candidate == null || candidate.url == null || candidate.url.isEmpty()) continue;
             if (candidate.isImage() && omittedBlackImages.contains(candidate.url)) continue;
             if (!existing.add(candidate.url)) continue;
-            if (batchEnabled && thumbnailPipeline != null && GalleryThumbnailPipeline.supports(candidate)) {
+            if (PreparedGalleryThumbnails.cached(context, candidate) != null) {
+                items.add(candidate);
+            } else if (batchEnabled && thumbnailPipeline != null && GalleryThumbnailPipeline.supports(candidate)) {
                 GalleryThumbnailPipeline.Result cached = thumbnailPipeline.cached(candidate.url);
                 if (cached == null) {
                     pendingTiles.put(candidate.url, candidate);
@@ -1489,6 +1494,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
     private void preloadRange(int start, int end) {
         for (int i = start; i < end; i++) {
             NativeContentItem item = items.get(i);
+            if (PreparedGalleryThumbnails.cached(context, item) != null) continue;
             if (thumbnailPipeline != null && GalleryThumbnailPipeline.supports(item)) {
                 if (batchEnabled) continue;
                 int generation = galleryGeneration;
@@ -1610,7 +1616,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
         if (holder.tile.setAspectRatio(ratio)) stopFavoriteMoves();
     }
 
-    private GlideUrl withHeaders(String imageUrl, String pageUrl) {
+    static GlideUrl withHeaders(String imageUrl, String pageUrl) {
         if (PawchiveRepository.isArtwork(imageUrl) || PawchiveRepository.isDeliveryFor(pageUrl, imageUrl))
             return new GlideUrl(imageUrl, new LazyHeaders.Builder()
                     .setHeader("User-Agent", USER_AGENT).setHeader("Referer", PawchiveRepository.ORIGIN).build());
@@ -1645,7 +1651,7 @@ final class BunkrGalleryAdapter extends RecyclerView.Adapter<BunkrGalleryAdapter
                 item.url != null && !item.url.equals(item.imageUrl);
     }
 
-    private String imageReferer(NativeContentItem item) {
+    static String imageReferer(NativeContentItem item) {
         String eromeReferer = EromeRepository.imageReferer(item);
         if (!eromeReferer.isEmpty()) return eromeReferer;
         String wikiFeetReferer = WikiFeetRepository.imageReferer(item);

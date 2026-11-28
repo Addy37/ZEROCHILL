@@ -521,6 +521,16 @@ public final class BunkrGalleryActivity extends Activity {
     }
 
     private void loadMore() {
+        if (isCreatorGallery() && GalleryIndexWorker.owns(this, creatorSessionKey, sessionId)) {
+            BunkrGallerySessionStore.Snapshot indexed = BunkrGallerySessionStore.snapshot(sessionId);
+            if (indexed != null) {
+                adapter.append(filterMedia(indexed.items));
+                currentPage = indexed.currentPage;
+                endReached = indexed.endReached;
+                updateChrome(pager.getCurrentItem());
+            }
+            return;
+        }
         if (!isCreatorGallery() && EromeRepository.isAlbumUrl(albumUrl)) return;
         if (loadingMore || endReached ||
                 (albumUrl.isEmpty() && !isCreatorGallery()) ||
