@@ -1,4 +1,4 @@
-name: ZEROCHILL 7.5.0 Signed Release Candidate
+name: ZEROCHILL 7.5 Signed Release Candidate
 
 on:
   pull_request:
@@ -18,7 +18,8 @@ jobs:
     if: >-
       github.repository == 'Addy37/ZEROCHILL' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.head_ref == 'release/zerochill-7.5.0-preparation'
+      (github.head_ref == 'release/zerochill-7.5.0-preparation' ||
+       (github.event.pull_request.number == 506 && github.head_ref == 'fix/pawchive-mixed-media'))
     runs-on: ubuntu-latest
     timeout-minutes: 75
     env:
@@ -63,6 +64,7 @@ jobs:
           cache-provider: basic
       - name: Reuse verified phone APK for emulator-only changes
         id: reuse
+        if: env.APP_VERSION_NAME == '7.5.0'
         env:
           GH_TOKEN: ${{ github.token }}
           VERIFIED_APK_SOURCE: 7a28dd47ac0b0342bfba989c738211007ffe5664
@@ -93,9 +95,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p "$RUNNER_TEMP/7.4.0" "$RUNNER_TEMP/7.3.0"
-          gh release download v7.4.0 --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir "$RUNNER_TEMP/7.4.0"
-          gh release download v7.3.0 --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir "$RUNNER_TEMP/7.3.0"
+          if [[ "$APP_VERSION_NAME" == 7.5.1 ]]; then
+            baselines=(7.5.0)
+          else
+            baselines=(7.4.0 7.3.0)
+          fi
+          for baseline in "${baselines[@]}"; do
+            gh release download "v$baseline" --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir "$RUNNER_TEMP/$baseline"
+          done
       - name: Restore production signing credentials
         if: steps.reuse.outputs.reused != 'true'
         env:
@@ -125,7 +132,7 @@ jobs:
                   out.write(key+'='+value+'\n')
           PY
       - name: Run focused phone-candidate regressions and assemble one signed APK
-        if: steps.reuse.outputs.reused != 'true'
+        if: env.APP_VERSION_NAME == '7.5.0' && steps.reuse.outputs.reused != 'true'
         run: >-
           gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
           :app:testReleaseUnitTest
@@ -151,6 +158,11 @@ jobs:
           --tests '*StartupWizardUiTest'
           --tests '*SpotlightSearchTest'
           :app:assembleRelease
+      - name: Run complete 7.5.1 unit suites and assemble one signed APK
+        if: env.APP_VERSION_NAME == '7.5.1'
+        run: >-
+          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
+          :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleRelease
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/zerochill-7-5-0-candidate.jks"
@@ -162,10 +174,18 @@ jobs:
           safe_ref="${ZEROCHILL_SOURCE_BRANCH//\//-}"
           apk="candidate/ZeroChill-${APP_VERSION_NAME}-${safe_ref}-${ZEROCHILL_SOURCE_SHA:0:7}.apk"
           cp app/build/outputs/apk/release/app-release.apk "$apk"
-          python3 tools/verify_release_candidate.py --apk "$apk" --previous "$RUNNER_TEMP/7.4.0/ZeroChill.apk" \
+          previous_version=7.4.0
+          previous_code=7004000
+          approved_code=7005080
+          if [[ "$APP_VERSION_NAME" == 7.5.1 ]]; then
+            previous_version=7.5.0
+            previous_code=7005085
+            approved_code=7005090
+          fi
+          python3 tools/verify_release_candidate.py --apk "$apk" --previous "$RUNNER_TEMP/$previous_version/ZeroChill.apk" \
             --build-tools "$ANDROID_HOME/build-tools/35.0.0" --source-sha "$ZEROCHILL_SOURCE_SHA" \
             --source-branch "$ZEROCHILL_SOURCE_BRANCH" --version "$APP_VERSION_NAME" --code "$APP_VERSION_CODE" \
-            --previous-version 7.4.0 --previous-code 7004000 --approved-code 7005080 \
+            --previous-version "$previous_version" --previous-code "$previous_code" --approved-code "$approved_code" \
             --verify-bundled-notes --output candidate/VALIDATION.json
           cp "$RUNNER_TEMP/BUILD_LINEAGE.txt" candidate/
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
@@ -174,7 +194,7 @@ jobs:
         if: steps.reuse.outputs.reused != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-7.5.0-candidate-signed-${{ env.ZEROCHILL_SOURCE_SHA }}
+          name: ZeroChill-${{ env.APP_VERSION_NAME }}-candidate-signed-${{ env.ZEROCHILL_SOURCE_SHA }}
           path: candidate/
           if-no-files-found: error
           retention-days: 14
@@ -197,8 +217,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-7.5.0-test-evidence-${{ env.ZEROCHILL_SOURCE_SHA }}
+          name: ZeroChill-${{ env.APP_VERSION_NAME }}-test-evidence-${{ env.ZEROCHILL_SOURCE_SHA }}
           path: |
+            app/build/test-results/testDebugUnitTest/
             app/build/test-results/testReleaseUnitTest/
             upgrade-results/
           if-no-files-found: warn

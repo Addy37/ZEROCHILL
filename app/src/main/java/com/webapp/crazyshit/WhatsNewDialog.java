@@ -94,6 +94,10 @@ public final class WhatsNewDialog extends DialogFragment {
         TextView version = text("Version " + getArguments().getString("version"), 12,
                 AppearanceTheme.accent(activity), true);
         content.addView(version);
+        TextView summary = text(activity.getString(R.string.whats_new_summary), 15,
+                AppearanceTheme.primaryText(activity), true);
+        summary.setPadding(0, dp(14), 0, 0);
+        content.addView(summary);
         for (String highlight : notes(activity, getArguments().getString("version"))) {
             TextView row = text("•  " + highlight, 14, AppearanceTheme.secondaryText(activity), false);
             row.setPadding(0, dp(16), 0, 0);

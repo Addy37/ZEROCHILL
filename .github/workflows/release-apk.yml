@@ -1,6 +1,8 @@
 name: Publish ZeroChill Signed APK Release
 
 on:
+  push:
+    tags: ['v7.5.1']
   workflow_dispatch:
     inputs:
       version:
@@ -13,7 +15,7 @@ permissions:
 jobs:
   release:
     # All future releases require an explicit manual action on main.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.version != '7.5.1'
     runs-on: ubuntu-latest
     env:
       ZEROCHILL_V7_TRAFFIC: 'true'
@@ -199,3 +201,82 @@ jobs:
             --title "$RELEASE_TITLE" \
             --notes-file RELEASE_NOTES.md \
             --latest
+
+  publish-7-5-1:
+    if: >-
+      (github.event_name == 'push' && github.event.created && github.ref == 'refs/tags/v7.5.1') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.version == '7.5.1')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify the signed candidate passed for the exact merged tree
+        run: |
+          set -euo pipefail
+          python3 tools/verify_release_7_5_notes.py 7.5.1 7005100
+          test "$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)" = v7.5.0
+          gh api "repos/$GITHUB_REPOSITORY/pulls/506" > "$RUNNER_TEMP/pr.json"
+          SOURCE_SHA="$(jq -er --arg sha "$GITHUB_SHA" \
+            'select(.merged == true and .merge_commit_sha == $sha and .base.ref == "main") | .head.sha' \
+            "$RUNNER_TEMP/pr.json")"
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse "$SOURCE_SHA^{tree}")" = "$(git rev-parse HEAD^{tree})"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/432259410/runs" \
+            -f head_sha="$SOURCE_SHA" -f event=pull_request -f status=success -F per_page=10 \
+            > "$RUNNER_TEMP/candidate-runs.json"
+          CANDIDATE_RUN="$(jq -er --arg sha "$SOURCE_SHA" --arg repo "$GITHUB_REPOSITORY" '
+            [.workflow_runs[] | select(
+              .workflow_id == 432259410 and .event == "pull_request" and .status == "completed" and
+              .conclusion == "success" and .head_sha == $sha and
+              .head_branch == "fix/pawchive-mixed-media" and .head_repository.full_name == $repo
+            )] | first | .id
+          ' "$RUNNER_TEMP/candidate-runs.json")"
+          echo "Using validated signed APK from run $CANDIDATE_RUN."
+          gh run download "$CANDIDATE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "ZeroChill-7.5.1-candidate-signed-$SOURCE_SHA" --dir candidate
+          (cd candidate && sha256sum -c SHA256SUMS.txt)
+          apk="candidate/ZeroChill-7.5.1-fix-pawchive-mixed-media-${SOURCE_SHA:0:7}.apk"
+          jq -e --arg sha "$SOURCE_SHA" --arg digest "$(sha256sum "$apk" | cut -d' ' -f1)" '
+            .source_sha == $sha and .version_name == "7.5.1" and .version_code == 7005100 and
+            .application_id == "com.addy37.crazyshitunofficial" and .upgrade_eligible == true and
+            .certificate_sha256 == "04abf84b3d468cbb1a562dea83b0007e686b2e56018cce911223963faea51356" and
+            .previous.version_name == "7.5.0" and .previous.version_code == 7005085 and
+            .sha256 == $digest
+          ' candidate/VALIDATION.json
+          cp "$apk" ZeroChill.apk
+          sha256sum ZeroChill.apk > SHA256SUMS.txt
+
+      - name: Publish the validated 7.5.1 APK as latest stable
+        run: |
+          gh release create v7.5.1 ZeroChill.apk SHA256SUMS.txt \
+            --target "$GITHUB_SHA" --title 'ZEROCHILL 7.5.1' --notes-file RELEASE_NOTES.md --latest
+
+      - name: Verify the public updater metadata and APK asset
+        run: |
+          set -euo pipefail
+          url="https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest"
+          digest="sha256:$(cut -d' ' -f1 SHA256SUMS.txt)"
+          apk_url="https://github.com/$GITHUB_REPOSITORY/releases/download/v7.5.1/ZeroChill.apk"
+          for attempt in 1 2 3; do
+            if curl --fail --silent --show-error --max-time 30 "$url" | jq -e \
+              --arg digest "$digest" --arg apk_url "$apk_url" '
+                .tag_name == "v7.5.1" and .draft == false and .prerelease == false and
+                (.body | contains("A note about Pawchive")) and
+                any(.assets[]; .name == "ZeroChill.apk" and .state == "uploaded"
+                    and .digest == $digest and .browser_download_url == $apk_url)
+              '; then
+              curl --fail --silent --show-error --head --location --max-time 30 "$apk_url" > /dev/null
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1

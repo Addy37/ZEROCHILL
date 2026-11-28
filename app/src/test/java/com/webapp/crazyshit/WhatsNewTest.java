@@ -165,14 +165,12 @@ public class WhatsNewTest {
         assertTrue(WhatsNewDialog.show(activity, false));
         WhatsNewDialog fragment = (WhatsNewDialog) activity.getFragmentManager().findFragmentByTag(WhatsNewDialog.TAG);
         java.util.List<String> notes = WhatsNewDialog.notes(activity, "7.0-test");
-        assertEquals(8, notes.size());
-        assertTrue(notes.get(0).contains("Five independent feeds"));
-        assertTrue(notes.stream().anyMatch(note -> note.contains("Pawchive")));
-        assertTrue(notes.stream().anyMatch(note -> note.contains("Erome")));
-        assertTrue(notes.stream().anyMatch(note -> note.contains("Improved Spotlight and Shows results")));
-        assertTrue(notes.stream().anyMatch(note -> note.contains("Custom collections")));
-        assertTrue(notes.stream().anyMatch(note -> note.contains("Cinematic onboarding")));
-        assertTrue(notes.get(notes.size() - 1).contains("refreshed splash"));
+        assertEquals(java.util.Arrays.asList(
+                "Pawchive improvements: Restored missing videos in mixed galleries.",
+                "Better video thumbnails: Automatic previews with faster loading.",
+                "Smarter Spotlight: Search across all creator sources regardless of your selected preference."
+        ), notes);
+        assertNotNull(find(fragment.getDialog().getWindow().getDecorView(), "Better previews. Smarter search."));
         assertEquals(notes, WhatsNewDialog.notes(activity, "6.0.1-dev"));
         find(fragment.getDialog().getWindow().getDecorView(), "LET’S GO").performClick();
         activity.getFragmentManager().executePendingTransactions();

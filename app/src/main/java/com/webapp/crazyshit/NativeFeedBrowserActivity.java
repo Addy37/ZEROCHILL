@@ -3566,6 +3566,9 @@ public class NativeFeedBrowserActivity extends Activity {
         }
         applyLayout();
         maybePrefetchShowEpisodes();
+        if (isCreatorGallery() && !creatorAvatarPickerMode) {
+            PawchivePreviewNotice.maybeShow(this, fapelloProfileUrl);
+        }
     }
 
     @Override
