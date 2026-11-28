@@ -131,6 +131,14 @@ final class LibraryHubView extends ScrollView {
                 () -> activity.startActivity(new Intent(activity, DownloadedActivity.class)),
                 () -> openSavedVideos(FavoritesActivity.START_HISTORY), this::openMediaFavorites);
         content.addView(collection, new LinearLayout.LayoutParams(-1, -2));
+        TextView galleryQueue = new TextView(activity);
+        galleryQueue.setText("Gallery Queue  ›");
+        galleryQueue.setTextSize(15);
+        galleryQueue.setTextColor(AppearanceTheme.accent(activity));
+        galleryQueue.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        galleryQueue.setPadding(dp(12), dp(8), dp(12), dp(8));
+        galleryQueue.setOnClickListener(v -> GalleryIndexWorker.showQueue(activity));
+        content.addView(galleryQueue, new LinearLayout.LayoutParams(-1, dp(48)));
         customCollections = new CustomCollectionsView(activity);
         content.addView(customCollections, new LinearLayout.LayoutParams(-1, -2));
         mediaContent = new LinearLayout(activity);
