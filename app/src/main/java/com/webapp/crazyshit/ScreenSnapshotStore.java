@@ -21,22 +21,36 @@ final class ScreenSnapshotStore {
         Context app = context.getApplicationContext();
         byte[] bytes = value.toString().getBytes(StandardCharsets.UTF_8);
         if (bytes.length > 4 * 1024 * 1024) return;
-        IO.execute(() -> {
-            synchronized (LOCK) {
-                File target = file(app, id);
-                if (target == null) return;
-                File dir = target.getParentFile();
-                if (!dir.exists() && !dir.mkdirs()) return;
-                AtomicFile atomic = new AtomicFile(target);
-                FileOutputStream stream = null;
-                try { stream = atomic.startWrite(); stream.write(bytes); atomic.finishWrite(stream); }
-                catch (Exception error) { if (stream != null) atomic.failWrite(stream); }
-                File[] old = dir.listFiles();
-                if (old != null) for (File entry : old) {
-                    if (System.currentTimeMillis() - entry.lastModified() > 24 * 60 * 60 * 1000L) entry.delete();
-                }
+        IO.execute(() -> write(app, id, bytes));
+    }
+
+    /** Wait for preceding writes and verify this snapshot fits the existing cache bound. */
+    static boolean saveChecked(Context context, String id, JSONObject value) throws Exception {
+        Context app = context.getApplicationContext();
+        byte[] bytes = value.toString().getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > 4 * 1024 * 1024) return false;
+        return IO.submit(() -> write(app, id, bytes)).get();
+    }
+
+    private static boolean write(Context app, String id, byte[] bytes) {
+        synchronized (LOCK) {
+            File target = file(app, id);
+            if (target == null) return false;
+            File dir = target.getParentFile();
+            if (!dir.exists() && !dir.mkdirs()) return false;
+            AtomicFile atomic = new AtomicFile(target);
+            FileOutputStream stream = null;
+            try { stream = atomic.startWrite(); stream.write(bytes); atomic.finishWrite(stream); }
+            catch (Exception error) {
+                if (stream != null) atomic.failWrite(stream);
+                return false;
             }
-        });
+            File[] old = dir.listFiles();
+            if (old != null) for (File entry : old) {
+                if (System.currentTimeMillis() - entry.lastModified() > 24 * 60 * 60 * 1000L) entry.delete();
+            }
+            return true;
+        }
     }
 
     static JSONObject read(Context context, String id) {
