@@ -10,6 +10,11 @@ import java.util.UUID;
 final class BunkrGallerySessionStore {
     private static final int MAX_SESSIONS = 8;
     private static final String HOT_PREFS = "onlyfap_hot_gallery_sessions";
+    private static final java.util.Set<String> INDEX_PINS = new java.util.HashSet<>();
+    static synchronized void pinIndex(String id) { INDEX_PINS.add(id); }
+    static synchronized boolean isIndexPinned(String id) { return INDEX_PINS.contains(id); }
+    static synchronized void unpinIndex(String id) { INDEX_PINS.remove(id); trim(); }
+
     private static final LinkedHashMap<String, Session> SESSIONS = new LinkedHashMap<>();
 
     static final class Snapshot {
@@ -235,6 +240,27 @@ final class BunkrGallerySessionStore {
         });
     }
 
+    static boolean persistForIndex(android.content.Context context, String id) throws Exception {
+        Snapshot snapshot = snapshot(id);
+        if (snapshot == null || snapshot.items.size() > 10000) return false;
+        android.content.Context app = context.getApplicationContext();
+        return SNAPSHOT_IO.submit(() -> {
+            org.json.JSONObject value = new org.json.JSONObject()
+                    .put("title", snapshot.title).put("album", snapshot.albumUrl)
+                    .put("query", snapshot.creatorQuery).put("page", snapshot.currentPage)
+                    .put("end", snapshot.endReached)
+                    .put("items", ContentItemCodec.encodeList(snapshot.items, 10000));
+            if (!snapshot.cursor.isEmpty()) value.put("cursor", new org.json.JSONObject(snapshot.cursor));
+            if (!ScreenSnapshotStore.saveChecked(app, id, value)) return false;
+            if (!snapshot.creatorQuery.isEmpty() && !snapshot.items.isEmpty()
+                    && !snapshot.cursor.isEmpty()) {
+                return app.getSharedPreferences(HOT_PREFS, 0).edit()
+                        .putString(creatorKey(snapshot.creatorQuery), id).commit();
+            }
+            return true;
+        }).get();
+    }
+
     static Snapshot restore(android.content.Context context, String id) {
         Snapshot warm = snapshot(id);
         if (warm != null) return warm;
@@ -278,7 +304,11 @@ final class BunkrGallerySessionStore {
 
     private static void trim() {
         while (SESSIONS.size() > MAX_SESSIONS) {
-            String oldest = SESSIONS.keySet().iterator().next();
+            String oldest = null;
+            for (String id : SESSIONS.keySet()) {
+                if (!INDEX_PINS.contains(id)) { oldest = id; break; }
+            }
+            if (oldest == null) break;
             SESSIONS.remove(oldest);
         }
     }
