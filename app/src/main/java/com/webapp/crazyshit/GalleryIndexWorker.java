@@ -5,10 +5,7 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.SystemClock;
-import android.widget.ArrayAdapter;
 import androidx.work.Constraints;
 import androidx.work.Data;
 import androidx.work.ExistingWorkPolicy;
@@ -121,8 +118,15 @@ public final class GalleryIndexWorker extends Worker {
                                 .putString("token", token).build())
                         .addTag("gallery-index").build();
                 try {
-                    WorkManager.getInstance(app).enqueueUniqueWork("gallery-index-lane-" + lane,
-                            ExistingWorkPolicy.APPEND_OR_REPLACE, work);
+                    androidx.work.Operation operation = WorkManager.getInstance(app)
+                            .enqueueUniqueWork("gallery-index-lane-" + lane,
+                                    ExistingWorkPolicy.APPEND_OR_REPLACE, work);
+                    operation.getResult().addListener(() -> {
+                        try { operation.getResult().get(); }
+                        catch (Exception error) {
+                            update(app, key, token, FAILED, value.optInt("items"), "Could not schedule");
+                        }
+                    }, Runnable::run);
                 } catch (RuntimeException error) {
                     update(app, key, token, FAILED, value.optInt("items"), "Could not schedule");
                     return false;
@@ -208,8 +212,9 @@ public final class GalleryIndexWorker extends Worker {
                     return Result.success();
                 }
                 if (count >= GalleryIndexQueue.MAX_ITEMS || snapshot.endReached) {
-                    update(app, key, token, count >= GalleryIndexQueue.MAX_ITEMS ? PARTIAL : COMPLETE, count,
-                            count >= GalleryIndexQueue.MAX_ITEMS ? "Local item limit reached" : "Available pages indexed");
+                    boolean incomplete = count >= GalleryIndexQueue.MAX_ITEMS || cursorIncomplete(snapshot);
+                    update(app, key, token, incomplete ? PARTIAL : COMPLETE, count,
+                            incomplete ? "Source or local cache limit reached" : "Available pages indexed");
                     return Result.success();
                 }
                 BunkrCreatorGalleryRepository.Batch batch = repository.fetchNext(app, session,
@@ -225,11 +230,16 @@ public final class GalleryIndexWorker extends Worker {
                 empty = nextCount == count ? empty + 1 : 0;
                 count = nextCount;
                 if (!update(app, key, token, RUNNING, count, "")) return Result.success();
-                if (GalleryIndexQueue.partial(count, empty, batch.fapelloFailure != null)) {
+                if (GalleryIndexQueue.partial(count, empty, batch.indexIncomplete)) {
                     update(app, key, token, PARTIAL, count, "Source incomplete; reopen or retry");
                     return Result.success();
                 }
-                if (!snapshot.endReached) Thread.sleep(750);
+                if (!snapshot.endReached) {
+                    android.media.AudioManager audio = (android.media.AudioManager)
+                            app.getSystemService(Context.AUDIO_SERVICE);
+                    // Yield between metadata batches when media audio is active.
+                    Thread.sleep(audio != null && audio.isMusicActive() ? 2500 : 750);
+                }
             }
             if (!update(app, key, token, WAITING, count, "Will resume when permitted"))
                 return Result.success();
@@ -245,6 +255,11 @@ public final class GalleryIndexWorker extends Worker {
             BunkrGallerySessionStore.unpinIndex(session);
             SLOTS.release();
         }
+    }
+
+    private static boolean cursorIncomplete(BunkrGallerySessionStore.Snapshot snapshot) {
+        try { return new JSONObject(snapshot.cursor).optBoolean("indexIncomplete"); }
+        catch (Exception ignored) { return false; }
     }
 
     static String label(Context context, String key, int count, boolean complete) {
@@ -267,7 +282,7 @@ public final class GalleryIndexWorker extends Worker {
             ArrayList<String> actions = new ArrayList<>();
             actions.add("Open gallery");
             if (active(task)) actions.add("Cancel");
-            else if (!COMPLETE.equals(task.optString("status"))) actions.add("Retry");
+            else if (FAILED.equals(task.optString("status")) || CANCELLED.equals(task.optString("status"))) actions.add("Retry");
             new AlertDialog.Builder(activity).setTitle(task.optString("title"))
                     .setItems(actions.toArray(new String[0]), (d, action) -> {
                         if (action == 0) {
