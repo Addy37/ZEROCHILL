@@ -257,8 +257,9 @@ jobs:
 
       - name: Publish the validated 7.5.1 APK as latest stable
         run: |
+          test "$(git rev-parse 'v7.5.1^{commit}')" = "$GITHUB_SHA"
           gh release create v7.5.1 ZeroChill.apk SHA256SUMS.txt \
-            --target "$GITHUB_SHA" --title 'ZEROCHILL 7.5.1' --notes-file RELEASE_NOTES.md --latest
+            --verify-tag --title 'ZEROCHILL 7.5.1' --notes-file RELEASE_NOTES.md --latest
 
       - name: Verify the public updater metadata and APK asset
         run: |

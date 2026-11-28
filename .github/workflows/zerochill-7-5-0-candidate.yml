@@ -21,7 +21,11 @@ jobs:
       (github.head_ref == 'release/zerochill-7.5.0-preparation' ||
        (github.event.pull_request.number == 506 && github.head_ref == 'fix/pawchive-mixed-media'))
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: ${{ fromJSON(github.event.pull_request.number == 506 && '["release","debug"]' || '["release"]') }}
     env:
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
       ZEROCHILL_SOURCE_BRANCH: ${{ github.head_ref }}
@@ -64,7 +68,7 @@ jobs:
           cache-provider: basic
       - name: Reuse verified phone APK for emulator-only changes
         id: reuse
-        if: env.APP_VERSION_NAME == '7.5.0'
+        if: matrix.variant == 'release' && env.APP_VERSION_NAME == '7.5.0'
         env:
           GH_TOKEN: ${{ github.token }}
           VERIFIED_APK_SOURCE: 7a28dd47ac0b0342bfba989c738211007ffe5664
@@ -92,6 +96,7 @@ jobs:
             echo 'reused=true' >> "$GITHUB_OUTPUT"
           fi
       - name: Download public upgrade baselines
+        if: matrix.variant == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -104,7 +109,7 @@ jobs:
             gh release download "v$baseline" --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir "$RUNNER_TEMP/$baseline"
           done
       - name: Restore production signing credentials
-        if: steps.reuse.outputs.reused != 'true'
+        if: matrix.variant == 'release' && steps.reuse.outputs.reused != 'true'
         env:
           SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
         run: |
@@ -132,7 +137,7 @@ jobs:
                   out.write(key+'='+value+'\n')
           PY
       - name: Run focused phone-candidate regressions and assemble one signed APK
-        if: env.APP_VERSION_NAME == '7.5.0' && steps.reuse.outputs.reused != 'true'
+        if: matrix.variant == 'release' && env.APP_VERSION_NAME == '7.5.0' && steps.reuse.outputs.reused != 'true'
         run: >-
           gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
           :app:testReleaseUnitTest
@@ -158,16 +163,19 @@ jobs:
           --tests '*StartupWizardUiTest'
           --tests '*SpotlightSearchTest'
           :app:assembleRelease
-      - name: Run complete 7.5.1 unit suites and assemble one signed APK
-        if: env.APP_VERSION_NAME == '7.5.1'
+      - name: Run complete 7.5.1 debug unit suite
+        if: matrix.variant == 'debug'
+        run: gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64 :app:testDebugUnitTest
+      - name: Run complete 7.5.1 release unit suite and assemble one signed APK
+        if: matrix.variant == 'release' && env.APP_VERSION_NAME == '7.5.1'
         run: >-
           gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
-          :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleRelease
+          :app:testReleaseUnitTest :app:assembleRelease
       - name: Remove signing material
-        if: always()
+        if: always() && matrix.variant == 'release'
         run: rm -f "$RUNNER_TEMP/zerochill-7-5-0-candidate.jks"
       - name: Verify production identity, packaged notes, backend configuration and exact source
-        if: steps.reuse.outputs.reused != 'true'
+        if: matrix.variant == 'release' && steps.reuse.outputs.reused != 'true'
         run: |
           set -euo pipefail
           mkdir -p candidate
@@ -191,7 +199,7 @@ jobs:
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
           printf 'CANDIDATE_APK=%s/%s\n' "$GITHUB_WORKSPACE" "$apk" >> "$GITHUB_ENV"
       - name: Upload signed phone-test APK and checksum
-        if: steps.reuse.outputs.reused != 'true'
+        if: matrix.variant == 'release' && steps.reuse.outputs.reused != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ZeroChill-${{ env.APP_VERSION_NAME }}-candidate-signed-${{ env.ZEROCHILL_SOURCE_SHA }}
@@ -199,11 +207,13 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Enable KVM for Android upgrade tests
+        if: matrix.variant == 'release'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Install signed APKs and verify retained data and onboarding
+        if: matrix.variant == 'release'
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -217,7 +227,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ZeroChill-${{ env.APP_VERSION_NAME }}-test-evidence-${{ env.ZEROCHILL_SOURCE_SHA }}
+          name: ZeroChill-${{ env.APP_VERSION_NAME }}-${{ matrix.variant == 'debug' && 'debug-' || '' }}test-evidence-${{ env.ZEROCHILL_SOURCE_SHA }}
           path: |
             app/build/test-results/testDebugUnitTest/
             app/build/test-results/testReleaseUnitTest/
