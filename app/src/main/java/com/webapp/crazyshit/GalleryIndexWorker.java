@@ -58,7 +58,9 @@ public final class GalleryIndexWorker extends Worker {
         android.app.ActivityManager.RunningAppProcessInfo state = new android.app.ActivityManager.RunningAppProcessInfo();
         android.app.ActivityManager.getMyMemoryState(state);
         android.os.PowerManager power = context.getSystemService(android.os.PowerManager.class);
-        boolean interactive = state.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
+        // A foreground service alone must not count as visible UI.
+        boolean interactive = (state.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+                || state.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE)
                 && (power == null || power.isInteractive());
         return GalleryIndexQueue.previewSlots(interactive, playback(context), thermal(context));
     }
@@ -206,6 +208,9 @@ public final class GalleryIndexWorker extends Worker {
             if (value == null || !token.equals(value.optString("token"))) return false;
             try {
                 String status = GalleryIndexQueue.transition(value.optString("status"), finished ? PREPARING : RUNNING);
+                if (status.equals(value.optString("status")) && value.optInt("items") == count
+                        && value.optInt("ready") == ready && value.optInt("total") == total
+                        && value.optInt("thumbnailOffset") == offset) return !CANCELLED.equals(status);
                 value.put("status", status).put("items", count).put("ready", ready).put("total", total)
                         .put("detail", ready + " / " + total + " thumbnails").put("thumbnailOffset", offset);
                 if (!prefs(context).edit().putString(key, value.toString()).commit()) return false;
@@ -272,11 +277,11 @@ public final class GalleryIndexWorker extends Worker {
                 return prepareThumbnails(app, key, token, snapshot, deadline, turbo,
                         task.optBoolean("paginationIncomplete") || sourceIncomplete);
             }
+            if (!BunkrGallerySessionStore.persistForIndex(app, session)) {
+                update(app, key, token, PARTIAL, count, "Local cache limit reached");
+                return Result.success();
+            }
             while (!shouldStop(app, key, token) && SystemClock.elapsedRealtime() < deadline) {
-                if (!BunkrGallerySessionStore.persistForIndex(app, session)) {
-                    update(app, key, token, PARTIAL, count, "Local cache limit reached");
-                    return Result.success();
-                }
                 if (!turbo.pump(snapshot, false)) return Result.success();
                 if (count >= GalleryIndexQueue.MAX_ITEMS || snapshot.endReached) {
                     return prepareThumbnails(app, key, token, snapshot, deadline, turbo,
@@ -358,11 +363,12 @@ public final class GalleryIndexWorker extends Worker {
             int slots = cacheFull ? 0 : previewSlots(app);
             while (pending.size() < slots && next < snapshot.items.size()) {
                 NativeContentItem item = snapshot.items.get(next++);
-                if (!PreparedGalleryThumbnails.eligible(item))
-                    pending.add(CompletableFuture.completedFuture(false));
-                else if (PreparedGalleryThumbnails.cached(app, item) != null)
-                    pending.add(CompletableFuture.completedFuture(true));
-                else pending.add(PREVIEW_IO.submit(() -> PreparedGalleryThumbnails.prepare(app, item)));
+                boolean eligible = PreparedGalleryThumbnails.eligible(item);
+                boolean cached = eligible && PreparedGalleryThumbnails.cached(app, item) != null;
+                if (!eligible || cached) {
+                    if (pending.isEmpty()) { offset++; if (cached) ready++; }
+                    else pending.add(CompletableFuture.completedFuture(cached));
+                } else pending.add(PREVIEW_IO.submit(() -> PreparedGalleryThumbnails.prepare(app, item)));
             }
             return thumbnails(app, key, token, snapshot.items.size(), ready, total, finished, offset);
         }
