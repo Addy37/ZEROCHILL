@@ -91,6 +91,8 @@ public final class LibraryHubActivity extends Activity {
                 openSavedVideos(FavoritesActivity.START_WATCH_LATER));
         addAction(content, "Downloads", "Watch videos available offline", v ->
                 startActivity(new Intent(this, DownloadedActivity.class)));
+        addAction(content, "Gallery Queue", "Manage background gallery indexing", v ->
+                GalleryIndexWorker.showQueue(this));
 
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
