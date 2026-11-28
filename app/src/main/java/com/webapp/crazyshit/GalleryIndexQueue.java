@@ -8,6 +8,18 @@ final class GalleryIndexQueue {
 
     private GalleryIndexQueue() { }
 
+    // Android thermal status: moderate=2, severe=3, critical=4.
+    static int previewSlots(boolean interactive, boolean playback, int thermal) {
+        if (thermal >= 4) return 0;
+        if (playback || thermal >= 3) return 1;
+        if (interactive || thermal >= 2) return 2;
+        return 4;
+    }
+
+    static long pagePause(boolean playback, int thermal) {
+        return thermal >= 3 ? 1500L : playback ? 750L : 0L;
+    }
+
     static int chooseLane(int first, int second) {
         return first <= second ? 0 : 1;
     }

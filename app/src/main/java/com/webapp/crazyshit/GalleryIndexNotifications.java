@@ -48,7 +48,7 @@ final class GalleryIndexNotifications {
     static Notification progress(Context context, String title, String status, int items,
             int ready, int total) {
         boolean preparing = "Preparing thumbnails".equals(status);
-        String detail = preparing ? ready + " / " + total + " thumbnails" : items + " items found";
+        String detail = preparing ? ready + " / " + total + " thumbnails" : items + " items · " + ready + " previews";
         return builder(context).setContentTitle(title).setContentText(status + " · " + detail)
                 .setOngoing(true).setProgress(preparing ? Math.max(1, total) : 0,
                         preparing ? ready : 0, !preparing).build();

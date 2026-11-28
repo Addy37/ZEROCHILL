@@ -21,6 +21,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.ArrayDeque;
+import java.util.concurrent.*;
 
 /** Explicitly requested metadata indexing, independent of Activity lifetime. */
 public final class GalleryIndexWorker extends Worker {
@@ -38,6 +40,28 @@ public final class GalleryIndexWorker extends Worker {
     private static final String FAILED = "Failed";
     private static final java.util.concurrent.Semaphore SLOTS =
             new java.util.concurrent.Semaphore(GalleryIndexQueue.MAX_ACTIVE, true);
+
+    private static final ExecutorService PREVIEW_IO = Executors.newFixedThreadPool(8);
+
+    private static int thermal(Context context) {
+        android.os.PowerManager power = context.getSystemService(android.os.PowerManager.class);
+        return power != null && android.os.Build.VERSION.SDK_INT >= 29
+                ? power.getCurrentThermalStatus() : 0;
+    }
+
+    private static boolean playback(Context context) {
+        android.media.AudioManager audio = context.getSystemService(android.media.AudioManager.class);
+        return audio != null && audio.isMusicActive();
+    }
+
+    private static int previewSlots(Context context) {
+        android.app.ActivityManager.RunningAppProcessInfo state = new android.app.ActivityManager.RunningAppProcessInfo();
+        android.app.ActivityManager.getMyMemoryState(state);
+        android.os.PowerManager power = context.getSystemService(android.os.PowerManager.class);
+        boolean interactive = state.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
+                && (power == null || power.isInteractive());
+        return GalleryIndexQueue.previewSlots(interactive, playback(context), thermal(context));
+    }
 
     public GalleryIndexWorker(Context context, WorkerParameters parameters) {
         super(context, parameters);
@@ -176,14 +200,14 @@ public final class GalleryIndexWorker extends Worker {
                 value.optInt("total"), active, waiting);
     }
 
-    private static boolean thumbnails(Context context, String key, String token, int count, int ready, int total) {
+    private static boolean thumbnails(Context context, String key, String token, int count, int ready, int total, boolean finished, int offset) {
         synchronized (LOCK) {
             JSONObject value = read(context, key);
             if (value == null || !token.equals(value.optString("token"))) return false;
             try {
-                String status = GalleryIndexQueue.transition(value.optString("status"), PREPARING);
+                String status = GalleryIndexQueue.transition(value.optString("status"), finished ? PREPARING : RUNNING);
                 value.put("status", status).put("items", count).put("ready", ready).put("total", total)
-                        .put("detail", ready + " / " + total + " thumbnails");
+                        .put("detail", ready + " / " + total + " thumbnails").put("thumbnailOffset", offset);
                 if (!prefs(context).edit().putString(key, value.toString()).commit()) return false;
                 notifyProgress(context, value);
                 return !CANCELLED.equals(status);
@@ -221,6 +245,7 @@ public final class GalleryIndexWorker extends Worker {
         String session = task.optString("session");
         int count = task.optInt("items");
         BunkrGallerySessionStore.pinIndex(session);
+        TurboBatch turbo = null;
         try {
             if (shouldStop(app, key, token)) {
                 update(app, key, token, isStopped() ? WAITING : CANCELLED, count, "");
@@ -242,8 +267,9 @@ public final class GalleryIndexWorker extends Worker {
             long deadline = SystemClock.elapsedRealtime() + SLICE_MS;
             int stagnant = 0;
             boolean sourceIncomplete = cursorIncomplete(snapshot);
+            turbo = new TurboBatch(app, key, token, snapshot, task.optInt("thumbnailOffset"));
             if (task.optBoolean("paginationFinished")) {
-                return prepareThumbnails(app, key, token, snapshot, deadline,
+                return prepareThumbnails(app, key, token, snapshot, deadline, turbo,
                         task.optBoolean("paginationIncomplete") || sourceIncomplete);
             }
             while (!shouldStop(app, key, token) && SystemClock.elapsedRealtime() < deadline) {
@@ -251,9 +277,14 @@ public final class GalleryIndexWorker extends Worker {
                     update(app, key, token, PARTIAL, count, "Local cache limit reached");
                     return Result.success();
                 }
+                if (!turbo.pump(snapshot, false)) return Result.success();
                 if (count >= GalleryIndexQueue.MAX_ITEMS || snapshot.endReached) {
-                    return prepareThumbnails(app, key, token, snapshot, deadline,
+                    return prepareThumbnails(app, key, token, snapshot, deadline, turbo,
                             GalleryIndexQueue.partial(count, sourceIncomplete || cursorIncomplete(snapshot)));
+                }
+                if (thermal(app) >= 4) {
+                    Thread.sleep(500);
+                    continue;
                 }
                 String priorCursor = snapshot.cursor;
                 BunkrCreatorGalleryRepository.Batch batch = repository.fetchNext(app, session,
@@ -269,17 +300,15 @@ public final class GalleryIndexWorker extends Worker {
                 stagnant = GalleryIndexQueue.stagnantBatches(stagnant, count, nextCount, priorCursor, snapshot.cursor);
                 sourceIncomplete |= batch.indexIncomplete;
                 count = nextCount;
-                if (!update(app, key, token, RUNNING, count, "")) return Result.success();
+                if (!turbo.pump(snapshot, false)) return Result.success();
                 // A failed supplementary provider must not halt remaining creator pages.
                 // The repository records exhausted source failures separately from its end cursor.
                 if (GalleryIndexQueue.stopIndexing(count, stagnant)) {
-                    return prepareThumbnails(app, key, token, snapshot, deadline, true);
+                    return prepareThumbnails(app, key, token, snapshot, deadline, turbo, true);
                 }
                 if (!snapshot.endReached) {
-                    android.media.AudioManager audio = (android.media.AudioManager)
-                            app.getSystemService(Context.AUDIO_SERVICE);
-                    // Yield between metadata batches when media audio is active.
-                    Thread.sleep(audio != null && audio.isMusicActive() ? 2500 : 750);
+                    long pause = GalleryIndexQueue.pagePause(playback(app), thermal(app));
+                    if (pause > 0) Thread.sleep(pause);
                 }
             }
             if (!update(app, key, token, WAITING, count, "Will resume when permitted"))
@@ -293,13 +322,59 @@ public final class GalleryIndexWorker extends Worker {
             update(app, key, token, FAILED, count, "Source unavailable; retry");
             return Result.success();
         } finally {
+            if (turbo != null) turbo.close();
             BunkrGallerySessionStore.unpinIndex(session);
             SLOTS.release();
         }
     }
 
+    /** One rolling window per creator; only completed contiguous offsets are checkpointed.
+     * All work shares the eight-thread pool, including workers winding down after cancellation. */
+    private static final class TurboBatch {
+        final Context app;
+        final String key, token;
+        final ArrayDeque<Future<Boolean>> pending = new ArrayDeque<>();
+        int offset, next, ready, total, measured;
+        boolean cacheFull;
+
+        TurboBatch(Context app, String key, String token, BunkrGallerySessionStore.Snapshot snapshot, int saved) {
+            this.app = app; this.key = key; this.token = token;
+            offset = next = Math.max(0, Math.min(saved, snapshot.items.size()));
+            for (int i = 0; i < offset; i++)
+                if (PreparedGalleryThumbnails.cached(app, snapshot.items.get(i)) != null) ready++;
+        }
+
+        boolean pump(BunkrGallerySessionStore.Snapshot snapshot, boolean finished) throws InterruptedException {
+            for (; measured < snapshot.items.size(); measured++)
+                if (PreparedGalleryThumbnails.eligible(snapshot.items.get(measured))) total++;
+            while (!pending.isEmpty() && pending.peek().isDone()) {
+                Future<Boolean> future = pending.remove();
+                try { if (future.get()) ready++; }
+                catch (ExecutionException error) {
+                    if (error.getCause() instanceof PreparedGalleryThumbnails.CacheFull) cacheFull = true;
+                } catch (CancellationException ignored) {}
+                offset++;
+            }
+            int slots = cacheFull ? 0 : previewSlots(app);
+            while (pending.size() < slots && next < snapshot.items.size()) {
+                NativeContentItem item = snapshot.items.get(next++);
+                if (!PreparedGalleryThumbnails.eligible(item))
+                    pending.add(CompletableFuture.completedFuture(false));
+                else if (PreparedGalleryThumbnails.cached(app, item) != null)
+                    pending.add(CompletableFuture.completedFuture(true));
+                else pending.add(PREVIEW_IO.submit(() -> PreparedGalleryThumbnails.prepare(app, item)));
+            }
+            return thumbnails(app, key, token, snapshot.items.size(), ready, total, finished, offset);
+        }
+
+        void close() {
+            for (Future<Boolean> future : pending) future.cancel(true);
+            pending.clear();
+        }
+    }
+
     private Result prepareThumbnails(Context app, String key, String token,
-            BunkrGallerySessionStore.Snapshot snapshot, long deadline, boolean incomplete)
+            BunkrGallerySessionStore.Snapshot snapshot, long deadline, TurboBatch turbo, boolean incomplete)
             throws InterruptedException {
         int count = snapshot.items.size();
         synchronized (LOCK) {
@@ -310,40 +385,21 @@ public final class GalleryIndexWorker extends Worker {
                 if (!prefs(app).edit().putString(key, current.toString()).commit()) return Result.success();
             } catch (Exception error) { return Result.success(); }
         }
-        int total = PreparedGalleryThumbnails.count(app, snapshot.items);
-        int ready = PreparedGalleryThumbnails.ready(app, snapshot.items);
-        if (!thumbnails(app, key, token, count, ready, total)) return Result.success();
-        // Persist the index of the next attempted preview so long galleries resume without
-        // retrying every unavailable poster on each WorkManager slice.
-        JSONObject task = read(app, key);
-        int offset = task == null ? 0 : Math.min(snapshot.items.size(), task.optInt("thumbnailOffset"));
-        boolean cacheFull = false;
-        for (int i = offset; i < snapshot.items.size(); i++) {
+        while (!turbo.cacheFull && turbo.offset < count) {
             if (shouldStop(app, key, token) || SystemClock.elapsedRealtime() >= deadline) {
                 if (!update(app, key, token, WAITING, count, "Thumbnail preparation will resume")) return Result.success();
                 return Result.retry();
             }
-            NativeContentItem item = snapshot.items.get(i);
-            if (PreparedGalleryThumbnails.eligible(item) && PreparedGalleryThumbnails.cached(app, item) == null) {
-                try { if (PreparedGalleryThumbnails.prepare(app, item)) ready++; }
-                catch (PreparedGalleryThumbnails.CacheFull full) { cacheFull = true; break; }
-                if (!thumbnails(app, key, token, count, ready, total)) return Result.success();
-            }
-            synchronized (LOCK) {
-                JSONObject current = read(app, key);
-                if (current == null || !token.equals(current.optString("token"))) return Result.success();
-                try {
-                    current.put("thumbnailOffset", i + 1);
-                    prefs(app).edit().putString(key, current.toString()).apply();
-                } catch (Exception ignored) { }
-            }
+            if (!turbo.pump(snapshot, true)) return Result.success();
+            if (turbo.offset < count && !turbo.cacheFull) Thread.sleep(200);
         }
-        ready = PreparedGalleryThumbnails.ready(app, snapshot.items);
-        if (!thumbnails(app, key, token, count, ready, total)) return Result.success();
-        boolean complete = !incomplete && ready == total && total > 0 && !cacheFull;
+        int total = PreparedGalleryThumbnails.count(app, snapshot.items);
+        int ready = PreparedGalleryThumbnails.ready(app, snapshot.items);
+        if (!thumbnails(app, key, token, count, ready, total, true, turbo.offset)) return Result.success();
+        boolean complete = !incomplete && ready == total && total > 0 && !turbo.cacheFull;
         update(app, key, token, complete ? COMPLETE : PARTIAL, count,
                 ready + " / " + total + " thumbnails"
-                        + (cacheFull ? " · Storage limit reached" : incomplete ? " · Source incomplete" : ""));
+                        + (turbo.cacheFull ? " · Storage limit reached" : incomplete ? " · Source incomplete" : ""));
         return Result.success();
     }
 
@@ -372,6 +428,7 @@ public final class GalleryIndexWorker extends Worker {
                 ? "Gallery ready" : PARTIAL.equals(status) ? "Gallery partially prepared" : status;
         if (PREPARING.equals(status) || COMPLETE.equals(status) || PARTIAL.equals(status))
             return label + " · " + value.optInt("ready") + "/" + value.optInt("total") + " previews  ›";
+        if (RUNNING.equals(status)) return label + " · " + value.optInt("items") + " items · " + value.optInt("ready") + " previews  ›";
         return label + " · " + value.optInt("items") + " items  ›";
     }
 

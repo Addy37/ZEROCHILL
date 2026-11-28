@@ -8,6 +8,14 @@ public final class GalleryIndexQueueChecks {
 
     public static void main(String[] args) {
         check(GalleryIndexQueue.MAX_ACTIVE == 2);
+        check(GalleryIndexQueue.previewSlots(false, false, 0) == 4);
+        check(GalleryIndexQueue.previewSlots(true, false, 0) == 2);
+        check(GalleryIndexQueue.previewSlots(false, true, 0) == 1);
+        check(GalleryIndexQueue.previewSlots(false, false, 2) == 2);
+        check(GalleryIndexQueue.previewSlots(false, false, 3) == 1);
+        check(GalleryIndexQueue.previewSlots(false, false, 4) == 0);
+        check(GalleryIndexQueue.pagePause(false, 0) == 0);
+        check(GalleryIndexQueue.pagePause(true, 0) > 0);
         check(GalleryIndexQueue.chooseLane(0, 0) == 0);
         check(GalleryIndexQueue.chooseLane(1, 0) == 1);
         check(GalleryIndexQueue.chooseLane(1, 1) == 0);

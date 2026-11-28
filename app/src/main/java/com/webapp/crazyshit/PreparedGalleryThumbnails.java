@@ -20,6 +20,7 @@ final class PreparedGalleryThumbnails {
     private static final int SIZE = 384;
     private static final Object LOCK = new Object();
     private static long usedBytes = -1;
+    private static final java.util.Map<String, Long> COOLDOWNS = new java.util.HashMap<>();
 
     private PreparedGalleryThumbnails() {}
 
@@ -69,6 +70,15 @@ final class PreparedGalleryThumbnails {
         boolean distinctArtwork = !artwork.isEmpty() && !artwork.equals(item.url)
                 && (!BunkrRepository.isBunkrUrl(item.url) || BunkrRepository.isUsableArtwork(artwork));
         if (distinctArtwork) {
+            String host = android.net.Uri.parse(artwork).getHost();
+            if (host == null) return false;
+            // A provider's HTTP 429 pauses new background poster requests to that host.
+            // Keep the existing shared Pawchive cadence intact.
+            awaitHost(host);
+            if (PawchiveRepository.isArtwork(artwork) || PawchiveRepository.isDeliveryFor(BunkrGalleryAdapter.imageReferer(item), artwork)) {
+                try { PawchiveMediaRequests.awaitStart(); }
+                catch (java.io.InterruptedIOException stopped) { throw new InterruptedException(); }
+            }
             FutureTarget<Bitmap> target = Glide.with(app).asBitmap()
                     .load(BunkrGalleryAdapter.withHeaders(artwork, BunkrGalleryAdapter.imageReferer(item)))
                     .override(SIZE, SIZE).fitCenter().disallowHardwareConfig()
@@ -82,7 +92,15 @@ final class PreparedGalleryThumbnails {
                 }
             } catch (InterruptedException error) { throw error; }
             catch (CacheFull error) { throw error; }
-            catch (Exception ignored) { }
+            catch (Exception error) {
+                if (isRateLimited(error)) {
+                    synchronized (COOLDOWNS) {
+                        if (COOLDOWNS.size() >= 128) COOLDOWNS.entrySet().removeIf(e -> e.getValue() <= android.os.SystemClock.elapsedRealtime());
+                        COOLDOWNS.put(host, android.os.SystemClock.elapsedRealtime() + 30_000L);
+                    }
+                    return false; // Do not bypass a rate limit by switching to original media.
+                }
+            }
             finally { Glide.with(app).clear(target); }
         }
         if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
@@ -107,6 +125,29 @@ final class PreparedGalleryThumbnails {
                 catch (IOException ignored) { }
                 finally { bitmap.recycle(); }
             }
+        }
+        return false;
+    }
+
+    private static void awaitHost(String host) throws InterruptedException {
+        while (true) {
+            long wait;
+            synchronized (COOLDOWNS) {
+                wait = COOLDOWNS.getOrDefault(host, 0L) - android.os.SystemClock.elapsedRealtime();
+            }
+            if (wait <= 0) return;
+            Thread.sleep(Math.min(wait, 500L));
+        }
+    }
+
+    private static boolean isRateLimited(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof com.bumptech.glide.load.HttpException
+                    && ((com.bumptech.glide.load.HttpException) cause).getStatusCode() == 429) return true;
+            if (cause instanceof com.bumptech.glide.load.engine.GlideException)
+                for (Throwable root : ((com.bumptech.glide.load.engine.GlideException) cause).getRootCauses())
+                    if (root instanceof com.bumptech.glide.load.HttpException
+                            && ((com.bumptech.glide.load.HttpException) root).getStatusCode() == 429) return true;
         }
         return false;
     }
