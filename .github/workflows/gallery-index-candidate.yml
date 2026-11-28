@@ -1,0 +1,141 @@
+name: Gallery indexing phone-test APK
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gallery-index-candidate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  candidate:
+    if: >-
+      github.repository == 'Addy37/ZEROCHILL' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'feature/gallery-index-queue'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+      ZEROCHILL_SOURCE_BRANCH: ${{ github.head_ref }}
+      APP_VERSION_NAME: '7.5.1-gallery-index.1'
+      APP_VERSION_CODE: '7005101'
+      ZEROCHILL_V7_TRAFFIC: 'true'
+      SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ANON_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
+      FEEDBACK_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/dynamic-api
+      SOURCE_CONFIG_ENDPOINT: https://aavjpykssueavbseqdlf.supabase.co/functions/v1/app-config
+      ANALYTICS_ENDPOINT: ''
+      ANALYTICS_V2_ENDPOINT: ''
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify current main lineage
+        run: bash tools/verify-android-build-lineage.sh "$RUNNER_TEMP/BUILD_LINEAGE.txt"
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: Install Android build tools
+        run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          cache-provider: basic
+      - name: Download current stable APK for identity comparison
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download v7.5.1 --repo "$GITHUB_REPOSITORY" --pattern ZeroChill.apk --dir "$RUNNER_TEMP/stable"
+      - name: Restore existing production signing credentials
+        env:
+          SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib
+          raw = os.environ.get('SIGNING_BUNDLE', '')
+          if not raw:
+              raise SystemExit('Missing ANDROID_SIGNING_BUNDLE')
+          data = json.loads(raw.replace('\r','').replace('\n',''))
+          for key in ('keystore_base64','store_password','key_alias','key_password'):
+              if not data.get(key):
+                  raise SystemExit('Missing signing item: ' + key)
+          for key in ('store_password','key_alias','key_password'):
+              print('::add-mask::' + data[key])
+          path = pathlib.Path(os.environ['RUNNER_TEMP'])/'gallery-index-candidate.jks'
+          path.write_bytes(base64.b64decode(data['keystore_base64']))
+          path.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'],'a') as out:
+              for key, value in {
+                  'ANDROID_KEYSTORE_PATH': str(path),
+                  'ANDROID_KEYSTORE_PASSWORD': data['store_password'],
+                  'ANDROID_KEY_ALIAS': data['key_alias'],
+                  'ANDROID_KEY_PASSWORD': data['key_password'],
+              }.items():
+                  out.write(key+'='+value+'\n')
+          PY
+      - name: Focused gallery regressions and signed release build
+        run: >-
+          gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
+          :app:testReleaseUnitTest
+          --tests '*GalleryIndexQueueTest'
+          --tests '*GallerySnapshotTest'
+          --tests '*PawchiveRepositoryTest'
+          :app:assembleRelease
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gallery-index-candidate.jks"
+      - name: Verify package, signer and upgrade version
+        run: |
+          set -euo pipefail
+          mkdir -p candidate
+          apk="candidate/ZeroChill-gallery-index-${ZEROCHILL_SOURCE_SHA:0:7}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          python3 - "$apk" "$RUNNER_TEMP/stable/ZeroChill.apk" "$ANDROID_HOME/build-tools/35.0.0" <<'PY'
+          import pathlib, re, subprocess, sys, os
+          candidate, stable, tools = sys.argv[1:]
+          def identity(apk):
+              output = subprocess.check_output([tools+'/apksigner','verify','--print-certs',apk], text=True)
+              certs = re.findall(r'Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]+)', output)
+              badging = subprocess.check_output([tools+'/aapt','dump','badging',apk], text=True)
+              package = re.search(r"package: name='([^']+)' versionCode='([^']+)'", badging)
+              assert certs and package, 'Missing APK identity'
+              return sorted(certs), package.group(1), int(package.group(2))
+          new = identity(candidate)
+          old = identity(stable)
+          assert new[0] == old[0], 'Signing certificate differs'
+          assert new[1] == old[1] == 'com.addy37.crazyshitunofficial', 'Package differs'
+          assert new[2] == int(os.environ['APP_VERSION_CODE']) and new[2] > old[2], 'Invalid upgrade version'
+          pathlib.Path('candidate/VALIDATION.txt').write_text(
+              'Source: '+os.environ['ZEROCHILL_SOURCE_SHA']+'\n'
+              +'Package: '+new[1]+'\nVersion code: '+str(new[2])+'\n'
+              +'Stable signing certificate matches; package matches; version is higher.\n'
+              +'Physical install and background behavior not yet tested.\n')
+          PY
+          cp "$RUNNER_TEMP/BUILD_LINEAGE.txt" candidate/
+          (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZeroChill-gallery-index-${{ env.ZEROCHILL_SOURCE_SHA }}
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gallery-index-test-results-${{ env.ZEROCHILL_SOURCE_SHA }}
+          path: app/build/test-results/testReleaseUnitTest/
+          if-no-files-found: warn
