@@ -242,6 +242,10 @@ public final class GalleryIndexWorker extends Worker {
             long deadline = SystemClock.elapsedRealtime() + SLICE_MS;
             int stagnant = 0;
             boolean sourceIncomplete = cursorIncomplete(snapshot);
+            if (task.optBoolean("paginationFinished")) {
+                return prepareThumbnails(app, key, token, snapshot, deadline,
+                        task.optBoolean("paginationIncomplete") || sourceIncomplete);
+            }
             while (!shouldStop(app, key, token) && SystemClock.elapsedRealtime() < deadline) {
                 if (!BunkrGallerySessionStore.persistForIndex(app, session)) {
                     update(app, key, token, PARTIAL, count, "Local cache limit reached");
@@ -298,6 +302,14 @@ public final class GalleryIndexWorker extends Worker {
             BunkrGallerySessionStore.Snapshot snapshot, long deadline, boolean incomplete)
             throws InterruptedException {
         int count = snapshot.items.size();
+        synchronized (LOCK) {
+            JSONObject current = read(app, key);
+            if (current == null || !token.equals(current.optString("token"))) return Result.success();
+            try {
+                current.put("paginationFinished", true).put("paginationIncomplete", incomplete);
+                if (!prefs(app).edit().putString(key, current.toString()).commit()) return Result.success();
+            } catch (Exception error) { return Result.success(); }
+        }
         int total = PreparedGalleryThumbnails.count(app, snapshot.items);
         int ready = PreparedGalleryThumbnails.ready(app, snapshot.items);
         if (!thumbnails(app, key, token, count, ready, total)) return Result.success();
@@ -338,6 +350,12 @@ public final class GalleryIndexWorker extends Worker {
     private static boolean cursorIncomplete(BunkrGallerySessionStore.Snapshot snapshot) {
         try { return new JSONObject(snapshot.cursor).optBoolean("indexIncomplete"); }
         catch (Exception ignored) { return false; }
+    }
+
+    static boolean ready(Context context, String key, String session) {
+        JSONObject value = read(context, key);
+        return value != null && session != null && session.equals(value.optString("session"))
+                && COMPLETE.equals(value.optString("status"));
     }
 
     static boolean hasRecord(Context context, String key, String session) {

@@ -511,7 +511,10 @@ public class NativeFeedBrowserActivity extends Activity {
                 // thread, paint it immediately, then continue refreshing in the background.
                 loading = true;
                 progress.setVisibility(View.VISIBLE);
-                if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.VISIBLE);
+                if (gallerySkeleton != null && !GalleryIndexWorker.ready(this, creatorGallerySessionKey, bunkrGallerySessionId))
+                    gallerySkeleton.setVisibility(View.VISIBLE);
+                if (GalleryIndexWorker.ready(this, creatorGallerySessionKey, bunkrGallerySessionId))
+                    progress.setVisibility(View.GONE);
                 String restoreId = bunkrGallerySessionId;
                 io.execute(() -> {
                     BunkrGallerySessionStore.Snapshot restored =
@@ -966,7 +969,8 @@ public class NativeFeedBrowserActivity extends Activity {
                 : showDetailsMode && !isEromeAlbum() ? wrapShowDetailsOled(shell, top) : shell;
         if (isCreatorGallery() && CreatorGalleryTransition.ownsRevealWindow(this)) {
             creatorGalleryReveal = new CreatorGalleryReveal(this, root,
-                    CreatorGalleryTransition.shouldAnimate(this, restoredBrowserState != null));
+                    !GalleryIndexWorker.ready(this, creatorGallerySessionKey, bunkrGallerySessionId)
+                            && CreatorGalleryTransition.shouldAnimate(this, restoredBrowserState != null));
             setContentView(creatorGalleryReveal);
         } else if (wantsShitTokReturn()) {
             installShitTokReturnSurface(root);
@@ -1667,6 +1671,10 @@ public class NativeFeedBrowserActivity extends Activity {
                 if (gallerySkeleton != null) gallerySkeleton.setVisibility(View.GONE);
                 updateCreatorEmptyState();
             }
+        }
+        if (indexWasActive && !active && !loading && GalleryIndexWorker.ready(this, creatorGallerySessionKey, bunkrGallerySessionId)) {
+            BunkrGallerySessionStore.Snapshot prepared = BunkrGallerySessionStore.snapshot(bunkrGallerySessionId);
+            if (prepared != null) replaceBunkrItems(prepared.items);
         }
         indexWasActive = active;
         boolean hasIndex = GalleryIndexWorker.hasRecord(this, creatorGallerySessionKey, bunkrGallerySessionId);

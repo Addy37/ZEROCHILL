@@ -67,6 +67,8 @@ final class GalleryIndexNotifications {
             if (manager == null) return;
             if ("Fetching".equals(status) || "Preparing thumbnails".equals(status))
                 manager.notify(SUMMARY_ID + 1 + lane, progress(context, title, status, items, ready, total));
+            else if ("Ready".equals(status) || "Partial".equals(status) || "Failed".equals(status))
+                manager.cancel(SUMMARY_ID + 1 + lane);
             if (active > 0) {
                 manager.notify(SUMMARY_ID, builder(context).setGroupSummary(true)
                         .setContentTitle("Preparing galleries")

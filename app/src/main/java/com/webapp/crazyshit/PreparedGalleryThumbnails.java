@@ -11,9 +11,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /** Explicitly requested, preview-sized artwork; no original media is retained. */
@@ -22,7 +20,6 @@ final class PreparedGalleryThumbnails {
     private static final int SIZE = 384;
     private static final Object LOCK = new Object();
     private static long usedBytes = -1;
-    private static final Set<String> knownFiles = new HashSet<>();
 
     private PreparedGalleryThumbnails() {}
 
@@ -106,7 +103,9 @@ final class PreparedGalleryThumbnails {
                         write(app, item, bitmap);
                         return true;
                     }
-                } finally { bitmap.recycle(); }
+                } catch (CacheFull full) { throw full; }
+                catch (IOException ignored) { }
+                finally { bitmap.recycle(); }
             }
         }
         return false;
@@ -134,13 +133,11 @@ final class PreparedGalleryThumbnails {
                     File[] files = dir.listFiles((folder, name) -> name.endsWith(".jpg"));
                     if (files != null) for (File existing : files) {
                         usedBytes += existing.length();
-                        knownFiles.add(existing.getName());
                     }
                 }
                 if (usedBytes + temporary.length() > MAX_BYTES) throw new CacheFull();
                 if (!temporary.renameTo(destination)) throw new IOException("Preview cache write failed");
                 usedBytes += destination.length();
-                knownFiles.add(destination.getName());
             }
         } finally { temporary.delete(); }
     }
