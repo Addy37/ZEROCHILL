@@ -1,4 +1,4 @@
-name: Gallery indexing phone-test APK
+name: Gallery indexing side-by-side beta APK
 
 on:
   pull_request:
@@ -23,8 +23,8 @@ jobs:
     env:
       ZEROCHILL_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
       ZEROCHILL_SOURCE_BRANCH: ${{ github.head_ref }}
-      APP_VERSION_NAME: '7.5.1-gallery-index.1'
-      APP_VERSION_CODE: '7005101'
+      APP_VERSION_NAME: '7.5.1-gallery-index.2'
+      APP_VERSION_CODE: '7005102'
       ZEROCHILL_V7_TRAFFIC: 'true'
       SUPABASE_URL: https://aavjpykssueavbseqdlf.supabase.co
       SUPABASE_PUBLISHABLE_KEY: sb_publishable_oSQALszxzeeHxDwEeclucA_5dGEpOLs
@@ -90,20 +90,20 @@ jobs:
       - name: Focused gallery regressions and signed release build
         run: >-
           gradle --no-daemon -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64
-          :app:testReleaseUnitTest
+          :app:testDebugUnitTest
           --tests '*GalleryIndexQueueTest'
           --tests '*GallerySnapshotTest'
           --tests '*PawchiveRepositoryTest'
-          :app:assembleRelease
+          :app:assembleDebug
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/gallery-index-candidate.jks"
-      - name: Verify package, signer and upgrade version
+      - name: Verify separate beta package and signer
         run: |
           set -euo pipefail
           mkdir -p candidate
-          apk="candidate/ZeroChill-gallery-index-${ZEROCHILL_SOURCE_SHA:0:7}.apk"
-          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          apk="candidate/ZeroChill-Beta-gallery-index-${ZEROCHILL_SOURCE_SHA:0:7}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$apk"
           python3 - "$apk" "$RUNNER_TEMP/stable/ZeroChill.apk" "$ANDROID_HOME/build-tools/35.0.0" <<'PY'
           import pathlib, re, subprocess, sys, os
           candidate, stable, tools = sys.argv[1:]
@@ -117,13 +117,13 @@ jobs:
           new = identity(candidate)
           old = identity(stable)
           assert new[0] == old[0], 'Signing certificate differs'
-          assert new[1] == old[1] == 'com.addy37.crazyshitunofficial', 'Package differs'
-          assert new[2] == int(os.environ['APP_VERSION_CODE']) and new[2] > old[2], 'Invalid upgrade version'
+          assert old[1] == 'com.addy37.crazyshitunofficial' and new[1] == old[1]+'.dev', 'Beta package not isolated'
+          assert new[2] == int(os.environ['APP_VERSION_CODE']), 'Unexpected beta version'
           pathlib.Path('candidate/VALIDATION.txt').write_text(
               'Source: '+os.environ['ZEROCHILL_SOURCE_SHA']+'\n'
               +'Package: '+new[1]+'\nVersion code: '+str(new[2])+'\n'
-              +'Stable signing certificate matches; package matches; version is higher.\n'
-              +'Physical install and background behavior not yet tested.\n')
+              +'Stable signing certificate matches; beta package is separate from stable.\n'
+              +'Side-by-side physical install and background behavior not yet tested.\n')
           PY
           cp "$RUNNER_TEMP/BUILD_LINEAGE.txt" candidate/
           (cd candidate && sha256sum *.apk > SHA256SUMS.txt)
@@ -137,5 +137,5 @@ jobs:
         if: always()
         with:
           name: gallery-index-test-results-${{ env.ZEROCHILL_SOURCE_SHA }}
-          path: app/build/test-results/testReleaseUnitTest/
+          path: app/build/test-results/testDebugUnitTest/
           if-no-files-found: warn

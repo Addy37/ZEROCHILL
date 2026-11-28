@@ -205,18 +205,20 @@ public final class GalleryIndexWorker extends Worker {
             if (!update(app, key, token, RUNNING, count, "")) return Result.success();
             BunkrCreatorGalleryRepository repository = new BunkrCreatorGalleryRepository();
             long deadline = SystemClock.elapsedRealtime() + SLICE_MS;
-            int empty = 0;
+            int stagnant = 0;
+            boolean sourceIncomplete = cursorIncomplete(snapshot);
             while (!shouldStop(app, key, token) && SystemClock.elapsedRealtime() < deadline) {
                 if (!BunkrGallerySessionStore.persistForIndex(app, session)) {
                     update(app, key, token, PARTIAL, count, "Local cache limit reached");
                     return Result.success();
                 }
                 if (count >= GalleryIndexQueue.MAX_ITEMS || snapshot.endReached) {
-                    boolean incomplete = count >= GalleryIndexQueue.MAX_ITEMS || cursorIncomplete(snapshot);
+                    boolean incomplete = GalleryIndexQueue.partial(count, sourceIncomplete || cursorIncomplete(snapshot));
                     update(app, key, token, incomplete ? PARTIAL : COMPLETE, count,
                             incomplete ? "Source or local cache limit reached" : "Available pages indexed");
                     return Result.success();
                 }
+                String priorCursor = snapshot.cursor;
                 BunkrCreatorGalleryRepository.Batch batch = repository.fetchNext(app, session,
                         task.optString("query"), task.optString("profile"), task.optString("title"),
                         list(task, "names"), list(task, "urls"), list(task, "images"),
@@ -227,11 +229,15 @@ public final class GalleryIndexWorker extends Worker {
                     return Result.success();
                 }
                 int nextCount = snapshot.items.size();
-                empty = nextCount == count ? empty + 1 : 0;
+                stagnant = GalleryIndexQueue.stagnantBatches(stagnant, count, nextCount, priorCursor, snapshot.cursor);
+                sourceIncomplete |= batch.indexIncomplete;
                 count = nextCount;
                 if (!update(app, key, token, RUNNING, count, "")) return Result.success();
-                if (GalleryIndexQueue.partial(count, empty, batch.indexIncomplete)) {
-                    update(app, key, token, PARTIAL, count, "Source incomplete; reopen or retry");
+                // A failed supplementary provider must not halt remaining creator pages.
+                // The repository records exhausted source failures separately from its end cursor.
+                if (GalleryIndexQueue.stopIndexing(count, stagnant)) {
+                    update(app, key, token, PARTIAL, count, count >= GalleryIndexQueue.MAX_ITEMS
+                            ? "Local item limit reached" : "Pagination stopped advancing");
                     return Result.success();
                 }
                 if (!snapshot.endReached) {
@@ -262,10 +268,19 @@ public final class GalleryIndexWorker extends Worker {
         catch (Exception ignored) { return false; }
     }
 
-    static String label(Context context, String key, int count, boolean complete) {
+    static boolean hasRecord(Context context, String key, String session) {
         JSONObject value = read(context, key);
-        if (active(value)) return value.optString("status") + " · " + value.optInt("items") + " items";
-        return complete ? "Gallery indexed · " + count : "Load entire gallery";
+        return value != null && session != null && session.equals(value.optString("session"));
+    }
+
+    static String label(Context context, String key, String session) {
+        JSONObject value = read(context, key);
+        if (value == null || session == null || !session.equals(value.optString("session")))
+            return "Load entire gallery";
+        String status = value.optString("status");
+        String label = RUNNING.equals(status) ? "Indexing gallery" : COMPLETE.equals(status)
+                ? "Gallery indexed" : PARTIAL.equals(status) ? "Gallery partially indexed" : status;
+        return label + " · " + value.optInt("items") + " items  ›";
     }
 
     static void showQueue(Activity activity) {

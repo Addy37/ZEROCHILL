@@ -22,7 +22,17 @@ final class GalleryIndexQueue {
                 ? "Cancelled" : requested;
     }
 
-    static boolean partial(int items, int emptyBatches, boolean sourceIncomplete) {
-        return items >= MAX_ITEMS || emptyBatches >= MAX_EMPTY_BATCHES || sourceIncomplete;
+    static int stagnantBatches(int previous, int oldCount, int newCount,
+            String oldCursor, String newCursor) {
+        return oldCount == newCount && java.util.Objects.equals(oldCursor, newCursor)
+                ? previous + 1 : 0;
+    }
+
+    static boolean stopIndexing(int items, int stagnantBatches) {
+        return items >= MAX_ITEMS || stagnantBatches >= MAX_EMPTY_BATCHES;
+    }
+
+    static boolean partial(int items, boolean sourceIncomplete) {
+        return items >= MAX_ITEMS || sourceIncomplete;
     }
 }

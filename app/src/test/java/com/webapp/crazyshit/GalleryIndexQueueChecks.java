@@ -22,10 +22,15 @@ public final class GalleryIndexQueueChecks {
         check(GalleryIndexQueue.transition("Cancelling", "Indexed").equals("Cancelled"));
         check(GalleryIndexQueue.transition("Cancelled", "Fetching").equals("Cancelled"));
         check(GalleryIndexQueue.transition("Fetching", "Indexed").equals("Indexed"));
-        check(!GalleryIndexQueue.partial(9999, 5, false));
-        check(GalleryIndexQueue.partial(10000, 0, false));
-        check(GalleryIndexQueue.partial(0, 6, false));
-        check(GalleryIndexQueue.partial(1, 0, true));
+        check(!GalleryIndexQueue.stopIndexing(544, 5));
+        check(GalleryIndexQueue.stopIndexing(544, 6));
+        check(GalleryIndexQueue.stopIndexing(10000, 0));
+        check(!GalleryIndexQueue.partial(544, false));
+        check(GalleryIndexQueue.partial(544, true));
+        check(GalleryIndexQueue.partial(10000, false));
+        check(GalleryIndexQueue.stagnantBatches(5, 544, 544, "page1", "page2") == 0);
+        check(GalleryIndexQueue.stagnantBatches(5, 544, 544, "page2", "page2") == 6);
+        check(GalleryIndexQueue.stagnantBatches(5, 544, 600, "page2", "page2") == 0);
         System.out.println("GalleryIndexQueue checks passed");
     }
 }

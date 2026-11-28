@@ -655,12 +655,21 @@ public class NativeFeedBrowserActivity extends Activity {
             }
 
             if (!creatorAvatarPickerMode) {
-                galleryIndexAction = text("Load entire gallery", 13, AppearanceTheme.accent(this));
-                galleryIndexAction.setGravity(Gravity.CENTER);
-                galleryIndexAction.setPadding(dp(12), dp(8), dp(12), dp(8));
+                galleryIndexAction = text("Load entire gallery", 14, AppearanceTheme.accent(this));
+                galleryIndexAction.setGravity(Gravity.CENTER_VERTICAL);
+                galleryIndexAction.setTypeface(null, android.graphics.Typeface.BOLD);
+                galleryIndexAction.setPadding(dp(16), dp(8), dp(16), dp(8));
+                android.graphics.drawable.GradientDrawable indexCard = new android.graphics.drawable.GradientDrawable();
+                indexCard.setColor(Color.rgb(20, 20, 20));
+                indexCard.setCornerRadius(dp(12));
+                indexCard.setStroke(dp(1), Color.rgb(55, 55, 55));
+                galleryIndexAction.setBackground(new android.graphics.drawable.RippleDrawable(
+                        android.content.res.ColorStateList.valueOf(0x33FFFFFF), indexCard, null));
                 galleryIndexAction.setVisibility(View.GONE);
                 galleryIndexAction.setOnClickListener(v -> requestGalleryIndex());
-                creatorAppBar.addView(galleryIndexAction, new AppBarLayout.LayoutParams(-1, dp(40)));
+                AppBarLayout.LayoutParams indexParams = new AppBarLayout.LayoutParams(-1, dp(48));
+                indexParams.setMargins(dp(12), dp(4), dp(12), dp(6));
+                creatorAppBar.addView(galleryIndexAction, indexParams);
             }
 
             creatorTabs = new TabLayout(this);
@@ -1621,7 +1630,7 @@ public class NativeFeedBrowserActivity extends Activity {
     }
 
     private void requestGalleryIndex() {
-        if (GalleryIndexWorker.owns(this, creatorGallerySessionKey, bunkrGallerySessionId)) {
+        if (GalleryIndexWorker.hasRecord(this, creatorGallerySessionKey, bunkrGallerySessionId)) {
             GalleryIndexWorker.showQueue(this);
             return;
         }
@@ -1655,9 +1664,11 @@ public class NativeFeedBrowserActivity extends Activity {
             }
         }
         indexWasActive = active;
-        galleryIndexAction.setText(GalleryIndexWorker.label(this, creatorGallerySessionKey, itemCount(), endReached));
+        boolean hasIndex = GalleryIndexWorker.hasRecord(this, creatorGallerySessionKey, bunkrGallerySessionId);
+        String indexLabel = GalleryIndexWorker.label(this, creatorGallerySessionKey, bunkrGallerySessionId);
+        if (!indexLabel.contentEquals(galleryIndexAction.getText())) galleryIndexAction.setText(indexLabel);
         galleryIndexAction.setTextColor(AppearanceTheme.accent(this));
-        galleryIndexAction.setVisibility(active || (!loading && !restoringBrowser && !endReached && itemCount() > 0)
+        galleryIndexAction.setVisibility(hasIndex || (!loading && !restoringBrowser && !endReached && itemCount() > 0)
                 ? View.VISIBLE : View.GONE);
     }
 
